@@ -1,0 +1,6 @@
+This project contains both hardware and software components, which are licensed under separate terms:
+
+- All content in the /hardware directory is licensed under the CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0).
+- All content in the /firmware directory is licensed under the Apache License, Version 2.0.
+
+See the LICENSE files in the respective directories for full license texts and terms.
