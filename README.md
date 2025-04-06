@@ -45,13 +45,14 @@ This repository provides all design files, documentation, and code for the open 
 ```
 esign/
 ├── LICENSE                    # Top-level: explains dual-licensing
-├── hardware/                 # KiCad project, schematics, BOM, PCB files
+├── hardware/                 # Schematics, pcb, 3D printable case
 │   ├── LICENSE               # CERN-OHL-S v2.0
+│	 ├── enclosure/            # 3D printable STL files and documentation
+│	 ├── pcb/                  # KiCAD files
 │   └── ...
-├── firmware/                # C firmware source, headers, build system
+├── firmware/                 # C firmware source, headers, build system
 │   ├── LICENSE               # Apache 2.0
 │   └── ...
-├── enclosure/               # 3D printable STL files and documentation
 ├── docs/                    # Markdown docs, tips, and background
 ├── images/                  # Photos, renderings, examples
 └── README.md                # This file
