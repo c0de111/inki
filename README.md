@@ -13,13 +13,13 @@
 </p>
 
 <p align="center">
-  <a href="https://makertube.net/w/ogwhv2iz3bCEpDWk6XRxvr" target="_blank">
-    <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
+  <a href="https://makertube.net/w/gxEmY74gfjZvuuTyGfTvus" target="_blank">
+    <img src="images/esign_4_2_video_refresh_screenshot.png" alt="eSign refresh" width="300">
   </a>
 </p>
 
 <p align="center">
-  <i>eSign 4.2&quotoperating: The video shows: realtime clock switching on the device (LED on), pico dials in WIFI and gathered current booking of desk (originally, desk was free), epaper is refresh with the new information, device is switching off (LED off).</i>
+  <i>eSign 4.2" operating: realtime clock switching on the device (LED on), pico connects to WIFI and gathered current booking of desk (originally, desk was free), epaper is refreshed with the new information, device is switching off (LED off).</i>
 <i>Click the image to view video.</i>
 </p>
 ---
