@@ -17,6 +17,11 @@
     <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
   </a>
 </p>
+
+<p align="center">
+  <i>eSign 4.2&quotoperating: The video shows: realtime clock switching on the device (LED on), pico dials in WIFI and gathered current booking of desk (originally, desk was free), epaper is refresh with the new information, device is switching off (LED off).</i>
+<i>Click the image to view video.</i>
+</p>
 ---
 
 ## Features
