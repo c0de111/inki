@@ -1,5 +1,5 @@
 # esign
-**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, as for instance room signage ([SeatSurfing](https://github.com/seatsurfing)). It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, and a custom PCB.
+**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used as for instance in combination with the  [SeatSurfing](https://github.com/seatsurfing) desk sharing tool. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, and a custom PCB.
 
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
@@ -43,7 +43,7 @@ This repository provides all design files, documentation, and code for the open 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular eSign enclosure.
 <p align="center">
-  <a href="https://makertube.net/w/nMY919ciTN9LbvoS9aCWst" target="_blank">
+  <a href="https://makertube.net/w/ogwhv2iz3bCEpDWk6XRxvr" target="_blank">
     <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
   </a>
 </p>
