@@ -12,6 +12,11 @@
 <i>Click the image to view full-resolution version.</i>
 </p>
 
+<p align="center">
+  <a href="https://makertube.net/w/ogwhv2iz3bCEpDWk6XRxvr" target="_blank">
+    <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
+  </a>
+</p>
 ---
 
 ## Features
@@ -23,13 +28,13 @@
   Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries and optional coin cell. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). 
 
 - **Wi-Fi Connectivity**
-  Periodically fetches content via HTTP.
+  Periodically fetches content via HTTP, refresh time freely programmable.
 
 - **Multi-Page Display**
   Up to 8 user-selectable display pages via pushbuttons.
 
 - **Battery Voltage Monitoring**
-  + Monitoring of batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
+  + Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
 - **For room signage application: Room Customization**
   Layouts and display content can be adjusted for room types (office, conference, seminar).
@@ -49,8 +54,6 @@ This repository provides all design files, documentation, and code for the open 
 </p>
 
 <p align="center"><i>Click to watch the 3D enclosure demo video on MakerTube</i></p>
-
-
 
 2. **Electronics**
    Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption.
