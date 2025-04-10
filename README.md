@@ -1,5 +1,5 @@
 # esign
-**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, as for instance room signage. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed cases, and a custom PCB.
+**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, as for instance room signage ([SeatSurfing](https://github.com/seatsurfing)). It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, and a custom PCB.
 
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
@@ -7,12 +7,10 @@
   </a>
 </p>
 
-<p align="center"><i>Click the image to view full-resolution version.</i></p>
-
 <p align="center">
   <i>Fully assembled 4.2&quot; eSign with ePaper display and 3D-printed enclosure.</i>
+<i>Click the image to view full-resolution version.</i>
 </p>
-
 
 ---
 
@@ -36,7 +34,6 @@
 - **For room signage application: Room Customization**
   Layouts and display content can be adjusted for room types (office, conference, seminar).
 
-
 ---
 
 ## Project Overview
@@ -45,6 +42,15 @@ This repository provides all design files, documentation, and code for the open 
 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular eSign enclosure.
+<p align="center">
+  <a href="https://makertube.net/w/nMY919ciTN9LbvoS9aCWst" target="_blank">
+    <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
+  </a>
+</p>
+
+<p align="center"><i>Click to watch the 3D enclosure demo video on MakerTube</i></p>
+
+
 
 2. **Electronics**
    Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption.
