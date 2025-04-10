@@ -1,21 +1,18 @@
 # esign
-**eSign** is a compact, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, as for instance room signage. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed cases, and a custom PCB.
+**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, as for instance room signage. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed cases, and a custom PCB.
 
+<p align="center">
+  <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
+    <img src="images/esign_4_2_1_cropped.jpg" alt="eSign Device" width="500" style="border-radius: 8px;">
+  </a>
+</p>
 
----
+<p align="center"><i>Click the image to view full-resolution version.</i></p>
 
-## Project Overview
+<p align="center">
+  <i>Fully assembled 4.2&quot; eSign with ePaper display and 3D-printed enclosure.</i>
+</p>
 
-This repository provides all design files, documentation, and code for the open hardware and firmware project *eSign*:
-
-1. **3D-Printed Enclosure**
-   Files and documentation for the modular eSign enclosure.
-
-2. **Electronics**
-   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption.
-
-3. **Firmware**
-   C-based firmware for RTC wakeup, Wi-Fi sync, ePaper display handling, and modular room configuration.
 
 ---
 
@@ -38,6 +35,22 @@ This repository provides all design files, documentation, and code for the open 
 
 - **For room signage application: Room Customization**
   Layouts and display content can be adjusted for room types (office, conference, seminar).
+
+
+---
+
+## Project Overview
+
+This repository provides all design files, documentation, and code for the open hardware and firmware project *eSign*:
+
+1. **3D-Printed Enclosure**
+   Files and documentation for the modular eSign enclosure.
+
+2. **Electronics**
+   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption.
+
+3. **Firmware**
+   C-based firmware for RTC wakeup, Wi-Fi sync, ePaper display handling, and modular room configuration.
 ---
 
 ## 📁 Repository Structure
