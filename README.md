@@ -118,3 +118,9 @@ See the LICENSE files in the respective directories for full license texts and t
 
 Want to follow or contribute? Star the repo, and stay tuned for updates!
 
+## 📬 Contact
+
+For questions, feedback, or contributions, feel free to reach out via email:
+
+✉️ [c0de@posteo.de](mailto:c0de@posteo.de)
+
