@@ -35,6 +35,17 @@
 - **Energy Efficiency**
   Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries and optional coin cell. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). 
 
+<p align="center">
+  <a href="images/log_prototype_esign_7_5.png" target="_blank">
+    <img src="images/log_prototype_esign_7_5.png" alt="eSign Device" width="300" style="border-radius: 8px;">
+  </a>
+</p>
+
+<p align="center">
+  <i>Log of the AA battery voltage of prototype of the 7.5" version, running since 172 days. </i>
+<i>Click the image to view full-resolution version.</i>
+</p>
+
 - **Wi-Fi Connectivity**
   Periodically fetches content via HTTP, refresh time freely programmable.
 
