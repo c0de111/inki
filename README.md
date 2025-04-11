@@ -1,5 +1,7 @@
 # esign
-**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used as for instance in combination with the  [SeatSurfing](https://github.com/seatsurfing) desk sharing tool. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, and a custom PCB.
+**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, ...used for room signage, for example as a display front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, and a custom PCB.
+
+
 
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
@@ -22,6 +24,7 @@
   <i>eSign 4.2" operating: realtime clock switching on the device (LED on), pico connects to WIFI and gathered current booking of desk (originally, desk was free), epaper is refreshed with the new information, device is switching off (LED off).</i>
 <i>Click the image to view video.</i>
 </p>
+
 ---
 
 ## Features
