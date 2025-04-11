@@ -42,7 +42,7 @@
 </p>
 
 <p align="center">
-  <i>Log of the AA battery voltage of prototype of the 7.5" version, running since 172 days. </i>
+  <i>Log of the AA battery voltage of prototype of the 7.5" version, running since 172 days, refreshing every 1800 seconds. </i>
 <i>Click the image to view full-resolution version.</i>
 </p>
 
