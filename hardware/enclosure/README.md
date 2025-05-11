@@ -1,45 +1,82 @@
-# eSign Enclosure (4.2" Waveshare Version)
+# eSign Enclosure
 
-This directory contains the self-designed (using FreeCAD) 3D-printable enclosure for the eSign project using the **4.2" Waveshare V2 ePaper display**. The enclosure is tailored to fit the custom eSign PCB and is optimized for compact wall mounting.
+This directory contains the 3D-printable enclosures for the eSign project, created in FreeCAD. Two versions are included, supporting:
 
----
+- **4.2" Waveshare V2 ePaper display**
+- **7.5" Waveshare V2 ePaper display**
 
-## 🧩 Included Files
-
-- `case_4_2.stl` – Main body of the case
-- `case_4_2-Bezel.stl` – Bezel frame to hold the ePaper module and a LED
-- `wallmount.stl` – wall-mounting bracket
-
-The epaper fits closely into the bezel, which is glued to the case. The PCB connects directly to standard pins soldered to the epaper board headers and is hold in place by four simple pins 3D printed into the case.  
+Both are tailored to fit the shared custom eSign PCB and for wall mounting.
 
 ---
 
-## 🖨️ Print Recommendations
+## Assembly and Example Photos
 
-- **Printer:** I used a Crealty Ender-3, "standard quality" setting
+### Assembly Animation (4.2" version)
+
+![Assembly Animation](images/assembly.gif)
+
+This animation shows the step-by-step assembly of the 4.2" enclosure.
+
+### Example Photos
+
+**Parts 4.2" version:**
+
+<p float="left">
+  <img src="images/1_Assembly_4_2.JPG" width="400"/>
+  <img src="images/2_Assembly_4_2.JPG" width="400"/>
+</p>
+
+**Case and bezel 4.2" version:**
+
+<p float="left">
+  <img src="images/esign_4_2_case.jpg" width="400"/>
+  <img src="images/esign_4_2_bezel.jpg" width="400"/>
+</p>
+
+**Wallmount:**
+
+<p float="left">
+  <img src="images/esign_4_2_wallmount.jpg" width="400"/>
+</p>
+
+Additional detail shots can be found in the `images/` folder.
+
+---
+
+## Notes
+
+- The same PCB fits both enclosures.
+- The LED and ePaper module are integrated into the bezel.
+- The parts are assembled with (small amounts of) epoxy glue.
+
+---
+## Directory Structure
+
+- `Case_frame_waveshare_4_2_epaper/` – STL + FCStd files for the 4.2" version
+- `Case_frame_waveshare_7_5_epaper/` – STL + FCStd files for the 7.5" version
+
+Each folder includes:
+- Main body (`Case`)
+- Bezel frame (`Bezel`)
+- Wall mount
+- FreeCAD source files (`.FCStd`)
+- Mechanical reference files
+
+---
+
+## Print Info (applies to both)
+
+- **Printer:** Creality Ender-3 (standard quality)
 - **Material:** PLA
 - **Layer height:** 0.2 mm
-- **Infill:** does not matter much, not much to fill, I used 40 %
-- **Supports:** not required
-
-
----
-
-## 🧾 Notes
-
-- Internal space accommodates the eSign PCB with all components populated.
+- **Infill:** ~40 % (non-critical)
+- **Supports:** Not required
+- **Assembly:** Bezel is glued to the case, PCB held by built-in printed pins
 
 ---
 
-## 📜 License
 
-These files are considered part of the hardware for the eSign project and are licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.
+## License
 
-For full license text, see `../LICENSE`.
-
----
-
-## 📸 Coming Soon
-
-Example photos of the printed case and wall-mounted eSign display will be added in a future update.
-
+These files are licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.  
+See `../LICENSE` for full license text.
