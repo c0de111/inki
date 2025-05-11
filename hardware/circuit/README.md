@@ -87,7 +87,7 @@ This is based on measurements and gives estimations useful to gauge wake-up ener
 | 1    | 17.58                | 2484.6                   |
 
 
-<img src="7_5_prototype_run.png" alt="7_5_prototype_run" width="400" style="float: right; margin-left: 15px;">
+<img src="../../images/log_prototype_esign_7_5.png" alt="7_5_prototype_run" width="400" style="float: right; margin-left: 15px;">
 
 This chart shows the measured energy consumption of the 7.5" prototype. 
 
