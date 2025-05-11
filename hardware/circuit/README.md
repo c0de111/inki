@@ -130,9 +130,9 @@ The intention is for the coin cell to only take over once the main battery volta
 
 An oscilloscope measurement verifies the expected behavior:
 
-![Annotated Oscilloscope Image](oscilloscope_annotated_labeled_orange_box.jpg)
+<img src="oscilloscope_annotated_labeled_orange_box.jpg" alt="Annotated Oscilloscope Image" width="400" style="float: right; margin-left: 15px;">
 
-Initially (high AAA voltage), VBAT closely follows the AAA level. As the AAA voltage drops and the output of the 1N4148 falls below the coin cell’s level minus the BAT54 drop, the coin cell takes over. VBAT then stabilizes around 3.1 V and becomes independent of AAA voltage. The transition is smooth, without instability.
+Initially (high AAA voltage), VBAT closely follows the AAA level. As the AAA voltage drops and the output of the 1N4148 falls below the coin cell’s level minus the BAT54 drop, the coin cell takes over. VBAT then stabilizes around 3.1 V and becomes independent of AAA voltage. 
 
 ---
 
