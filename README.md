@@ -1,5 +1,5 @@
 # esign
-**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for room signage, for example as a display front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system. It features RTC-based power control allowing for low power consumption, the project includes 3D-printed case, a custom PCB and an epaper display.
+**eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for room signage, for example as a display front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system via seatsurfing's Rest API. It features RTC-based power control allowing for low power consumption, the project includes an 3D-printed case, a custom PCB and an epaper display.
 
 
 
@@ -61,7 +61,7 @@
 
 ---
 
-## Project Overview and DIY-rebuild
+## Build your own *eSign*
 
 This repository provides all design files, documentation, and code to build your own *eSign*:
 
@@ -81,6 +81,91 @@ This repository provides all design files, documentation, and code to build your
 3. **Firmware**
    C-based firmware for RTC wakeup, Wi-Fi sync, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
 ---
+
+## User-definable pages
+
+Eight user-definable pages can be selected during startup by holding combinations of buttons 1–3 and pressing *Start*.
+
+> 💡 **Page selection logic:**  
+> The active page number is determined by summing the values of the pressed buttons:  
+> **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**  
+> This allows selecting pages 1–7. Page 0 is the default.  
+> For details, see the **“How to Show Pages”** screen (Page 4 below).
+
+---
+
+### Page 0: **Room Occupation (Default View)**  
+Displays current room occupancy fetched from the seatsurfing server. The room name, occupant, and space number are shown. This page is shown automatically triggered by the Real Time Clock.
+
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_0.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_0.JPG" alt="page 0eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
+---
+
+### Page 1: **Do Not Disturb**  
+Indicates that the room should not be entered. No network connection required.
+
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_1.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_1.JPG" alt="page 1 eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
+---
+
+### Page 2: **Universal Decision Maker**  
+A playful feature for indecisive moments. Randomly displays either “Yes!” or “No!” without requiring a network connection.
+
+
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_2_YES.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_2_YES.JPG" alt="page 2 eSign Device" width="400" style="border-radius: 8px;">
+<img src="images/4_2_white_pages/esign_4_2_page_2_NO.JPG" alt="page 2 eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
+
+---
+
+### Page 3: **Display Settings**  
+Shows technical details such as Wi-Fi settings, update intervals, battery voltage (Vcc and Vbat), raw and DST-corrected RTC time, MAC address, and ADC scaling constant.
+
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_3.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_3.JPG" alt="page 3 eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
+---
+
+### Page 4: **How to Show Pages**  
+Explains the startup page selection mechanism using button combinations.  
+Useful as an on-device quick reference.
+
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_4.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_4.JPG" alt="page 4 eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
+---
+
+### Page 5: **Set Clock with Server Time**  
+[Not yet implemented in the seatsurfing version] Synchronizes the internal RTC with the current time from a remote time server. Especially useful after battery replacement or when the RTC has been reset. 
+
+---
+
+### Page 6–7: *(Currently unused)*  
+Reserved for future features. 
+<p align="center">
+  <a href="images/4_2_white_pages/esign_4_2_page_5.JPG" target="_blank">
+    <img src="images/4_2_white_pages/esign_4_2_page_5.JPG" alt="page 5 eSign Device" width="400" style="border-radius: 8px;">
+  </a>
+</p>
+
 
 ## 📁 Repository Structure
 
