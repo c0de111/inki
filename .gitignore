@@ -50,3 +50,30 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+c/build/_deps/picotool-src/
+# Ignore build directories and artifacts
+build/
+_deps/
+generated/
+pico-sdk/
+version.c
+version.h
+
+# Ignore temporary or build-related files
+*.o
+*.so
+*.a
+*.log
+*.cmake
+*.stamp
+*.tmp
+*.xcf
+
+# Ignore specific generated files
+pico_flash_region.ld
+ds3231_clock_setup/
+
+# Private credentials
+**/wifi_credentials.h
+**/seatsurfing_api.h
