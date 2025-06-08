@@ -2,7 +2,6 @@
 **eSign** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for room signage, for example as a display front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system via seatsurfing's Rest API. It features RTC-based power control allowing for low power consumption, the project includes an 3D-printed case, a custom PCB and an epaper display.
 
 
-
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
     <img src="images/esign_4_2_1_cropped.jpg" alt="eSign Device" width="500" style="border-radius: 8px;">
@@ -127,6 +126,16 @@ A playful feature for indecisive moments. Randomly displays either “Yes!” or
   </a>
 </p>
 
+
+<p align="center">
+  <a href="https://makertube.net/w/1DiDJP2MitTqSbMxgx9UBE" target="_blank">
+    <img src="images/esign_4_2_universal_decisionMaker_screenshot.png" alt="eSign refresh" width="400">
+  </a>
+
+  <a href="https://makertube.net/w/9YwdxqEVp6JRVWCDHPg3zx" target="_blank">
+    <img src="images/esign_4_2_universal_decisionMaker_screenshot_no.png" alt="eSign refresh" width="400">
+  </a>
+</p>
 
 ---
 
