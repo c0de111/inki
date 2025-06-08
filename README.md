@@ -39,7 +39,7 @@
   Periodically fetches content via HTTP, refresh time freely programmable.
 
 - **Multi-Page Display**
-  Up to 8 user-selectable display pages via pushbuttons.
+  Up to 8 user-selectable display pages via pushbuttons. [See „User-selectable pages“](#user-selectable-pages)
 
 - **Battery Voltage Monitoring**
   + Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
@@ -82,7 +82,7 @@ This repository provides all design files, documentation, and code to build your
    C-based firmware for RTC wakeup, Wi-Fi sync, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
 ---
 
-## User-definable pages
+## User-selectable pages
 
 Eight user-definable pages can be selected during startup by holding combinations of buttons 1–3 and pressing *Start*.
 
