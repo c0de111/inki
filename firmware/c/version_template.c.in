@@ -1,0 +1,18 @@
+/*
+ * Version Information ("@BUILD_DATE@"):
+ * - "@GIT_VERSION@" provides the full version string:
+ *   - "@GIT_TAG@" is the nearest Git tag, indicating the base version.
+ *   - "@GIT_COMMITS@" represents the number of commits since the tagged version.
+ *   - "@GIT_HASH@" is the abbreviated Git commit hash, prefixed with 'g' to indicate it is a shortened hash.
+ *   - "dirty" indicates that the working tree had uncommitted changes at build time.
+ *
+ * Together, this provides a unique and traceable version string for the firmware.
+ * Room Configuration:
+ * - Built for room: "@ROOM@"
+ */
+
+#include "version.h"
+
+char *program_name = "esign";
+char *version = "@GIT_VERSION@";
+char *build_date = "@BUILD_DATE@";
