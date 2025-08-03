@@ -77,3 +77,9 @@ ds3231_clock_setup/
 # Private credentials
 **/wifi_credentials.h
 **/seatsurfing_api.h
+
+# KiCad project metadata
+*.kicad_prl
+*.bak
+**/fp-info-cache
+
