@@ -106,7 +106,20 @@ This repository provides all design files, documentation, and code to build your
 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular enclosure - [(STLs and FreeCAD files)](hardware/enclosure/).
-<p align="center">
+   
+   ### Assembly Animation (4.2" version)
+
+![Assembly Animation](hardware/enclosure/images/assembly.gif)
+
+This animation shows the step-by-step assembly of the 4.2" enclosure.
+
+2. **Electronics**
+   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption [(schematics, pcbs, docs)](hardware/circuit/).
+
+3. **Firmware**
+   C-based firmware for RTC wakeup, Wi-Fi sync, Web interface, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
+
+   <p align="center">
   <a href="https://makertube.net/w/ogwhv2iz3bCEpDWk6XRxvr" target="_blank">
     <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
   </a>
@@ -114,12 +127,7 @@ This repository provides all design files, documentation, and code to build your
 
 <p align="center"><i>Click to watch the 3D enclosure demo video on MakerTube</i></p>
 
-2. **Electronics**
-   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption [(schematics, pcbs, docs)](hardware/circuit/).
-
-3. **Firmware**
-   C-based firmware for RTC wakeup, Wi-Fi sync, Web interface, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
----
+   ---
 
 ## User-selectable pages
 
