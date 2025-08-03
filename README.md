@@ -1,6 +1,6 @@
 # inki (esign) 
 
-**inki** is a battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for example for room signage and as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system via seatsurfing's Rest API. It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case, a custom PCB and an ePaper display that retains its content even when powered off. 
+**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for example for room signage and as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system via seatsurfing's Rest API. It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case, a custom PCB and an ePaper display that retains its content even when powered off. 
 <!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
 
 <p align="center">
