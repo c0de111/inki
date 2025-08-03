@@ -18,7 +18,6 @@
 #define ROOMS_H
 
 #include "ImageResources.h"
-#include "seatsurfing_api.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -85,37 +84,6 @@ typedef struct {
     float voltage_max;
 } VoltageInterval;
 
-// Room configuration struct
-// typedef struct {
-    // const char* roomname;
-    // RoomTypeProperties properties;
-    // EpaperType epapertype;
-    // const unsigned char* backgroundimage;
-    // SubImage qr_code_1_image;
-    // SubImage qr_code_2_image;
-    // SubImage qr_code_3_image;
-    // float conversion_factor;
-    // int refresh_minutes_by_pushbutton[8];
-    // int wifi_reconnect_minutes;
-    // int watchdog_time;
-    // int wifi_timeout;
-    // int number_wifi_attempts;
-    // int max_wait_data_wifi;
-    // uint8_t pushbutton1_pin;
-    // uint8_t pushbutton2_pin;
-    // uint8_t pushbutton3_pin;
-    // int num_pushbuttons;
-    // bool show_query_date;
-    // bool query_only_at_officehours;
-    // float switch_off_battery_voltage;
-    // int ip[4];
-    // int port;
-    // const char* host;
-    // const char* space_id;
-    // const char* location_id;
-    // const char* api_user;
-// } RoomConfig;
-
 // Image assets declared externally
 extern const SubImage battery_levels_64x97[];
 extern const SubImage eSign_128x128_white_background3;
@@ -123,11 +91,4 @@ extern const SubImage eSign_100x100_3;
 extern const SubImage qr_Seminarraum;
 extern const SubImage qr_github_link;
 
-// Default config instance declared externally
-// extern const RoomConfig DEFAULT_CAMPUS_H_CONFIG;
-
-// Active room config instance (used globally)
-// extern const RoomConfig* current_room;
 #endif // ROOMS_H
-
-// const RoomConfig* current_room = &DEFAULT_CAMPUS_H_CONFIG;

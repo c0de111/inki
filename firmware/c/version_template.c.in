@@ -13,6 +13,6 @@
 
 #include "version.h"
 
-char *program_name = "esign";
+char *program_name = "inki";
 char *version = "@GIT_VERSION@";
 char *build_date = "@BUILD_DATE@";
