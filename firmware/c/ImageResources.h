@@ -31,12 +31,10 @@ extern const unsigned char gImage_battery_level_10[];
 
 extern const unsigned char gImage_qr_Seminarraum[];
 
-extern const unsigned char gImage_battery_level_1_42x70[];
-extern const unsigned char gImage_battery_level_2_42x70[];
-
 extern const unsigned char gImage_github_link[];
-extern const unsigned char gImage_generic_logo_112_107[];
 extern const unsigned char gImage_eSign_128x128_white_background[];
+extern const unsigned char gImage_eSign_128x128_white_background3[];
+extern const unsigned char gImage_eSign_100x100_3[];
 
 
 #endif

@@ -2,23 +2,22 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "lwip/altcp.h"
+#include "lwip/ip_addr.h"
 #include "hardware/adc.h"
 #include "hardware/watchdog.h"
-// #include "pico/rand.h"
 #include "config.h"
 #include "version.h"
-// #include "rooms.h"
 #include "wifi.h"
-#include "DEV_Config.h"    // For device configuration
-#include "GUI_Paint.h"     // For painting functions (e.g., Paint_NewImage)
-#include "ImageResources.h"     // For image-related data
+#include "DEV_Config.h"
+#include "GUI_Paint.h"
+#include "ImageResources.h"
 #include "EPD_7in5_V2.h"
 #include "EPD_4in2_V2.h"
 #include "EPD_2in9_V2.h"
 #include "ds3231.h"
 #include "debug.h"
-// #include "pico/version.h"
-#include "wifi_credentials.h"
+#include "flash.h"
+#include "webserver.h"
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
@@ -39,12 +38,19 @@ static char server_response_buf[2048];
  */
 static char recv_chunk_buf[1024];
 
+static char submitted_text[128] = "";
+
+ds3231_t ds3231; // RTC definition
+// extern const wifi_config_t wifi_config_flash;
+// extern const seatsurfing_config_t seatsurfing_config_flash;
+// extern const device_config_t device_config_flash;
+
 /*Represents the combined state of pushbuttons pbx pressed during startup, mapped to 2³:
 * - Button 1 adds 1 if pressed.
 * - Button 2 adds 2 if pressed.
 * - Button 3 adds 4 if pressed.
 * - Button 4 adds 8 if pressed (not implemented in hardware currently)
-* This determines the page shown on ePaper, and the refreshtimes via .refresh_minutes_by_pushbutton in rooms.h.
+* This determines the page shown on ePaper, and the refreshtimes via .refresh_minutes_by_pushbutton
 */
 int pushbutton = 0;
 bool pb1 = false;
@@ -88,13 +94,11 @@ if (i < len) {
 output[j] = '\0';
 }
 
-
 void create_basic_auth_header(const char *username, const char *password, char *output_base64) {
     char userpass[128];
     snprintf(userpass, sizeof(userpass), "%s:%s", username, password);
     base64_encode((const uint8_t*)userpass, strlen(userpass), output_base64);
 }
-
 
 /**
  * @brief Draws a sub-image onto the ePaper buffer at the specified position.
@@ -105,11 +109,11 @@ void create_basic_auth_header(const char *username, const char *password, char *
  * @param y Y-coordinate for the top-left corner of the sub-image.
  * @param room_config Pointer to the current room configuration (to determine ePaper dimensions).
  */
-void DrawSubImage(UBYTE* buffer, const SubImage* sub_image, int x, int y, const RoomConfig* room_config) {
+void DrawSubImage(UBYTE* buffer, const SubImage* sub_image, int x, int y) {
     // Get buffer dimensions dynamically
     int buffer_width, buffer_height;
 
-    switch (room_config->epapertype) {
+    switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             buffer_width = EPD_7IN5_V2_WIDTH;
             buffer_height = EPD_7IN5_V2_HEIGHT;
@@ -121,7 +125,7 @@ void DrawSubImage(UBYTE* buffer, const SubImage* sub_image, int x, int y, const 
             break;
 
         default:
-            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", room_config->epapertype);
+            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
             return;
     }
 
@@ -200,25 +204,25 @@ void display_battery_image(float voltage, UBYTE * image_buffer, int x, int y) {
 
     // Select and draw the appropriate battery image.
     if (battery_level == 10) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_1], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_1], x, y);
     } else if (battery_level == 20) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_2], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_2], x, y);
     } else if (battery_level == 30) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_3], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_3], x, y);
     } else if (battery_level == 40) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_4], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_4], x, y);
     } else if (battery_level == 50) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_5], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_5], x, y);
     } else if (battery_level == 60) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_6], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_6], x, y);
     } else if (battery_level == 70) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_7], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_7], x, y);
     } else if (battery_level == 80) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_8], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_8], x, y);
     } else if (battery_level == 90) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_9], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_9], x, y);
     } else if (battery_level == 100) {
-        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_10], x, y, current_room);
+        DrawSubImage(image_buffer, &battery_levels_64x97[BATTERY_LEVEL_10], x, y);
     } else {
         printf("Voltage %.2f is out of range!\n", voltage);
     }
@@ -431,9 +435,9 @@ err_t recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
         pbuf_copy_partial(p, recv_chunk_buf, p->tot_len, 0);
         recv_chunk_buf[p->tot_len] = 0;
 
-        #ifdef HIGH_VERBOSE_DEBUG
+        // #ifdef HIGH_VERBOSE_DEBUG
         debug_log("Buffer= %s\n", recv_chunk_buf);
-        #endif
+        // #endif
 
         strcat(server_response_buf, recv_chunk_buf); // Append chunk to global buffer
         altcp_recved(pcb, p->tot_len);
@@ -508,9 +512,8 @@ seat_info_t parse_seat_info(const char* json) {
 }
 
 
-
 /**
- * @brief Configures and reads the state of pushbuttons defined in the given room configuration.
+ * @brief Configures and reads the state of pushbuttons
  *
  * This function sets up the GPIO pins for all pushbuttons as defined in the `RoomConfig` struct.
  * It also reads their states and updates the global `pushbutton` variable to reflect the combination
@@ -532,47 +535,47 @@ seat_info_t parse_seat_info(const char* json) {
  * @param config Pointer to the `RoomConfig` struct containing pushbutton configurations.
  */
 
-void setup_and_read_pushbuttons(const RoomConfig* config) {
+void setup_and_read_pushbuttons() {
     // Reset pushbutton state
     pushbutton = 0;
 
     // Setup and read pushbutton 1
-    if (config->num_pushbuttons >= 1 && config->pushbutton1_pin != 0xFF) {
-        gpio_init(config->pushbutton1_pin);
-        gpio_set_dir(config->pushbutton1_pin, GPIO_IN);
-        gpio_pull_up(config->pushbutton1_pin);
+    if (device_config_flash.data.num_pushbuttons >= 1 && device_config_flash.data.pushbutton1_pin != 0xFF) {
+        gpio_init(device_config_flash.data.pushbutton1_pin);
+        gpio_set_dir(device_config_flash.data.pushbutton1_pin, GPIO_IN);
+        gpio_pull_up(device_config_flash.data.pushbutton1_pin);
         sleep_ms(5); // De-bounce
-        pb1 = gpio_get(config->pushbutton1_pin); // Read pushbutton state
+        pb1 = gpio_get(device_config_flash.data.pushbutton1_pin); // Read pushbutton state
         if (!pb1) pushbutton += 1; // Active low
     }
 
     // Setup and read pushbutton 2
-    if (config->num_pushbuttons >= 2 && config->pushbutton2_pin != 0xFF) {
-        gpio_init(config->pushbutton2_pin);
-        gpio_set_dir(config->pushbutton2_pin, GPIO_IN);
-        gpio_pull_up(config->pushbutton2_pin);
+    if (device_config_flash.data.num_pushbuttons >= 2 && device_config_flash.data.pushbutton2_pin != 0xFF) {
+        gpio_init(device_config_flash.data.pushbutton2_pin);
+        gpio_set_dir(device_config_flash.data.pushbutton2_pin, GPIO_IN);
+        gpio_pull_up(device_config_flash.data.pushbutton2_pin);
         sleep_ms(5); // De-bounce
-        pb2 = gpio_get(config->pushbutton2_pin); // Read pushbutton state
+        pb2 = gpio_get(device_config_flash.data.pushbutton2_pin); // Read pushbutton state
         if (!pb2) pushbutton += 2; // Active low
     }
 
     // Setup and read pushbutton 3
-    if (config->num_pushbuttons >= 3 && config->pushbutton3_pin != 0xFF) {
-        gpio_init(config->pushbutton3_pin);
-        gpio_set_dir(config->pushbutton3_pin, GPIO_IN);
-        gpio_pull_up(config->pushbutton3_pin);
+    if (device_config_flash.data.num_pushbuttons >= 3 && device_config_flash.data.pushbutton3_pin != 0xFF) {
+        gpio_init(device_config_flash.data.pushbutton3_pin);
+        gpio_set_dir(device_config_flash.data.pushbutton3_pin, GPIO_IN);
+        gpio_pull_up(device_config_flash.data.pushbutton3_pin);
         sleep_ms(5); // De-bounce
-        pb3 = gpio_get(config->pushbutton3_pin); // Read pushbutton state
+        pb3 = gpio_get(device_config_flash.data.pushbutton3_pin); // Read pushbutton state
         if (!pb3) pushbutton += 4; // Active low
     }
     // for possible future use, maybe examples like below make sense
     // // Setup and read pushbutton 4
-    // if (config->num_pushbuttons == 4 && config->pushbutton4_pin != 0xFF) {
-    //     gpio_init(config->pushbutton4_pin);
-    //     gpio_set_dir(config->pushbutton4_pin, GPIO_IN);
-    //     gpio_pull_up(config->pushbutton4_pin);
+    // if (device_config_flash.data.num_pushbuttons == 4 && device_config_flash.data.pushbutton4_pin != 0xFF) {
+    //     gpio_init(device_config_flash.data.pushbutton4_pin);
+    //     gpio_set_dir(device_config_flash.data.pushbutton4_pin, GPIO_IN);
+    //     gpio_pull_up(device_config_flash.data.pushbutton4_pin);
     //     sleep_ms(5); // De-bounce
-    //     bool pb4 = gpio_get(config->pushbutton4_pin); // Read pushbutton state
+    //     bool pb4 = gpio_get(device_config_flash.data.pushbutton4_pin); // Read pushbutton state
     //     if (!pb4) pushbutton += 8; // Active low
     // }
 }
@@ -621,8 +624,8 @@ WifiResult wifi_server_communication(float voltage) {
     }
     cyw43_arch_enable_sta_mode();
 
-    if (current_room->roomname != NULL) {
-        netif_set_hostname(netif_default, current_room->roomname);
+    if (device_config_flash.data.roomname != NULL) {
+        netif_set_hostname(netif_default, device_config_flash.data.roomname);
     }
 
     watchdog_update();
@@ -630,16 +633,18 @@ WifiResult wifi_server_communication(float voltage) {
 
     int wifi_connected = -1;
     int wifi_attempt_count = 0;
-    while (wifi_connected != 0 && wifi_attempt_count < current_room->number_wifi_attempts) {
+    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
         wifi_attempt_count++;
         wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
-            WIFI_SSID,
-            WIFI_PASSWORD,
+            wifi_config_flash.ssid,
+            wifi_config_flash.password,
             auth,
-            current_room->wifi_timeout
+            device_config_flash.data.wifi_timeout
         );
         watchdog_update();
-        debug_log_with_color(COLOR_YELLOW, "Trying to connect... Attempt %d\n", wifi_attempt_count);
+        // debug_log_with_color(COLOR_YELLOW, "ssid %s\n", wifi_config_flash.ssid);
+
+        debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n", wifi_config_flash.ssid, wifi_attempt_count);
     }
 
     if (wifi_connected != 0) {
@@ -651,7 +656,7 @@ WifiResult wifi_server_communication(float voltage) {
 
     // Build "username:password" string for HTTP Basic Auth
     char userpass[128];
-    snprintf(userpass, sizeof(userpass), "%s:%s", API_USER_ESIGN, API_PWD_ESIGN);
+    snprintf(userpass, sizeof(userpass), "%s:%s", seatsurfing_config_flash.data.username, seatsurfing_config_flash.data.password);
 
     // Encode the userpass string to Base64 (output will be used in Authorization header)
     char auth_b64[192];  // Safe size: 4/3 * 128 + null terminator
@@ -664,9 +669,9 @@ WifiResult wifi_server_communication(float voltage) {
             "Host: %s\r\n"
             "Authorization: Basic %s\r\n"
             "\r\n",
-            current_room->location_id,
-            current_room->space_id,
-            current_room->host,
+            seatsurfing_config_flash.data.location_id,
+            seatsurfing_config_flash.data.space_id,
+            seatsurfing_config_flash.data.host,
             auth_b64
     );
 
@@ -677,10 +682,16 @@ WifiResult wifi_server_communication(float voltage) {
     altcp_recv(pcb, recv);
 
     ip_addr_t ip;
-    IP4_ADDR(&ip, current_room->ip[0], current_room->ip[1], current_room->ip[2], current_room->ip[3]);
+    // IP4_ADDR(&ip, device_config_flash.data.ip[0], device_config_flash.data.ip[1], device_config_flash.data.ip[2], device_config_flash.data.ip[3]);
+    IP4_ADDR(&ip,
+             seatsurfing_config_flash.data.ip[0],
+             seatsurfing_config_flash.data.ip[1],
+             seatsurfing_config_flash.data.ip[2],
+             seatsurfing_config_flash.data.ip[3]);
 
     altcp_arg(pcb, header);
-    err_t err = altcp_connect(pcb, &ip, current_room->port, altcp_client_connected);
+    err_t err = altcp_connect(pcb, &ip, seatsurfing_config_flash.data.port, altcp_client_connected);
+
     if (err != ERR_OK) {
         debug_log_with_color(COLOR_RED, "TCP connection failed: %d\n", err);
         cyw43_arch_disable_sta_mode();
@@ -699,7 +710,7 @@ WifiResult wifi_server_communication(float voltage) {
     bool header_done = false;
 
     debug_log_with_color(COLOR_YELLOW, "50 ms wait time for header/body #: ");
-    while (max_waits++ < current_room->max_wait_data_wifi) {
+    while (max_waits++ < device_config_flash.data.max_wait_data_wifi) {
         sleep_ms(50);
         debug_log_with_color(COLOR_YELLOW, " ");
 
@@ -715,7 +726,7 @@ WifiResult wifi_server_communication(float voltage) {
                 content_length = atoi(cl);
                 debug_log("Parsed Content-Length: %d\n", content_length);
             } else {
-                debug_log_with_color(COLOR_RED, "No Content-Length found.\n");
+                // debug_log_with_color(COLOR_RED, "No Content-Length found.\n");
                 break;
             }
         }
@@ -992,7 +1003,7 @@ void set_rtc_from_display_string(ds3231_t* ds3231, const char* line) {
  * - A safe modulo-based time calculation ensures refresh intervals > 60 min are handled correctly.
  * - The gate pin is reset to high impedance, enabling the RTC to control the power state.
  */
-void set_alarmclock_and_powerdown(ds3231_t* ds3231, const RoomConfig* room_config) {
+void set_alarmclock_and_powerdown(ds3231_t* ds3231) {
     ds3231_data_t current_time;
     ds3231_read_current_time(ds3231, &current_time);
 
@@ -1011,14 +1022,14 @@ void set_alarmclock_and_powerdown(ds3231_t* ds3231, const RoomConfig* room_confi
     }
 
     // Calculate next wake-up time (safe for refresh_minutes ≥ 60)
-    // int total_minutes = local_hour * 60 + local_minute + room_config->refresh_minutes;
-    int refresh = room_config->refresh_minutes_by_pushbutton[pushbutton & 0x07]; // use only 3 bits
+    // int total_minutes = local_hour * 60 + local_minute + device_config_flash.data.refresh_minutes;
+    int refresh = device_config_flash.data.refresh_minutes_by_pushbutton[pushbutton & 0x07]; // use only 3 bits
     int total_minutes = local_hour * 60 + local_minute + refresh;
     int alarm_hour = (total_minutes / 60) % 24;
     int alarm_minute = total_minutes % 60;
 
     // Adjust wake-up time based on office hours configuration
-    if (room_config->query_only_at_officehours) {
+    if (device_config_flash.data.query_only_at_officehours) {
         // Skip operation on Saturdays (6) and Sundays (7)
         if (day == 6 || day == 7) {
             debug_log("Skipping operation: Weekend detected.\n");
@@ -1054,6 +1065,7 @@ void set_alarmclock_and_powerdown(ds3231_t* ds3231, const RoomConfig* room_confi
 
     ds3231_enable_alarm_interrupt(ds3231, true);
     ds3231_set_alarm_2(ds3231, &alarm2, ON_MATCHING_MINUTE_AND_HOUR);
+    debug_log("Alarm2 set for %02d:%02d (RTC time)\n", alarm2.hours, alarm2.minutes);
 
     sleep_ms(5);
 
@@ -1067,9 +1079,32 @@ void set_alarmclock_and_powerdown(ds3231_t* ds3231, const RoomConfig* room_confi
     ds3231_clear_alarm2(ds3231);
 }
 
-UBYTE* init_epaper(const RoomConfig* room_config) {
+bool draw_flash_logo(UBYTE* buffer, int x, int y) {
+    const logo_header_t* header = (const logo_header_t*)FLASH_PTR(LOGO_FLASH_OFFSET);
 
-    if (room_config->epapertype == EPAPER_NONE) {
+    if (memcmp(header->magic, "LOGO", 4) != 0) {
+        debug_log_with_color(COLOR_YELLOW, "Kein gültiges Flash-Logo gefunden\n");
+        return false;
+    }
+
+    debug_log("Flash-Logo gefunden: %dx%d px, %d bytes\n",
+              header->width, header->height, header->datalen);
+
+    const uint8_t* bitmap = FLASH_PTR(LOGO_FLASH_OFFSET + sizeof(logo_header_t));
+
+    SubImage logo_image = {
+        .data = bitmap,
+        .width = header->width,
+        .height = header->height
+    };
+
+    DrawSubImage(buffer, &logo_image, x, y);
+    return true;
+}
+
+UBYTE* init_epaper() {
+
+    if (device_config_flash.data.epapertype == EPAPER_NONE) {
         debug_log("No ePaper configured for this room.\n");
         return NULL;
     }
@@ -1091,7 +1126,7 @@ UBYTE* init_epaper(const RoomConfig* room_config) {
     UWORD Imagesize = 0;
 
     // Initialize and clear the ePaper based on the configured type
-    switch (room_config->epapertype) {
+    switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             debug_log("Initializing Waveshare 7.5-inch V2 ePaper...\n");
             EPD_7IN5_V2_Init();
@@ -1114,7 +1149,7 @@ UBYTE* init_epaper(const RoomConfig* room_config) {
             break;
 
         default:
-            debug_log("Unsupported ePaper type: %d\n", room_config->epapertype);
+            debug_log("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
             hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS); // Re-enable watchdog
             return NULL;
     }
@@ -1124,7 +1159,7 @@ UBYTE* init_epaper(const RoomConfig* room_config) {
     debug_log("Re-enabling watchdog...\n");
     #endif
 
-    watchdog_enable(room_config->watchdog_time, 0);
+    watchdog_enable(device_config_flash.data.watchdog_time, 0);
     watchdog_update();
 
     // Create a new image cache
@@ -1140,8 +1175,8 @@ UBYTE* init_epaper(const RoomConfig* room_config) {
     #endif
 
     Paint_NewImage(BlackImage,
-                   (room_config->epapertype == EPAPER_WAVESHARE_7IN5_V2) ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH,
-                   (room_config->epapertype == EPAPER_WAVESHARE_7IN5_V2) ? EPD_7IN5_V2_HEIGHT : EPD_4IN2_V2_HEIGHT,
+                   (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH,
+                   (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) ? EPD_7IN5_V2_HEIGHT : EPD_4IN2_V2_HEIGHT,
                    0, WHITE);
 
     #ifdef HIGH_VERBOSE_DEBUG
@@ -1195,13 +1230,12 @@ void format_name_from_email(const char* email, char* outbuf, size_t outbuf_len) 
 }
 
 // Render the default page with room-specific information and QR codes if enabled. This is the page without any user interaction
-void render_page_0(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
-    if (room->properties.type == ROOM_TYPE_OFFICE && room->properties.number_of_seats == 3 &&
-        room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+    if (device_config_flash.data.type == ROOM_TYPE_OFFICE && device_config_flash.data.number_of_seats == 3 &&
+        device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
     // Display room name & logo
-    Paint_DrawString_EN(40, 50, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
-    // DrawSubImage(image_buffer, &gImage_generic_logo_112_107, 460, 15, room);
+    Paint_DrawString_EN(40, 50, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
 
     seat_info_t seat = parse_seat_info(server_response_buf);
 
@@ -1218,19 +1252,20 @@ void render_page_0(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     Paint_DrawLine(380, 170, 380, 300, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
     }
-    else if ((room->properties.type == ROOM_TYPE_CONFERENCE ) &&
-        room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    else if ((device_config_flash.data.type == ROOM_TYPE_CONFERENCE ) &&
+        device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
           }
 
-    else if ((room->properties.type == ROOM_TYPE_OFFICE || room->properties.number_of_seats >= 1) &&
-        room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    else if ((device_config_flash.data.type == ROOM_TYPE_OFFICE || device_config_flash.data.number_of_seats >= 1) &&
+        device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
-    // Display room name & logo
+        Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
 
-    Paint_DrawString_EN(20, 40, room->roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
-    DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+    if (!draw_flash_logo(image_buffer, 290, 10)) {
+        DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+    }
 
     seat_info_t seat = parse_seat_info(server_response_buf);
 
@@ -1255,21 +1290,24 @@ void render_page_0(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
  * @param room  The room configuration containing ePaper and layout settings.
  * @param clock A pointer to the initialized RTC (ds3231) structure.
  */
-void render_page_1(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     char buffer[128]; // Buffer for formatted strings
 
     // Check the ePaper type and render accordingly
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3 , 270, 5);
 
         // Display room name
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
 
 
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
-        Paint_DrawString_EN(20, 40, room->roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+        Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
+
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
 
         sprintf(buffer, "Please,");
         Paint_DrawString_EN(50, 120, buffer, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
@@ -1291,7 +1329,11 @@ void render_page_1(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_1 is not supported for the configured ePaper type.\n");
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+
+        if (!draw_flash_logo(image_buffer, 285, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+        }
+
     }
 }
 
@@ -1302,7 +1344,7 @@ void render_page_1(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
 * @param room  The room configuration containing ePaper and layout settings.
 * @param clock A pointer to the initialized RTC (ds3231) structure (not used here but kept for consistency).
 */
-void render_page_2(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     char buffer[128]; // Buffer for formatted strings
     ds3231_data_t ds3231_data;
 
@@ -1313,10 +1355,14 @@ void render_page_2(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     Paint_Clear(WHITE);
 
     // Check the ePaper type and render accordingly
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
-        Paint_DrawBitMap(gImage_generic_logo_112_107);  // Default logo if QR codes are disabled
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
+
+        if (!draw_flash_logo(image_buffer, 285, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+        }
+
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
         // Rendering logic for the 7.5-inch ePaper
         sprintf(buffer, "Universal Decision Maker says:");
@@ -1337,8 +1383,10 @@ void render_page_2(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
 
         // Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
 
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
 
         sprintf(buffer, "Universal ");
         Paint_DrawString_EN(25, 40, buffer, &font_ubuntu_mono_11pt, WHITE, BLACK);
@@ -1365,7 +1413,11 @@ void render_page_2(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_2 is not supported for the configured ePaper type.\n");
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+
+        if (!draw_flash_logo(image_buffer, 285, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+        }
+
     }
 }
 
@@ -1376,7 +1428,7 @@ void render_page_2(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
  * @param room  The room configuration containing ePaper and layout settings.
  * @param clock A pointer to the initialized RTC (ds3231) structure.
  */
-void render_page_3(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+void render_page_3(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     char buffer[256]; // Buffer for formatted strings
 
     ds3231_data_t ds3231_data;
@@ -1385,33 +1437,35 @@ void render_page_3(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     ds3231_read_current_time(clock, &ds3231_data);
 
     // Read the current battery voltage
-    // float battery_voltage = read_battery_voltage(current_room->conversion_factor);
-    float coin_voltage = read_coin_cell_voltage(current_room->conversion_factor);
+    // float battery_voltage = read_battery_voltage(device_config_flash.data.conversion_factor);
+    float coin_voltage = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
 
 
     // Check the ePaper type and render accordingly
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         // Display device information and RTC time
-        Paint_DrawBitMap(gImage_generic_logo_112_107);  // Default logo if QR codes are disabled
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
 
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         // Display device information and RTC time
-        // DrawSubImage(image_buffer, &generic_logo_112_107, 280, 10, room);
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
-        Paint_DrawString_EN(10, 20, room->roomname, &font_ubuntu_mono_14pt_bold,  WHITE, BLACK);
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
 
-        sprintf(buffer, "ssid: %s", WIFI_SSID);
+        Paint_DrawString_EN(10, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold,  WHITE, BLACK);
+
+        sprintf(buffer, "ssid: %s", wifi_config_flash.ssid);
         Paint_DrawString_EN(10, 70, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
-        sprintf(buffer, "wifi_reconnect_minutes: %i", room->wifi_reconnect_minutes);
+        sprintf(buffer, "wifi_reconnect_minutes: %i", device_config_flash.data.wifi_reconnect_minutes);
         Paint_DrawString_EN(10, 90, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
-        sprintf(buffer, "wifi_timeout: %i", room->wifi_timeout);
+        sprintf(buffer, "wifi_timeout: %i", device_config_flash.data.wifi_timeout);
         Paint_DrawString_EN(10, 110, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
-        sprintf(buffer, "refresh_minutes: [%d,%d,%d,%d,%d,%d,%d,%d]", room->refresh_minutes_by_pushbutton[0], room->refresh_minutes_by_pushbutton[1], room->refresh_minutes_by_pushbutton[2], room->refresh_minutes_by_pushbutton[3], room->refresh_minutes_by_pushbutton[4], room->refresh_minutes_by_pushbutton[5], room->refresh_minutes_by_pushbutton[6], room->refresh_minutes_by_pushbutton[7]);
+        sprintf(buffer, "refresh_minutes: [%d,%d,%d,%d,%d,%d,%d,%d]", device_config_flash.data.refresh_minutes_by_pushbutton[0], device_config_flash.data.refresh_minutes_by_pushbutton[1], device_config_flash.data.refresh_minutes_by_pushbutton[2], device_config_flash.data.refresh_minutes_by_pushbutton[3], device_config_flash.data.refresh_minutes_by_pushbutton[4], device_config_flash.data.refresh_minutes_by_pushbutton[5], device_config_flash.data.refresh_minutes_by_pushbutton[6], device_config_flash.data.refresh_minutes_by_pushbutton[7]);
         Paint_DrawString_EN(10, 130, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
         // Get current time from RTC
@@ -1450,7 +1504,7 @@ void render_page_3(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
         sprintf(buffer, "Vbat: %.3fV", coin_voltage);
         Paint_DrawString_EN(10, 230, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
-        sprintf(buffer, "adc conv.: %.8f", room->conversion_factor);
+        sprintf(buffer, "adc conv.: %.8f", device_config_flash.data.conversion_factor);
         Paint_DrawString_EN(10, 250, buffer, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
         display_battery_image(battery_voltage, image_buffer, 330, 190);
@@ -1459,20 +1513,20 @@ void render_page_3(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_3 is not supported for the configured ePaper type.\n");
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
     }
 }
 
 // Howto page
-void render_page_4(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
+void render_page_4(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
 
     // Check the ePaper type and render accordingly
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         // Display device information and RTC time
-        Paint_DrawBitMap(gImage_generic_logo_112_107);  // Default logo if QR codes are disabled
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
-      } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+      } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
           int tempx = 5;
           // Title
@@ -1517,31 +1571,33 @@ void render_page_4(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
           Paint_DrawString_EN(8, 280, "4", &font_ubuntu_mono_8pt, WHITE, BLACK);
 
           Paint_DrawString_EN(320, 220, "more at", &font_ubuntu_mono_6pt, WHITE, BLACK);
-          DrawSubImage(image_buffer, &qr_github_link, 330, 240, room);
+          DrawSubImage(image_buffer, &qr_github_link, 330, 240);
 
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_3 is not supported for the configured ePaper type.\n");
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
     }
 }
 
-// set time of RTC to server time
-void render_page_5(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
+void render_page_5(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     const char* page_label = "Page 5: Setting RTC via WIFI to server time";
     int rtc_data_line = -1;
 
     // Determine which line to use based on display type
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         rtc_data_line = 6;
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
         rtc_data_line = 4;
     }
 
     // Only proceed if a known display type is used
     if (rtc_data_line >= 0) {
-        // Paint_DrawString_EN(20, 40, room->roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
-        // DrawSubImage(image_buffer, &generic_logo_112_107, 280, 10, room);
+        // Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
+
         // Paint_DrawString_EN(5, 200, page_label, &font_ubuntu_mono_6pt, WHITE, BLACK);
 
         // const char *line = retrieveline(server_response_buf, rtc_data_line);
@@ -1581,60 +1637,67 @@ void render_page_5(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer,
     }
 }
 
-void render_page_6(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
+void render_page_6(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
 
     // Determine which epaper type is used
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
         Paint_DrawString_EN(330, 230, "more at", &font_ubuntu_mono_6pt, WHITE, BLACK);
-        DrawSubImage(image_buffer, &qr_github_link, 340, 250, room);
+        DrawSubImage(image_buffer, &qr_github_link, 340, 250);
         Paint_DrawString_EN(8, 292, "6", &Font8, WHITE, BLACK);
     }
 }
 
-void render_page_7(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
+void render_page_7(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
 
     // Determine which epaper type is used
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        if (!draw_flash_logo(image_buffer, 290, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        }
+
+        Paint_DrawString_EN(130, 30, "Server Mode", &font_ubuntu_mono_11pt, WHITE, BLACK);
+
         Paint_DrawString_EN(330, 230, "more at", &font_ubuntu_mono_6pt, WHITE, BLACK);
-        DrawSubImage(image_buffer, &qr_github_link, 340, 250, room);
+        DrawSubImage(image_buffer, &qr_github_link, 340, 250);
         Paint_DrawString_EN(8, 292, "6", &Font8, WHITE, BLACK);
     }
 }
 
 // Render the appropriate page based on the RoomConfig and user-selected pushbutton state
-void render_page(const RoomConfig* room, int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     switch (pushbutton) {
         case 0:
-            render_page_0(room, clock, image_buffer, battery_voltage);  // default page, typial: Display room state or occupation details
+            render_page_0(clock, image_buffer, battery_voltage);  // default page, typial: Display room state or occupation details
             break;
         case 1:
-            render_page_1(room, clock, image_buffer, battery_voltage);   // typical: Display "Do Not Disturb" message with time
+            render_page_1(clock, image_buffer, battery_voltage);   // typical: Display "Do Not Disturb" message with time
             break;
         case 2:
-            render_page_2(room, clock, image_buffer, battery_voltage);    // typical: Display a random number generator or utility
+            render_page_2(clock, image_buffer, battery_voltage);    // typical: Display a random number generator or utility
             break;
         case 3:
-            render_page_3(room, clock, image_buffer, battery_voltage);    // typical: Display current device configuration
+            render_page_3(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
             break;
         case 4:
-            render_page_4(room, clock, image_buffer, battery_voltage);    // typical: Display current device configuration
+            render_page_4(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
             break;
         case 5:
-            render_page_5(room, clock, image_buffer, battery_voltage);    // typical: Display current device configuration
+            render_page_5(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
             break;
         case 6:
-            render_page_6(room, clock, image_buffer, battery_voltage);    // typical: Display current device configuration
+            render_page_6(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
             break;
         case 7:
-            render_page_7(room, clock, image_buffer, battery_voltage);    // typical: Display current device configuration
+            render_page_7(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
             break;
         default:
             debug_log("Invalid pushbutton state: %d\n", pushbutton);
-            Paint_DrawBitMap(gImage_generic_logo_112_107);  // Display default logo for unknown states
+            DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
             break;
     }
 }
@@ -1666,7 +1729,7 @@ void render_page(const RoomConfig* room, int pushbutton, ds3231_t* clock, UBYTE*
  * @attention Ensure the `room` parameter is valid and correctly configured. Passing a NULL
  * pointer or unsupported `epapertype` will result in no rendering and a debug log error.
  */
-void render_firmware_info(float battery_voltage, const RoomConfig* room) {
+void render_firmware_info(float battery_voltage) {
     // Single buffer for building and storing the final message
     char buffer[128];
 
@@ -1675,7 +1738,7 @@ void render_firmware_info(float battery_voltage, const RoomConfig* room) {
              program_name, version, build_date, battery_voltage);
 
     // Render the constructed string on the ePaper
-    switch (room->epapertype) {
+    switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             Paint_DrawString_EN(500, 464, buffer, &Font12, WHITE, BLACK);
             break;
@@ -1689,19 +1752,14 @@ void render_firmware_info(float battery_voltage, const RoomConfig* room) {
             break;
 
         default:
-            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", room->epapertype);
+            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
             return;
     }
 }
 
-void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) {
+void epaper_finalize_and_powerdown(UBYTE* image) {
     if (image == NULL) {
         debug_log("No valid image buffer to display. Skipping ePaper operations.\n");
-        return;
-    }
-    if (room_config == NULL) {
-        debug_log_with_color(COLOR_RED, "Room configuration is NULL. Cannot finalize ePaper.\n");
-        free(image);
         return;
     }
 
@@ -1709,10 +1767,10 @@ void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) 
 
     // Display the final image based on the configured ePaper type
     #ifdef HIGH_VERBOSE_DEBUG
-    debug_log("EPD_Display called for epaper type: %d\n", room_config->epapertype);
+    debug_log("EPD_Display called for epaper type: %d\n", device_config_flash.data.epapertype);
     #endif
 
-    switch (room_config->epapertype) {
+    switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             EPD_7IN5_V2_Display(image);
             break;
@@ -1726,7 +1784,7 @@ void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) 
             break;
 
         default:
-            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", room_config->epapertype);
+            debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
             free(image);
             return;
     }
@@ -1738,10 +1796,10 @@ void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) 
 
     // Put the e-Paper display into sleep mode based on the type
     #ifdef HIGH_VERBOSE_DEBUG
-    debug_log("Entering ePaper sleep mode for type: %d\n", room_config->epapertype);
+    debug_log("Entering ePaper sleep mode for type: %d\n", device_config_flash.data.epapertype);
     #endif
 
-    switch (room_config->epapertype) {
+    switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             EPD_7IN5_V2_Sleep();
             break;
@@ -1755,7 +1813,7 @@ void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) 
             break;
 
         default:
-            debug_log_with_color(COLOR_RED, "Unsupported ePaper type during sleep: %d\n", room_config->epapertype);
+            debug_log_with_color(COLOR_RED, "Unsupported ePaper type during sleep: %d\n", device_config_flash.data.epapertype);
             return;
     }
 
@@ -1780,7 +1838,7 @@ void epaper_finalize_and_powerdown(UBYTE* image, const RoomConfig* room_config) 
  * @param room_config Pointer to the RoomConfig structure.
  * @return true if Wi-Fi communication is needed; false otherwise.
  */
-bool is_wifi_required(int pushbutton, const RoomConfig* room_config) {
+bool is_wifi_required(int pushbutton) {
     // Example conditions for requiring Wi-Fi:
     // - Default page (pushbutton 0) generally requires Wi-Fi to display live data.
     // - Specific RoomConfig types might always require Wi-Fi (e.g., conference rooms).
@@ -1792,7 +1850,7 @@ bool is_wifi_required(int pushbutton, const RoomConfig* room_config) {
         return true;
     }
 
-    if (room_config->properties.type == ROOM_TYPE_CONFERENCE) {
+    if (device_config_flash.data.type == ROOM_TYPE_CONFERENCE) {
         // Example for future use: Conference rooms always require Wi-Fi for live updates
         return true;
     }
@@ -1829,7 +1887,7 @@ bool is_wifi_required(int pushbutton, const RoomConfig* room_config) {
  * @param clock Pointer to the ds3231_t structure for accessing RTC data.
  * @param image_buffer Image buffer used for subimage rendering.
  */
-void render_page_server_error(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer) {
+void render_page_server_error(ds3231_t* clock, UBYTE* image_buffer) {
     char buffer[256]; // Buffer for formatted strings
     ds3231_data_t ds3231_data;
 
@@ -1840,13 +1898,13 @@ void render_page_server_error(const RoomConfig* room, ds3231_t* clock, UBYTE* im
     Paint_Clear(WHITE);
     const char* server_error_msg = "Unable to reach the server";
 
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
         // Display the default logo
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
 
         // Display the room name
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
 
         // Render error message
         Paint_DrawString_EN(50, 200, "Server Error!", &font_ubuntu_mono_22pt_bold, WHITE, BLACK);
@@ -1858,11 +1916,19 @@ void render_page_server_error(const RoomConfig* room, ds3231_t* clock, UBYTE* im
         format_rtc_time(&ds3231_data, buffer, sizeof(buffer));
         Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
 
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
         // Display room name & logo
-        Paint_DrawString_EN(20, 40, room->roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
-        DrawSubImage(image_buffer, &eSign_128x128_white_background , 270, 5, room);
+
+        // Display room name & logo
+        const char* name = device_config_flash.data.roomname;
+
+        Paint_DrawString_EN(20, 40, name, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
+        // Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
+
+        if (!draw_flash_logo(image_buffer, 285, 10)) {
+            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+        }
 
         // Render error message
         Paint_DrawString_EN(20, 120, "Server Error!", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
@@ -1872,7 +1938,7 @@ void render_page_server_error(const RoomConfig* room, ds3231_t* clock, UBYTE* im
         Paint_DrawString_EN(20, 260, buffer, &font_ubuntu_mono_8pt, WHITE, BLACK);
 
     } else {
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type in render_page_server_error: %d\n", room->epapertype);
+        debug_log_with_color(COLOR_RED, "Unsupported ePaper type in render_page_server_error: %d\n", device_config_flash.data.epapertype);
     }
 
     // Log debug information
@@ -1890,7 +1956,7 @@ void render_page_server_error(const RoomConfig* room, ds3231_t* clock, UBYTE* im
  * @param room Pointer to the RoomConfig structure for ePaper configuration.
  * @param clock Pointer to the ds3231_t structure for accessing RTC data.
  */
-void render_page_wifi_error(const RoomConfig* room, ds3231_t* clock, UBYTE* image_buffer) {
+void render_page_wifi_error(ds3231_t* clock, UBYTE* image_buffer) {
     char buffer[256]; // Buffer for formatted strings
     ds3231_data_t ds3231_data;
 
@@ -1901,13 +1967,13 @@ void render_page_wifi_error(const RoomConfig* room, ds3231_t* clock, UBYTE* imag
     Paint_Clear(WHITE);
     const char* wifi_error_msg = "Unable to connect to Wi-Fi";
 
-    if (room->epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
         // Display the default logo
-        Paint_DrawBitMap(gImage_generic_logo_112_107);
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
 
         // Display the room name
-        Paint_DrawString_EN(70, 60, room->roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
 
         // Render error message
         Paint_DrawString_EN(50, 200, "Wi-Fi Error!", &font_ubuntu_mono_22pt_bold, WHITE, BLACK);
@@ -1919,12 +1985,11 @@ void render_page_wifi_error(const RoomConfig* room, ds3231_t* clock, UBYTE* imag
         format_rtc_time(&ds3231_data, buffer, sizeof(buffer));
         Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
 
-    } else if (room->epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
         // Display room name & logo
-
-        Paint_DrawString_EN(20, 40, room->roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
-        DrawSubImage(image_buffer, &generic_logo_112_107, 280, 10, room);
+        Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
+        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
 
         // Render error message
         Paint_DrawString_EN(20, 120, "Wi-Fi Error!", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
@@ -1936,47 +2001,337 @@ void render_page_wifi_error(const RoomConfig* room, ds3231_t* clock, UBYTE* imag
         format_rtc_time(&ds3231_data, buffer, sizeof(buffer));
         Paint_DrawString_EN(20, 260, buffer, &font_ubuntu_mono_8pt, WHITE, BLACK);
     }else {
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type in render_page_wifi_error: %d\n", room->epapertype);
+        debug_log_with_color(COLOR_RED, "Unsupported ePaper type in render_page_wifi_error: %d\n", device_config_flash.data.epapertype);
     }
 
     // Log debug information
     debug_log_with_color(COLOR_RED, "Wi-Fi error page rendered.\n");
 }
 
+void render_page_wifi_setup(UBYTE* image) {
+    if (!draw_flash_logo(image, 290, 10)) {
+        DrawSubImage(image, &eSign_100x100_3, 290, 15);
+    }
+
+    Paint_DrawString_EN(20, 20, "WIFI Setup Mode", &font_ubuntu_mono_11pt, WHITE, BLACK);
+    Paint_DrawString_EN(20, 80, "Connect to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
+    Paint_DrawString_EN(60, 130, "inki-setup", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+
+    Paint_DrawString_EN(20, 180, "Go to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
+    Paint_DrawString_EN(30, 230, "http://192.168.4.1 ", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+
+    // char line1[64];
+    // char line2[64];
+    // snprintf(line1, sizeof(line1), "SSID: %s", wifi_config_flash.ssid);
+    // snprintf(line2, sizeof(line2), "PWD:  %s", wifi_config_flash.password);
+    // Paint_DrawString_EN(20, 240, line1, &font_ubuntu_mono_8pt, WHITE, BLACK);
+    // Paint_DrawString_EN(20, 250, line2, &font_ubuntu_mono_8pt, WHITE, BLACK);
+}
+
+static const uint8_t dhcp_offer_template[] = {
+    0x02, 0x01, 0x06, 0x00,                  // BOOTP: op, htype, hlen, hops
+    0x00, 0x00, 0x00, 0x00,                  // XID (Transaction ID)
+    0x00, 0x00, 0x00, 0x00,                  // SECS, FLAGS
+    0, 0, 0, 0,                              // CIADDR (Client IP)
+    192, 168, 4, 100,                        // YIADDR (Your IP)
+    192, 168, 4, 1,                          // SIADDR (Server IP)
+    0x00, 0x00, 0x00, 0x00,                  // GIADDR (Gateway IP)
+    // CHADDR (Client HW addr)
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // CHADDR padding
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // SNAME (64 bytes)
+    [44] = 0,  // ab hier (Offset 44) bis 107:
+    [107] = 0,
+    // FILE (128 bytes)
+    [108] = 0, // ab hier bis 235
+    [235] = 0,
+    // MAGIC COOKIE
+    99, 130, 83, 99,
+    // DHCP Options
+    53, 1, 2,                                // DHCP Message Type: Offer
+    54, 4, 192, 168, 4, 1,                   // Server Identifier
+    51, 4, 0x00, 0x01, 0x51, 0x80,           // Lease time = 86400
+    58, 4, 0x00, 0x00, 0x01, 0x2C,           // Renewal (T1) = 300s
+    59, 4, 0x00, 0x00, 0x01, 0xE0,           // Rebinding (T2) = 480s
+    1, 4, 255, 255, 255, 0,                  // Subnet mask
+    3, 4, 192, 168, 4, 1,                    // Router
+    6, 4, 192, 168, 4, 1,                    // DNS
+    255                                     // End option
+};
+
+static const uint8_t dhcp_ack_template[] = {
+    0x02, 0x01, 0x06, 0x00,                  // BOOTP: op, htype, hlen, hops
+    0x00, 0x00, 0x00, 0x00,                  // XID (Transaction ID)
+    0x00, 0x00, 0x00, 0x00,                  // SECS, FLAGS
+    0, 0, 0, 0,                              // CIADDR (Client IP)
+    192, 168, 4, 100,                        // YIADDR (Your IP)
+    192, 168, 4, 1,                          // SIADDR (Server IP)
+    0x00, 0x00, 0x00, 0x00,                  // GIADDR (Gateway IP)
+    // CHADDR (Client HW addr)
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // CHADDR padding
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // SNAME (64 bytes)
+    [44] = 0,  // Offset identisch wie oben
+    [107] = 0,
+    // FILE (128 bytes)
+    [108] = 0,
+    [235] = 0,
+    // MAGIC COOKIE
+    99, 130, 83, 99,
+    // DHCP Options
+    53, 1, 5,                                // DHCP Message Type: ACK
+    54, 4, 192, 168, 4, 1,                   // Server Identifier
+    51, 4, 0x00, 0x01, 0x51, 0x80,           // Lease time = 86400
+    58, 4, 0x00, 0x00, 0x01, 0x2C,           // Renewal (T1) = 300s
+    59, 4, 0x00, 0x00, 0x01, 0xE0,           // Rebinding (T2) = 480s
+    1, 4, 255, 255, 255, 0,                  // Subnet mask
+    3, 4, 192, 168, 4, 1,                    // Router
+    6, 4, 192, 168, 4, 1,                    // DNS
+    255                                     // End option
+};
+
+static void dhcp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                         const ip_addr_t *addr, u16_t port) {
+    if (!p || p->len < 240) {
+        if (p) pbuf_free(p);
+        return;
+    }
+
+    const uint8_t *request = (const uint8_t *)p->payload;
+
+    // DHCP Message Type (Option 53) auslesen
+    uint8_t msg_type = 0;
+    for (int i = 240; i < p->len - 2; i++) {
+        if (request[i] == 53 && request[i + 1] == 1) {
+            msg_type = request[i + 2];
+            break;
+        }
+    }
+
+    // DHCP Offer oder ACK auswählen
+    const uint8_t *template = NULL;
+    size_t template_len = 0;
+
+    switch (msg_type) {
+        case 1: // DHCP Discover
+            template = dhcp_offer_template;
+            template_len = sizeof(dhcp_offer_template);
+            break;
+        case 3: // DHCP Request
+            template = dhcp_ack_template;
+            template_len = sizeof(dhcp_ack_template);
+            break;
+        default:
+            pbuf_free(p);
+            return;
+    }
+
+    // DHCP Antwort vorbereiten
+    uint8_t response[300] = {0};
+    memcpy(response, template, template_len);
+
+    // XID (Transaction ID) und CHADDR (Client MAC) kopieren
+    memcpy(response + 4, request + 4, 4);     // XID
+    memcpy(response + 28, request + 28, 16);  // CHADDR
+
+    // Antwort-Puffer erzeugen
+    struct pbuf *resp_buf = pbuf_alloc(PBUF_TRANSPORT, template_len, PBUF_RAM);
+    if (!resp_buf) {
+        pbuf_free(p);
+        return;
+    }
+
+    memcpy(resp_buf->payload, response, template_len);
+    udp_sendto(pcb, resp_buf, addr, port);
+
+    // Aufräumen
+    pbuf_free(resp_buf);
+    pbuf_free(p);
+}
+
+void start_dhcp_server(void) {
+    struct udp_pcb *pcb = udp_new_ip_type(IPADDR_TYPE_V4);
+    if (!pcb) return;
+
+    if (udp_bind(pcb, IP_ADDR_ANY, 67) != ERR_OK) {
+        udp_remove(pcb);
+        return;
+    }
+
+    udp_recv(pcb, dhcp_recv_cb, NULL);
+}
+
+void enter_wifi_setup_mode(ds3231_t* clock) {
+    static web_submission_t latest_submission;
+    static bool submission_received = false;
+
+    UBYTE* BlackImage = init_epaper();
+    if (BlackImage != NULL) {
+        render_page_wifi_setup(BlackImage);
+        epaper_finalize_and_powerdown(BlackImage);
+    }
+
+    debug_log_with_color(COLOR_GREEN, "WiFi setup mode: initializing...\n");
+
+    if (cyw43_arch_init_with_country(CYW43_COUNTRY_GERMANY)) {
+        debug_log_with_color(COLOR_RED, "CYW43 initialization failed.\n");
+        transmit_debug_logs();
+        set_alarmclock_and_powerdown(clock);
+        exit(0);
+    }
+
+    const char* ssid = "inki-setup";
+    const char* password = "12345678";
+
+    cyw43_arch_enable_ap_mode(ssid, password, CYW43_AUTH_WPA2_AES_PSK);
+
+    ip4_addr_t ip, netmask, gw;
+    IP4_ADDR(&ip, 192, 168, 4, 1);
+    IP4_ADDR(&netmask, 255, 255, 255, 0);
+    IP4_ADDR(&gw, 192, 168, 4, 1);
+
+    absolute_time_t shutdown_time = make_timeout_time_ms(WIFI_SETUP_TIMEOUT_MS);
+    webserver_set_shutdown_time(shutdown_time);
+
+    start_setup_webserver();
+    start_dhcp_server();
+
+    if (cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_AP, mac_address) != 0) {
+        debug_log_with_color(COLOR_RED, "Failed to retrieve MAC address.\n");
+    } else {
+        debug_log_with_color(COLOR_BOLD_GREEN,
+                             "AP MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                             mac_address[0], mac_address[1], mac_address[2],
+                             mac_address[3], mac_address[4], mac_address[5]);
+    }
+
+    debug_log_with_color(COLOR_GREEN, "Access Point active: SSID = %s, IP = 192.168.4.1\n", ssid);
+
+    absolute_time_t last_watchdog_feed = get_absolute_time();
+
+    while (true) {
+        cyw43_arch_poll();
+        sleep_ms(50);
+
+        if (absolute_time_diff_us(get_absolute_time(), last_watchdog_feed) < -2000000) {
+            watchdog_update();
+            last_watchdog_feed = get_absolute_time();
+        }
+
+        if (absolute_time_diff_us(get_absolute_time(), shutdown_time) < 0) {
+            debug_log_with_color(COLOR_BOLD_YELLOW, "Setup timeout erreicht – Gerät wird heruntergefahren.\n");
+            cyw43_arch_deinit();
+            transmit_debug_logs();
+            set_alarmclock_and_powerdown(clock);
+            exit(0);
+        }
+    }
+}
+
+void print_firmware_slots_status(void) {
+    // Show which firmware is currently running
+    const char* active_info = get_active_firmware_slot_info();
+    debug_log_with_color(COLOR_BOLD_GREEN, "Running firmware from: %s\n", active_info);
+
+    char build0[16] = {0}, version0[32] = {0};
+    char build1[16] = {0}, version1[32] = {0};
+    uint32_t size0 = 0, size1 = 0;
+    uint32_t crc0 = 0, crc1 = 0;
+    uint8_t slot_index0 = 0, slot_index1 = 0;
+    uint8_t valid0 = 0, valid1 = 0;
+
+    bool has0 = get_firmware_slot_info(0, build0, version0, &size0, &crc0, &slot_index0, &valid0);
+    bool has1 = get_firmware_slot_info(1, build1, version1, &size1, &crc1, &slot_index1, &valid1);
+
+    const char* color_slot0 = COLOR_YELLOW;
+    const char* color_slot1 = COLOR_YELLOW;
+
+    // Check if current slot matches Slot 0 or Slot 1
+    if (strstr(active_info, "SLOT_0")) {
+        color_slot0 = COLOR_BOLD_YELLOW;
+    } else if (strstr(active_info, "SLOT_1")) {
+        color_slot1 = COLOR_BOLD_YELLOW;
+    }
+
+    if (has0) {
+        debug_log_with_color(color_slot0, "Slot 0: Version %s, Build %s, Size %u Bytes\n", version0, build0, size0);
+    } else {
+        debug_log_with_color(color_slot0, "Slot 0: (no valid firmware)\n");
+    }
+
+    if (has1) {
+        debug_log_with_color(color_slot1, "Slot 1: Version %s, Build %s, Size %u Bytes\n", version1, build1, size1);
+    } else {
+        debug_log_with_color(color_slot1, "Slot 1: (no valid firmware)\n");
+    }
+}
+
+bool wait_for_usb_connection(uint32_t timeout_ms) {
+    const uint32_t step_ms = 10;
+    uint32_t waited = 0;
+
+    while (!stdio_usb_connected()) {
+        sleep_ms(step_ms);
+        waited += step_ms;
+        if (waited >= timeout_ms) {
+            return false;  // Timeout
+        }
+    }
+    return true;  // Verbunden
+}
+
 int main(void)
 {
     // Set debug mode (real-time, buffered, or both)
-//    set_debug_mode(DEBUG_BUFFERED);
+    // set_debug_mode(DEBUG_BUFFERED);
     set_debug_mode(DEBUG_REALTIME);
-
-    stdio_init_all();     // Initialize standard I/O for debugging
-
-    debug_log_with_color(COLOR_BOLD_GREEN, "System initializing\n");
-    debug_log_with_color(COLOR_GREEN, "watchdog_enable\n");
-    watchdog_enable(current_room->watchdog_time, 0);
-
-    debug_log_with_color(COLOR_GREEN, "ADC read\n");
-    float battery_voltage = read_battery_voltage(current_room->conversion_factor);
 
     debug_log_with_color(COLOR_GREEN, "hold power\n");
     hold_power();  // Hold power state of the circuit
 
-    debug_log_with_color(COLOR_GREEN, "init_clock\n");
-    ds3231_t ds3231 = init_clock(); // Initialize clock
+    stdio_init_all();     // Initialize standard I/O
+/*
+    if (wait_for_usb_connection(2500)) { // only used for debugging
+        printf("USB connected\n");
+    } else {
+        printf("USB timeout\n");
+    }*/
+
+    debug_log_with_color(COLOR_BOLD_GREEN, "System initializing\n");
+
+    print_firmware_slots_status();
+
+    debug_log_with_color(COLOR_GREEN, "watchdog_enable\n");
+    watchdog_enable(device_config_flash.data.watchdog_time, 0);
+
+    debug_log_with_color(COLOR_GREEN, "ADC read\n");
+    float battery_voltage = read_battery_voltage(device_config_flash.data.conversion_factor);
+
+    debug_log_with_color(COLOR_GREEN, "init real time clock DS3231\n");
+    ds3231 = init_clock(); // Initialize clock
     debug_log_with_color(COLOR_GREEN, "start setup_and_read_pushbuttons\n");
 
-    setup_and_read_pushbuttons(current_room);     // Initialize pushbuttons and read their state, based on the room configuration
+    setup_and_read_pushbuttons();     // Initialize pushbuttons and read their state
 
-    // pushbutton = 1; // use for debugging
+    // pushbutton = 7; // use for debugging
+
+    // Enter WiFi setup mode if all three buttons are held
+    if (pushbutton == 7) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "WiFi setup mode activated (pushbutton 7)\n");
+        enter_wifi_setup_mode(&ds3231);  // Launch the WiFi configuration access point and webserver
+     //   return 0;  // The device will shut down inside setup mode (after timeout or user action)
+    }
 
     debug_log_with_color(COLOR_GREEN, "wifi_server_communication\n");
     WifiResult wifi_result = WIFI_NOT_REQUIRED;
 
-    if (is_wifi_required(pushbutton, current_room)) {
+    if (is_wifi_required(pushbutton)) {
         wifi_result = wifi_server_communication(battery_voltage);
     }
 
-    UBYTE* BlackImage = init_epaper(current_room);
+    UBYTE* BlackImage = init_epaper();
     if (BlackImage == NULL) {
         debug_log_with_color(COLOR_RED, "BlackImage buffer memory allocation failed.\n");
         return -1;
@@ -1985,25 +2340,25 @@ int main(void)
     debug_log_with_color(COLOR_GREEN, "render_page\n");
     // Handle Wi-Fi and server errors with specific pages
     if (wifi_result == WIFI_ERROR_CONNECTION) {
-        render_page_wifi_error(current_room, &ds3231, BlackImage); // Display Wi-Fi error page
+        render_page_wifi_error(&ds3231, BlackImage); // Display Wi-Fi error page
     } else if (wifi_result == WIFI_ERROR_SERVER) {
-        render_page_server_error(current_room, &ds3231,BlackImage); // Display server error page
+        render_page_server_error(&ds3231,BlackImage); // Display server error page
     } else {
-        render_page(current_room, pushbutton, &ds3231, BlackImage, battery_voltage); // Render normal page
+        render_page(pushbutton, &ds3231, BlackImage, battery_voltage); // Render normal page
     }
 
     if (pushbutton != 4) {
-        render_firmware_info(battery_voltage, current_room);
+        render_firmware_info(battery_voltage);
     }
 
     debug_log_with_color(COLOR_GREEN, "epaper_finalize_and_powerdown (display epaper page)...\n");
-    epaper_finalize_and_powerdown(BlackImage, current_room);
+    epaper_finalize_and_powerdown(BlackImage);
 
     // Transmit logs before shutdown
     debug_log_with_color(COLOR_BOLD_GREEN, "...System shutting down.  \n");
     transmit_debug_logs();
 
-    set_alarmclock_and_powerdown(&ds3231, current_room);
+    set_alarmclock_and_powerdown(&ds3231);
 
 //any code behind this should never be reached! 
 

@@ -12,20 +12,10 @@
 
 // Include rooms.h, which defines RoomConfig
 #include "rooms.h"
+#include <stdint.h>
+#include <stdbool.h>
 
-// -----------------------------------------------------------------------------
-// Booking fetch method selection
-// -----------------------------------------------------------------------------
-
-/**
- * @brief Choose which method to use for fetching booking data.
- *
- * Options:
- * - 0: Use legacy Bash+CGI script
- * - 1: Use new REST API endpoint (preferred for modern installations)
- */
-#define USE_SEATSURFING_API 1
-
+#define WIFI_SETUP_TIMEOUT_MS (15 * 60 * 1000)
 
 // -----------------------------------------------------------------------------
 // Timezone and DST configuration
@@ -61,15 +51,11 @@
 // #define BATTERY_STATUS
 #define HIGH_VERBOSE_DEBUG
 
-/*
- * Global pointer to the current room configuration.
- *
- * The `current_room` pointer is set at compile time to point to the configuration
- * for the specific room being compiled (e.g., LPB113H_config, LPB111H_config).
- * This allows the main program and other parts of the system to use a unified
- * interface (`current_room->field`) regardless of the room being compiled.
- */
 
-extern const RoomConfig* current_room;
+/**
+ * @brief Maximum lengths for Wi-Fi credentials.
+ */
+#define WIFI_SSID_MAX_LEN              32
+#define WIFI_PASSWORD_MAX_LEN          64
 
 #endif // CONFIG_H

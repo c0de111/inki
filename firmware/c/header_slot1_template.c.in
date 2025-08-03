@@ -1,0 +1,14 @@
+#include "flash.h"
+
+__attribute__((section(".firmware_header")))
+const firmware_header_t firmware_header = {
+    .magic = FIRMWARE_MAGIC,
+    .valid_flag = 0,
+    .build_date = "@BUILD_DATE@",
+    .git_version = "@GIT_VERSION@",
+    .firmware_size = 0x00000000,  // patched later
+    .slot = 1,
+    .crc32 = 0x00000000           // patched later
+};
+
+_Static_assert(sizeof(firmware_header_t) == 256, "firmware_header_t must be 256 bytes");
