@@ -15,6 +15,18 @@ The eSign circuit is designed for long-term operation (years) using 3×AAA or 3�
 
 In the default state of the circuit, **Q1** is in the off-state and the Pico does not get any supply voltage. Two events can switch **Q1** on via its gate and thus power the Pico: An alarm from the RTC **DS3231** via its INT pin, or a manual trigger via **pushbutton #0**. If this happens, the Pico will start, and as a first action in its program pull down the gate from **Q2**, so that power is maintained even if the push button is released by the user. The Pico will then execute its programme and always finish the programme with setting the next alarm in the **DS3231**, and, subsequently, finally cutting itself off power by switching **Q1** off. This leaves the Pico completely unpowered and the circuit back to the default state. In the default state, the circuits draws a **few µA** only, compared to **several mA** in the usual sleep modes of the Pico. During the wake cycle, the current drawn is approximately 50 mA for about 15 seconds. The epaper is controlled via SPI, the DS3231 via I2C.
 
+<table>
+<tr>
+  <td style="padding: 20px;"><img src="images/inki_board.png" alt="inki board - for details use KiCAD" width="300"></td>
+  <td style="padding: 20px;"><img src="images/inki_schematic.png" alt="schematic - for details use KiCAD" width="500"></td>
+</tr>
+<tr>
+  <td align="center" style="padding: 20px;"><em>inki board – for details use KiCAD</em></td>
+  <td align="center" style="padding: 20px;"><em>schematic – for details use KiCAD</em></td>
+</tr>
+</table>
+
+
 Manual user interaction via:
  
 - **SW1 / DIP switch**: Allow static configuration.

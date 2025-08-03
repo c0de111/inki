@@ -20,7 +20,7 @@ The **inki** firmware is a compact, bare-metal C application for the **Raspberry
   Device features an access point mode (enter by holding all pushbuttons during startup). Configuration is done via browser (Wi-Fi, API, room, clock, ...).
 
 - Seatsurfing API integration  
-  Fetches live booking data and displays current room status. Multiple spaces per display supported.
+  Fetches live booking data and displays current room status. Multiple spaces per display supported. 
 
 - Flexible build system  
   Bootloader, lot-specific binaries and "factory"-setting binaries are generated automatically via `build.sh`, flashing is supported via `flash.sh`. 
@@ -69,6 +69,8 @@ flash.sh
 ---
 
 ## Debug Logging Sample Output for a single wake up cycle
+```bash
+
 [3849 ms] Trying to connect to ssid ... Attempt 1
 [6642 ms] Trying to connect to ssid ... Attempt 2
 [6643 ms] Connected to Wi-Fi successfully.
@@ -106,6 +108,7 @@ Content-Length: 338
 [14930 ms] Shutting down the ePaper module...
 [14930 ms] ...System shutting down.  
 [14932 ms] Alarm2 set for 00:24 (RTC time)
+```
 
 ---
 ## Display the doxygen html documentation
