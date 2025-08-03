@@ -20,6 +20,7 @@
 #     - esign_OTA.bin        → header + trimmed binary (for OTA updates)
 #
 # -----------------------------------------------------------------------------
+export PICO_SDK_PATH="${PICO_SDK_PATH:-$HOME/pico/pico-sdk}"
 
 # Enable or disable USB <-> Serial support for debugging in the bootloader (1 = enabled, 0 = disabled)
 USB_BOOTLOADER_ENABLE=0

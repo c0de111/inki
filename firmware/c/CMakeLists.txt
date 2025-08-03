@@ -2,12 +2,11 @@
 cmake_minimum_required(VERSION 3.12)
 
 set(PICO_BOARD pico_w)
-set(PICO_SDK_PATH "/home/nicolas/pico/pico-sdk")
 set(PICO_WIFI 1)
 set(PICO_CYW43_ARCH_DEFAULT "pico_cyw43_arch_lwip_threadsafe_background")
 
 # Include the Pico SDK and set up the project
-include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
+include(pico_sdk_import.cmake)
 project(inki C CXX ASM)
 
 # Set C/C++ standards
