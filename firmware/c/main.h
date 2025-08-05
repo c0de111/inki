@@ -3,7 +3,6 @@
 #define MAIN_H
 
 #include "ds3231.h"  // oder der Pfad zu deiner RTC-Struktur
-#include "rooms.h"
 #include "DEV_Config.h"    // For device configuration
 
 extern ds3231_t rtc;

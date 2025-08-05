@@ -12,7 +12,6 @@
 #include "flash.h"
 #include "wifi.h"
 #include "GUI_Paint.h"               // Paint_DrawString_EN
-#include "rooms.h"                   // current_room
 #include "ImageResources.h"          // BlackImage
 #include "fonts.h"                   // Fonts, falls nicht via GUI_Paint.h
 #include "DEV_Config.h"    // For device configuration

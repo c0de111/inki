@@ -28,6 +28,43 @@
 
 #include "ImageResources.h"
 
+// Image arrays and constants
+const SubImage battery_levels_64x97[] = {
+    { .data = gImage_battery_level_1, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_2, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_3, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_4, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_5, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_6, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_7, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_8, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_9, .width = 64, .height = 97 },
+    { .data = gImage_battery_level_10, .width = 64, .height = 97 },
+};
+
+const SubImage eSign_128x128_white_background3 = {
+    .data = gImage_eSign_128x128_white_background3,
+    .width = 128,
+    .height = 121
+};
+
+const SubImage eSign_100x100_3 = {
+    .data = gImage_eSign_100x100_3,
+    .width = 104,
+    .height = 95
+};
+
+const SubImage qr_Seminarraum = {
+    .data = gImage_qr_Seminarraum,
+    .width = 96,
+    .height = 90
+};
+
+const SubImage qr_github_link = {
+    .data = gImage_github_link,
+    .width = 56,
+    .height = 50
+};
 
 const unsigned char gImage_battery_level_1[776] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

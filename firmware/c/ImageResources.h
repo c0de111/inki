@@ -17,6 +17,20 @@
  * - Each image is stored as a byte array and should match the display's
  *   resolution and color format.
  */
+// Structure for a rectangular QR code placement
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} QRCodeConfig;
+
+// Structure for image data used on display
+typedef struct {
+    const unsigned char* data;
+    int width;
+    int height;
+} SubImage;
 
 extern const unsigned char gImage_battery_level_1[];
 extern const unsigned char gImage_battery_level_2[];
@@ -36,6 +50,12 @@ extern const unsigned char gImage_eSign_128x128_white_background[];
 extern const unsigned char gImage_eSign_128x128_white_background3[];
 extern const unsigned char gImage_eSign_100x100_3[];
 
+// Image assets declared externally
+extern const SubImage battery_levels_64x97[];
+extern const SubImage eSign_128x128_white_background3;
+extern const SubImage eSign_100x100_3;
+extern const SubImage qr_Seminarraum;
+extern const SubImage qr_github_link;
 
 #endif
 /* FILE END */

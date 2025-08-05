@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include "rooms.h"
 
 typedef struct __attribute__((packed)) {
     char ssid[32];

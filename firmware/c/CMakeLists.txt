@@ -35,7 +35,6 @@ add_executable(inki_slot0
     debug.c         # Debug functions
     flash.c         # Persistent config handling
     webserver.c
-    rooms.c
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot0.c
 )
 
@@ -47,7 +46,6 @@ add_executable(inki_slot1
     debug.c         # Debug functions
     flash.c         # Persistent config handling
     webserver.c
-    rooms.c
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot1.c
 )
 
