@@ -11,7 +11,7 @@
 #define CONFIG_H
 
 // Include rooms.h, which defines RoomConfig
-#include "rooms.h"
+// #include "rooms.h"
 #include <stdint.h>
 #include <stdbool.h>
 
