@@ -65,7 +65,7 @@ version.h
 *.so
 *.a
 *.log
-*.cmake
+# *.cmake
 *.stamp
 *.tmp
 *.xcf
