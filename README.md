@@ -41,7 +41,7 @@
 
 ## Quick Start: How to Use inki
 
-inki can be configured and updated via the Wi-Fi setup mode:
+inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
 
 - Start and connect to the inki Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
 
@@ -89,11 +89,9 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
 - **Multi-Page Display**
   Up to 8 user-selectable display pages via pushbuttons. [See „User-selectable pages“](#user-selectable-pages)
 
-- **Battery Voltage Monitoring**
-  + Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
+- **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
-- - **Energy Efficiency**
-  Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). Runtime (depending on wake-up frequency and thus iterations) up to years. For estimation use the script [power_consumption_estimate.py](hardware/circuit/)
+- **Energy Efficiency** Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). Runtime (depending on wake-up frequency and thus iterations) up to years. For estimation use the script [power_consumption_estimate.py](hardware/circuit/)
   
 <p align="center">
   <a href="images/log_prototype_esign_7_5.png" target="_blank">
