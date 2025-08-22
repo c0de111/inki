@@ -1,6 +1,6 @@
 # inki (esign) 
 
-**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi, used for example for room signage and as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system via seatsurfing's Rest API. It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case, a custom PCB and an ePaper display that retains its content even when powered off. 
+**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content even when powered off. 
 <!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
 
 <p align="center">
@@ -25,6 +25,14 @@
 <!-- <i>Click the image to view video.</i> -->
 </p>
 
+7.5" version of inki displaying temperature reading of a sensors from the ccu-historian home automation system from the last 24 hours. 
+
+<p align="center">
+  <a href="images/7_5_ccu-historian.JPG" target="_blank">
+    <img src="images/7_5_ccu-historian.JPG" alt="eSign Device" width="500" style="border-radius: 8px;">
+  </a>
+</p>
+
 ---
 
 ## Quick Start: How to Use inki
@@ -36,7 +44,7 @@ inki can be configured and updated via the Wi-Fi setup mode:
 - Setup the configuration of the device (settings will be stored for future use)
 
   - Wi-Fi credentials
-  - Seatsurfing settings (copy&paste from seatsurfing "service account": credentials, location id, space id, ...)
+  - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, ...)
   - Device settings (room numbers, seats per room, automatic refresh intervals...)
   - Optionally upload a custom logo / piktogram
   - Optionally upload firmware updates, inki will automatically choose the most recent version at next reboot
@@ -60,7 +68,7 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
 ## Features
 
 - **Battery powered**
-  No cables needed
+  No cables needed, runtime up to years
 
 - **Web Interface**
   For setup, configuration and updates via WIFI, bootloader (https://github.com/c0de111/pico_bootloader) automatically chooses most recent firmware version
@@ -68,8 +76,8 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
 - **ePaper Display Support**
   Compatible with Waveshare 7.5" V2 and 4.2" V2 displays, retains its content even when powered off.
 
-- **Automatically synchronizes with the seats booked via seatsurfing**
-  Shows current booking state and name, layouts, refresh time and display content can be adjusted for room types (office, conference, seminar).
+- **Automatically synchronizes with: seats booked via seatsurfing, data from ccu-historian**
+  Shows current booking state and name, layouts, refresh time and display content can be adjusted for room types (office, conference, seminar), or data from ccu-historian
 
 - **Wi-Fi Connectivity**
   Periodically fetches content via HTTP, refresh time freely programmable.
@@ -269,4 +277,5 @@ Want to follow or contribute? Star the repo, and stay tuned for updates!
 For questions, feedback, or contributions, feel free to reach out via email:
 
 ✉️ [c0de@posteo.de](mailto:c0de@posteo.de)
+
 
