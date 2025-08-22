@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <i>7.5" version of inki displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours. 
+  <i>7.5" version displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours. 
 </i>
 <!-- <i>Click the image to view video.</i> -->
 </p>
@@ -117,7 +117,7 @@ For more options and logo uploads, see [See â€œConfiguration via Web Interfaceâ€
 This repository provides all design files, documentation, and code to build your own *inki*:
 
 1. **3D-Printed Enclosure**
-   Files and documentation for the modular enclosure - [(STLs and FreeCAD files)](hardware/enclosure/).
+   Files and documentation for the modular enclosure with a dovetail mount - [(STLs and FreeCAD files)](hardware/enclosure/).
    
    ### Assembly Animation (4.2" version)
 
