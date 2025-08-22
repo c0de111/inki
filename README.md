@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <i>7.5" version of inki displaying temperature reading of a sensors from the ccu-historian home automation system from the last 24 hours. 
+  <i>7.5" version of inki displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours. 
 </i>
 <!-- <i>Click the image to view video.</i> -->
 </p>
