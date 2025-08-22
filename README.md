@@ -1,6 +1,6 @@
 # inki (esign) 
 
-**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content even when powered off. 
+**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. 
 <!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
 
 <p align="center">
@@ -25,12 +25,16 @@
 <!-- <i>Click the image to view video.</i> -->
 </p>
 
-7.5" version of inki displaying temperature reading of a sensors from the ccu-historian home automation system from the last 24 hours. 
-
 <p align="center">
   <a href="images/7_5_ccu-historian.JPG" target="_blank">
     <img src="images/7_5_ccu-historian.JPG" alt="eSign Device" width="500" style="border-radius: 8px;">
   </a>
+</p>
+
+<p align="center">
+  <i>7.5" version of inki displaying temperature reading of a sensors from the ccu-historian home automation system from the last 24 hours. 
+</i>
+<!-- <i>Click the image to view video.</i> -->
 </p>
 
 ---
