@@ -84,3 +84,5 @@ ds3231_clock_setup/
 **/fp-info-cache
 
 CLAUDE.md
+.claude/
+
