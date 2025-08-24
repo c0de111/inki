@@ -126,6 +126,30 @@ void url_decode(char *dst, const char *src, size_t dst_len) {
     dst[i] = '\0';
 }
 
+int copy_pbuf_chain(const struct pbuf *p, uint8_t *dest, size_t max_len) {
+    size_t copied = 0;
+    while (p && copied < max_len) {
+        size_t to_copy = p->len;
+        if (copied + to_copy > max_len) {
+            to_copy = max_len - copied;
+        }
+        memcpy(dest + copied, p->payload, to_copy);
+        copied += to_copy;
+        p = p->next;
+    }
+    return copied;
+}
+
+void reset_upload_session(void) {
+    upload_session.active = false;
+    upload_session.header_complete = false;
+    upload_session.header_length = 0;
+    upload_session.total_received = 0;
+    upload_session.expected_length = 0;
+    upload_session.flash_offset = 0;
+    upload_session.type = UPLOAD_NONE;
+}
+
 void parse_form_fields(const char *body, int len, web_submission_t *result) {
     memset(result, 0, sizeof(web_submission_t));
 
