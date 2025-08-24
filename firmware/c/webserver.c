@@ -89,6 +89,9 @@
 
 #define TCP_CHUNK_SIZE 1024
 
+// Global upload session instance
+upload_session_t upload_session = {0};
+
 // =============================================================================
 // ROUTE TABLE STRUCTURES & TYPES
 // =============================================================================
