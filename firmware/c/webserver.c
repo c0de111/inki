@@ -88,6 +88,102 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Route table structures
+typedef enum {
+    HTTP_GET,
+    HTTP_POST
+} http_method_t;
+
+typedef enum {
+    ROUTE_SIMPLE,      // Standard page handler (GET only)
+    ROUTE_FORM,        // Form handler (POST only)  
+    ROUTE_BINARY,      // Binary upload handler (POST only)
+    ROUTE_INLINE       // Inline logic handler
+} route_type_t;
+
+typedef struct {
+    const char *path;
+    http_method_t method;
+    route_type_t type;
+    union {
+        void (*simple_handler)(struct tcp_pcb *tpcb);
+        void (*form_handler)(struct tcp_pcb *tpcb, const char *body, int len);
+        void (*binary_handler)(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+        void (*inline_handler)(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+    } handler;
+} route_t;
+
+// Forward declarations for route handlers
+static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+static int64_t shutdown_callback(alarm_id_t id, void *user_data);
+
+// Wrapper functions for page handlers that take parameters
+static void send_wifi_config_page_wrapper(struct tcp_pcb *tpcb) {
+    send_wifi_config_page(tpcb, "");
+}
+
+static void send_seatsurfing_config_page_wrapper(struct tcp_pcb *tpcb) {
+    send_seatsurfing_config_page(tpcb, "");
+}
+
+static void send_device_config_page_wrapper(struct tcp_pcb *tpcb) {
+    send_device_config_page(tpcb, "");
+}
+
+static void send_clock_page_wrapper(struct tcp_pcb *tpcb) {
+    send_clock_page(tpcb, "");
+}
+
+static void send_upload_logo_page_wrapper(struct tcp_pcb *tpcb) {
+    send_upload_logo_page(tpcb, "");
+}
+
+static void send_firmware_update_page_wrapper(struct tcp_pcb *tpcb) {
+    send_firmware_update_page(tpcb, "");
+}
+
+// Inline route handlers for special cases
+static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    static bool shutdown_triggered = false;
+    if (shutdown_triggered) {
+        debug_log("Shutdown bereits in Vorbereitung, Ignorieren\n");
+        return;
+    }
+    
+    shutdown_triggered = true;
+    debug_log("GET /shutdown aufgerufen – Weiterleitung + Shutdown\n");
+    
+    send_response(tpcb,
+                  "<!DOCTYPE html><html><head>"
+                  "<meta charset=\"UTF-8\">"
+                  "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                  "<title>Rebooting</title>"
+                  "<style>"
+                  "body { font-family: sans-serif; text-align: center; padding: 2em; }"
+                  "h1 { font-size: 1.5em; color: #333; }"
+                  "p { font-size: 1em; color: green; }"
+                  "</style></head><body>"
+                  "<h1>✔️ Rebooting...</h1>"
+                  "</body></html>");
+    
+    tcp_output(tpcb);
+    add_alarm_in_ms(600, shutdown_callback, NULL, false);
+}
+
+static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
+    restore_interrupts(ints);
+    
+    debug_log("UPLOAD: flash erased at address: %d , %d bytes.\n", LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
+    
+    send_upload_logo_page(tpcb, "<p style='color:orange; font-weight:bold;'>✔️ Logo erfolgreich gelöscht.</p>");
+    upload_session.active = false;
+    upload_session.header_complete = false;
+    upload_session.header_length = 0;
+}
+
 
 
 void reset_upload_session(void) {
@@ -657,6 +753,64 @@ static void handle_post_clockcopied(struct tcp_pcb* tpcb, struct pbuf* p, const 
     }
 }
 
+// Route table implementation
+static const route_t routes[] = {
+    // GET routes
+    {"/", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_landing_page}},
+    {"/wifi", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_wifi_config_page_wrapper}},
+    {"/seatsurfing", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_seatsurfing_config_page_wrapper}},
+    {"/device_settings", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_config_page_wrapper}},
+    {"/clock", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_clock_page_wrapper}},
+    {"/device_status", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_status_page}},
+    {"/upload_logo", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_upload_logo_page_wrapper}},
+    {"/firmware_update", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_firmware_update_page_wrapper}},
+    {"/shutdown", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_shutdown_route}},
+    
+    // POST routes
+    {"/delete_logo", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_delete_logo_route}},
+    {"/wifi", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_wificopied}},
+    {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfingcopied}},
+    {"/device_config", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_devicecopied}},
+    {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clockcopied}},
+    {"/upload_logo", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_upload_logo}},
+    {"/firmware_update", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_firmware_update}},
+    // Add more POST routes here as we migrate them
+};
+
+static const size_t num_routes = sizeof(routes) / sizeof(routes[0]);
+
+// Route matching function
+static const route_t* find_route(const char *path, http_method_t method) {
+    for (size_t i = 0; i < num_routes; i++) {
+        if (routes[i].method == method && strcmp(routes[i].path, path) == 0) {
+            return &routes[i];
+        }
+    }
+    return NULL;
+}
+
+// Route dispatch function
+static bool dispatch_route(const route_t *route, struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    if (!route) return false;
+    
+    switch (route->type) {
+        case ROUTE_SIMPLE:
+            route->handler.simple_handler(tpcb);
+            break;
+        case ROUTE_FORM:
+            // Extract body for form handlers - this would need proper implementation
+            route->handler.form_handler(tpcb, buffer, len);
+            break;
+        case ROUTE_BINARY:
+            route->handler.binary_handler(tpcb, p, buffer, len);
+            break;
+        case ROUTE_INLINE:
+            route->handler.inline_handler(tpcb, p, buffer, len);
+            break;
+    }
+    return true;
+}
+
 static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
     if (!p) {
         tcp_close(tpcb);
@@ -702,163 +856,39 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             debug_log("HEADER LINE: %s\n", first_line);
             // debug_log("HEADER COMPLETE: %s\n", route_line);
 
-            if (strncmp(first_line, "POST /upload_logo", strlen("POST /upload_logo")) == 0) {
-                debug_log("UPLOAD: Detected /upload_logo route\n");
-                handle_post_upload_logo(tpcb, p, buffer, copied);
-            }
-            else if (strncmp(first_line, "POST /firmware_update", strlen("POST /firmware_update")) == 0) {
-                debug_log("UPLOAD: Detected POST /firmware_update route\n");
-                handle_post_firmware_update(tpcb, p, buffer, copied);
-            }
-            else if (strncmp(first_line, "POST /wifi", strlen("POST /wifi")) == 0) {
-                debug_log("UPLOAD: Detected POST /wifi\n");
-                handle_post_wificopied(tpcb, p, buffer, copied);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "POST /device_config", strlen("POST /device_config")) == 0) {
-                debug_log("UPLOAD: Detected POST /device_config\n");
-                handle_post_devicecopied(tpcb, p, buffer, copied);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "POST /seatsurfing", strlen("POST /seatsurfing")) == 0) {
-                debug_log("UPLOAD: Detected POST /seatsurfing\n");
-                handle_post_seatsurfingcopied(tpcb, p, buffer, copied);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "POST /delete_logo", strlen("POST /delete_logo")) == 0) {
-                uint32_t ints = save_and_disable_interrupts();
-                flash_range_erase(LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
-                restore_interrupts(ints);
-
-                debug_log("UPLOAD: flash erased at address: %d , %d bytes.\n", LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
-
-                send_upload_logo_page(tpcb, "<p style='color:orange; font-weight:bold;'>✔️ Logo erfolgreich gelöscht.</p>");
-                upload_session.active = false;
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-            }
-            else if (strncmp(first_line, "POST /clock", strlen("POST /clock")) == 0) {
-                debug_log("UPLOAD: Detected POST /clock\n");
-                handle_post_clockcopied(tpcb, p, buffer, copied);
-                pbuf_free(p);
-                return ERR_OK;
+            // Try route table dispatch first
+            char method_str[8], path_str[64];
+            if (sscanf(first_line, "%7s %63s", method_str, path_str) == 2) {
+                http_method_t method = (strcmp(method_str, "GET") == 0) ? HTTP_GET : 
+                                      (strcmp(method_str, "POST") == 0) ? HTTP_POST : -1;
+                
+                if (method != -1) {
+                    const route_t *route = find_route(path_str, method);
+                    if (route && dispatch_route(route, tpcb, p, buffer, copied)) {
+                        debug_log("ROUTE TABLE: Handled %s %s\n", method_str, path_str);
+                        if (route->type == ROUTE_SIMPLE || route->type == ROUTE_INLINE) {
+                            tcp_recved(tpcb, copied);
+                            upload_session.header_complete = false;
+                            upload_session.header_length = 0;
+                            pbuf_free(p);
+                            return ERR_OK;
+                        } else if (route->type == ROUTE_FORM) {
+                            // Form handlers need pbuf cleanup by caller
+                            pbuf_free(p);
+                            return ERR_OK;
+                        } else if (route->type == ROUTE_BINARY) {
+                            // Binary upload handlers manage their own pbuf lifecycle  
+                            return ERR_OK;
+                        }
+                    }
+                }
             }
 
-            else if (strncmp(first_line, "GET /upload_logo", strlen("GET /upload_logo")) == 0) {
-                debug_log("GET /upload_logo aufgerufen\n");
-                send_upload_logo_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /device_status", strlen("GET /device_status")) == 0) {
-                debug_log("GET /device_status called\n");
-                send_device_status_page(tpcb);
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /device_settings", strlen("GET /device_settings")) == 0) {
-                debug_log("GET /device_settings called\n");
-                send_device_config_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
+            // Handle remaining unmigrated routes
             else if (strncmp(first_line, "GET /logo", strlen("GET /logo")) == 0) {
                 debug_log("GET /logo called\n");
                 // handle_logo_request(tpcb);
                 tcp_recved(tpcb, copied);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /firmware_update", strlen("GET /firmware_update")) == 0) {
-                debug_log("GET /firmware_update called\n");
-                send_firmware_update_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /wifi", strlen("GET /wifi")) == 0) {
-                debug_log("GET /wifi called\n");
-                send_wifi_config_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /shutdown", strlen("GET /shutdown")) == 0) {
-                static bool shutdown_triggered = false;
-                if (shutdown_triggered) {
-                    debug_log("Shutdown bereits in Vorbereitung, Ignorieren\n");
-                    tcp_recved(tpcb, copied);
-                    pbuf_free(p);
-                    return ERR_OK;
-                }
-
-                shutdown_triggered = true;
-
-                debug_log("GET /shutdown aufgerufen – Weiterleitung + Shutdown\n");
-
-                send_response(tpcb,
-                              "<!DOCTYPE html><html><head>"
-                              "<meta charset=\"UTF-8\">"
-                              "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-                              "<title>Rebooting</title>"
-                              "<style>"
-                              "body { font-family: sans-serif; text-align: center; padding: 2em; }"
-                              "h1 { font-size: 1.5em; color: #333; }"
-                              "p { font-size: 1em; color: green; }"
-                              "</style></head><body>"
-                              "<h1>✔️ Rebooting...</h1>"
-                              // "<p></p>"
-                              "</body></html>");
-
-                tcp_output(tpcb);
-
-                tcp_recved(tpcb, copied);
-                pbuf_free(p);
-
-                add_alarm_in_ms(600, shutdown_callback, NULL, false);
-
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET / ", strlen("GET / ")) == 0) {
-                debug_log("GET / (start page) called\n");
-                send_landing_page(tpcb);
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /seatsurfing", strlen("GET /seatsurfing")) == 0) {
-                debug_log("GET / seatsurfing called\n");
-                send_seatsurfing_config_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else if (strncmp(first_line, "GET /clock", strlen("GET /clock")) == 0) {
-                debug_log("GET / clock called\n");
-                send_clock_page(tpcb, "");
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
                 pbuf_free(p);
                 return ERR_OK;
             }
