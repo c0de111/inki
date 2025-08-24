@@ -50,10 +50,10 @@
  *  /shutdown         → Trigger RTC-based shutdown
  *
  * POST routes:
- *  /wifi             → handle_post_wificopied()
- *  /seatsurfing      → handle_post_seatsurfingcopied()
- *  /device_config    → handle_post_devicecopied()
- *  /clock            → handle_post_clockcopied()
+ *  /wifi             → handle_post_wifi()
+ *  /seatsurfing      → handle_post_seatsurfing()
+ *  /device_config    → handle_post_device_config()
+ *  /clock            → handle_post_clock()
  *  /upload_logo      → handle_post_upload_logo()
  *  /firmware_update  → handle_post_firmware_update()
  *  /delete_logo      → Immediate flash erase
@@ -84,10 +84,10 @@
 #include "webserver_pages.h"
 #include "webserver_flash.h"
 
-#define TCP_CHUNK_SIZE 1024
-
 #include <stdint.h>
 #include <stddef.h>
+
+#define TCP_CHUNK_SIZE 1024
 
 // =============================================================================
 // ROUTE TABLE STRUCTURES & TYPES
@@ -245,7 +245,7 @@ static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const ch
     }
     
     shutdown_triggered = true;
-    debug_log("GET /shutdown aufgerufen – Weiterleitung + Shutdown\n");
+    debug_log("GET /shutdown called - redirecting and shutting down\n");
     
     send_response(tpcb,
                   "<!DOCTYPE html><html><head>"
@@ -271,7 +271,7 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
     
     debug_log("UPLOAD: flash erased at address: %d , %d bytes.\n", LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
     
-    send_upload_logo_page(tpcb, "<p style='color:orange; font-weight:bold;'>✔️ Logo erfolgreich gelöscht.</p>");
+    send_upload_logo_page(tpcb, "<p style='color:orange; font-weight:bold;'>✔️ Logo successfully deleted.</p>");
     upload_session.active = false;
     upload_session.header_complete = false;
     upload_session.header_length = 0;
@@ -290,10 +290,10 @@ static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *
 static absolute_time_t shutdown_time = {0};
 extern const unsigned char gImage_eSign_100x100_3[];
 
-// Shutdown-Callback
+// Shutdown callback
 static int64_t shutdown_callback(alarm_id_t id, void *user_data) {
     extern ds3231_t ds3231;
-    debug_log("Shutdown-Callback wurde aufgerufen\n");
+    debug_log("Shutdown callback invoked\n");
     set_alarmclock_and_powerdown(&ds3231);
     // watchdog_reboot(0, 0, 0);
     return 0;
@@ -303,7 +303,7 @@ typedef struct {
     bool active;
     size_t total_received;
     size_t expected_length;
-    uint8_t buffer[32768];  // Max. Logo-Größe
+    uint8_t buffer[32768];  // Max logo size
 } upload_state_t;
 
 typedef struct {
@@ -315,11 +315,11 @@ typedef struct {
     char* body_copy;
 } response_state_t;
 
-static upload_state_t logo_upload = {0};
 
 void webserver_set_shutdown_time(absolute_time_t t) {
     shutdown_time = t;
 }
+
 void add_timeout_info(char *buf, size_t buf_size) {
     int64_t now_us = to_us_since_boot(get_absolute_time());
     int64_t target_us = to_us_since_boot(shutdown_time);
@@ -343,7 +343,7 @@ void send_response(struct tcp_pcb* tpcb, const char* body) {
     int body_len = strlen(body);
     // debug_log("send_response: body_len = %d\n", body_len);
 
-    // HTML-Body kopieren, damit er gültig bleibt
+    // Copy HTML body to keep it valid
     char* body_copy = malloc(body_len);
     if (!body_copy) {
         // debug_log("send_response: malloc failed for body\n");
@@ -368,7 +368,7 @@ void send_response(struct tcp_pcb* tpcb, const char* body) {
         return;
     }
 
-    // Zustand für das Senden vorbereiten
+    // Prepare state for sending
     response_state_t* state = malloc(sizeof(response_state_t));
     if (!state) {
         debug_log("send_response: malloc failed for state\n");
@@ -432,7 +432,7 @@ static err_t send_next_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
 // 4. Form handlers: collect data, call handle_form_xxx() (create in webserver_pages.c)
 // 5. Binary handlers: setup upload_session, let chunked logic handle it
 
-static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+static void handle_post_seatsurfing(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: Content-Length missing\n");
@@ -444,7 +444,7 @@ static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
         debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: form body too large\n");
-        send_seatsurfing_config_page(tpcb, "Formulardaten zu groß");
+        send_seatsurfing_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
     }
@@ -480,7 +480,7 @@ static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, 
 
 
 
-static void handle_post_devicecopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+static void handle_post_device_config(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD DEVICE CONFIG: Content-Length missing\n");
@@ -492,7 +492,7 @@ static void handle_post_devicecopied(struct tcp_pcb* tpcb, struct pbuf* p, const
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
         debug_log_with_color(COLOR_RED, "UPLOAD DEVICE CONFIG: form body too large\n");
-        send_device_config_page(tpcb, "Formulardaten zu groß");
+        send_device_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
     }
@@ -696,7 +696,7 @@ static void handle_post_firmware_update(struct tcp_pcb* tpcb, struct pbuf* p, co
     tcp_recved(tpcb, copied);
 }
 
-static void handle_post_wificopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+static void handle_post_wifi(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD WIFI CONFIG: Content-Length missing\n");
@@ -733,7 +733,7 @@ static void handle_post_wificopied(struct tcp_pcb* tpcb, struct pbuf* p, const c
     }
 }
 
-static void handle_post_clockcopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+static void handle_post_clock(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD CLOCK: Content-Length fehlt\n");
@@ -744,8 +744,8 @@ static void handle_post_clockcopied(struct tcp_pcb* tpcb, struct pbuf* p, const 
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD CLOCK: body zu groß\n");
-        send_clock_page(tpcb, "❌ Formulardaten zu groß.");
+        debug_log_with_color(COLOR_RED, "UPLOAD CLOCK: body too large\n");
+        send_clock_page(tpcb, "❌ Form data too large.");
         tcp_close(tpcb);
         return;
     }
@@ -798,10 +798,10 @@ static const route_t routes[] = {
     
     // POST routes
     {"/delete_logo", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_delete_logo_route}},
-    {"/wifi", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_wificopied}},
-    {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfingcopied}},
-    {"/device_config", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_devicecopied}},
-    {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clockcopied}},
+    {"/wifi", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_wifi}},
+    {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfing}},
+    {"/device_config", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_device_config}},
+    {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clock}},
     {"/upload_logo", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_upload_logo}},
     {"/firmware_update", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_firmware_update}},
     
@@ -1051,7 +1051,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                 send_firmware_update_page(tpcb, msg);
             }
         }else {
-            const char *ok_msg = "<html><body><h2>✅ Upload OK</h2><a href='/'>Zurück</a></body></html>";
+            const char *ok_msg = "<html><body><h2>✅ Upload OK</h2><a href='/'>Back</a></body></html>";
             send_response(tpcb, ok_msg);
         }
 
