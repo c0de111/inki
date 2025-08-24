@@ -7,6 +7,7 @@
 
 #define MAX_FORM_FIELDS 128
 #define MAX_FIELD_LENGTH 128
+#define USER_INTERACTION_TIMEOUT_MS (5 * 60 * 1000)  // reset active time for user interaction: 5 minutes
 
 #ifdef __cplusplus
 extern "C" {
