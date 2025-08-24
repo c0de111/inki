@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "pico/types.h"
+#include "lwip/tcp.h"
 
 #define MAX_FORM_FIELDS 128
 #define MAX_FIELD_LENGTH 128
@@ -71,6 +72,10 @@ extern "C" {
 
     // Übergibt dem Webserver die globale Shutdown-Zeit (für Restlaufzeitanzeige)
     void webserver_set_shutdown_time(absolute_time_t t);
+
+    // Utility functions for HTML page generation
+    void add_timeout_info(char *buf, size_t buf_size);
+    void send_response(struct tcp_pcb* tpcb, const char* body);
 
     #ifdef __cplusplus
 }
