@@ -64,7 +64,7 @@ extern "C" {
     } upload_session_t;
 
 
-    static upload_session_t upload_session;
+    extern upload_session_t upload_session;
 
     typedef void (*submission_handler_t)(const web_submission_t *data);
 
