@@ -116,7 +116,9 @@ typedef struct {
 // Forward declarations for route handlers
 static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static int64_t shutdown_callback(alarm_id_t id, void *user_data);
+void flush_page_to_flash(void);
 
 // Wrapper functions for page handlers that take parameters
 static void send_wifi_config_page_wrapper(struct tcp_pcb *tpcb) {
@@ -141,6 +143,78 @@ static void send_upload_logo_page_wrapper(struct tcp_pcb *tpcb) {
 
 static void send_firmware_update_page_wrapper(struct tcp_pcb *tpcb) {
     send_firmware_update_page(tpcb, "");
+}
+
+// Helper function for consistent cleanup
+static void cleanup_and_return(struct tcp_pcb *tpcb, struct pbuf *p, int copied) {
+    tcp_recved(tpcb, copied);
+    upload_session.header_complete = false;
+    upload_session.header_length = 0;
+    pbuf_free(p);
+}
+
+// Helper function for binary upload chunked processing
+static void process_binary_upload_chunk(const char *buffer, int copied, const char *debug_prefix) {
+    size_t to_copy = copied;
+    const uint8_t *src = (const uint8_t *)buffer;
+
+    while (to_copy > 0) {
+        size_t space = FLASH_PAGE_SIZE - flash_writer.buffer_filled;
+        size_t chunk = (to_copy < space) ? to_copy : space;
+
+        memcpy(flash_writer.buffer + flash_writer.buffer_filled, src, chunk);
+        flash_writer.buffer_filled += chunk;
+        src += chunk;
+        to_copy -= chunk;
+
+        if (flash_writer.buffer_filled == FLASH_PAGE_SIZE) {
+            flush_page_to_flash();
+        }
+    }
+    upload_session.total_received += copied;
+}
+
+// Helper function for form upload chunked processing
+static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp_pcb *tpcb) {
+    size_t to_copy = copied;
+    if (upload_session.total_received + to_copy > upload_session.expected_length) {
+        to_copy = upload_session.expected_length - upload_session.total_received;
+    }
+
+    memcpy(upload_session.form_buffer + upload_session.total_received, buffer, to_copy);
+    upload_session.total_received += to_copy;
+    tcp_recved(tpcb, copied);
+
+    // Check if form is complete
+    if (upload_session.total_received >= upload_session.expected_length) {
+        upload_session.form_buffer[upload_session.expected_length] = '\0';
+        
+        // Dispatch to appropriate form handler
+        switch (upload_session.type) {
+            case UPLOAD_FORM_WIFI:
+                handle_form_wifi(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+            case UPLOAD_FORM_SEATSURFING:
+                handle_form_seatsurfing(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+            case UPLOAD_FORM_DEVICE:
+                handle_form_device_config(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+            case UPLOAD_FORM_CLOCK:
+                handle_form_clock(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+            default:
+                debug_log_with_color(COLOR_RED, "Unknown form type: %d\n", upload_session.type);
+                break;
+        }
+        
+        // Reset upload session
+        upload_session.active = false;
+        upload_session.header_complete = false;
+        upload_session.header_length = 0;
+        return true; // Form complete
+    }
+    return false; // Form still in progress
 }
 
 // Inline route handlers for special cases
@@ -182,6 +256,11 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
     upload_session.active = false;
     upload_session.header_complete = false;
     upload_session.header_length = 0;
+}
+
+static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    debug_log("GET /logo called\n");
+    // handle_logo_request(tpcb); // Commented out - no implementation
 }
 
 
@@ -764,6 +843,7 @@ static const route_t routes[] = {
     {"/device_status", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_status_page}},
     {"/upload_logo", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_upload_logo_page_wrapper}},
     {"/firmware_update", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_firmware_update_page_wrapper}},
+    {"/logo", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_logo_route}},
     {"/shutdown", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_shutdown_route}},
     
     // POST routes
@@ -811,6 +891,21 @@ static bool dispatch_route(const route_t *route, struct tcp_pcb *tpcb, struct pb
     return true;
 }
 
+/*
+ * recv_cb():
+ * ├── Connection check
+ * ├── Header collection phase
+ * │   ├── Buffer header data
+ * │   ├── Parse HTTP request line
+ * │   ├── Route table dispatch
+ * │   └── Error handling
+ * ├── Binary upload chunked processing
+ * │   ├── UPLOAD_LOGO (with helper)
+ * │   └── UPLOAD_FIRMWARE (with helper + progress)
+ * ├── Form upload chunked processing
+ * │   └── All form types (with unified helper)
+ * └── Upload completion handling
+ */
 static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
     if (!p) {
         tcp_close(tpcb);
@@ -832,14 +927,14 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 
             char *end = strstr(upload_session.header_buffer, "\r\n\r\n");
             if (!end) {
-                // Noch nicht komplett
+                // Header not yet complete
                 pbuf_free(p);
                 return ERR_OK;
             }
 
-            upload_session.header_complete = true;             // Header complete
+            upload_session.header_complete = true;
             const char *route_line = upload_session.header_buffer;
-            char *eol = strstr(route_line, "\r\n"); // Extrahiere nur die erste Headerzeile in eine eigene Kopie
+            char *eol = strstr(route_line, "\r\n"); // Extract only the first header line
             if (!eol) {
                 debug_log_with_color(COLOR_RED, "HEADER: malformed - no CRLF\n");
                 pbuf_free(p);
@@ -847,14 +942,13 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             }
 
             size_t line_len = eol - route_line;
-            if (line_len >= 128) line_len = 127;  // Sicherheitsgrenze
+            if (line_len >= 128) line_len = 127;  // Safety limit
 
             char first_line[128];
             memcpy(first_line, route_line, line_len);
             first_line[line_len] = '\0';
 
             debug_log("HEADER LINE: %s\n", first_line);
-            // debug_log("HEADER COMPLETE: %s\n", route_line);
 
             // Try route table dispatch
             char method_str[8], path_str[64];
@@ -873,35 +967,22 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                         
                         // Only GET routes and special POST routes need immediate cleanup
                         if (route->type == ROUTE_SIMPLE || route->type == ROUTE_INLINE) {
-                            tcp_recved(tpcb, copied);
-                            upload_session.header_complete = false;
-                            upload_session.header_length = 0;
-                            pbuf_free(p);
+                            cleanup_and_return(tpcb, p, copied);
                             return ERR_OK;
                         }
                         // Form/binary handlers set upload_session.active - let chunked logic handle them
+                    } else {
+                        // Route not found
+                        debug_log_with_color(COLOR_RED, "Route not implemented: %s %s\n", method_str, path_str);
+                        cleanup_and_return(tpcb, p, copied);
+                        return ERR_OK;
                     }
                 }
-            }
-            
-            // Handle remaining unmigrated routes
-            if (!route_handled) {
-                if (strncmp(first_line, "GET /logo", strlen("GET /logo")) == 0) {
-                    debug_log("GET /logo called\n");
-                    // handle_logo_request(tpcb);
-                    tcp_recved(tpcb, copied);
-                    upload_session.header_complete = false;
-                    upload_session.header_length = 0;
-                    pbuf_free(p);
-                    return ERR_OK;
-                } else {
-                    debug_log_with_color(COLOR_RED, "Route not implemented: %s\n", first_line);
-                    tcp_recved(tpcb, copied);
-                    upload_session.header_complete = false;
-                    upload_session.header_length = 0;
-                    pbuf_free(p);
-                    return ERR_OK;
-                }
+            } else {
+                // Parse error - malformed request
+                debug_log_with_color(COLOR_RED, "Malformed request: %s\n", first_line);
+                cleanup_and_return(tpcb, p, copied);
+                return ERR_OK;
             }
         } else {
             debug_log_with_color(COLOR_RED, "HEADER: buffer overflow\n");
@@ -909,113 +990,36 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             return ERR_OK;
         }
     } else if (upload_session.active && upload_session.type == UPLOAD_LOGO) {
-        size_t to_copy = copied;
-        const uint8_t *src = (const uint8_t *)buffer;
-
-        while (to_copy > 0) {
-            size_t space = FLASH_PAGE_SIZE - flash_writer.buffer_filled;
-            size_t chunk = (to_copy < space) ? to_copy : space;
-
-            memcpy(flash_writer.buffer + flash_writer.buffer_filled, src, chunk);
-            flash_writer.buffer_filled += chunk;
-            src += chunk;
-            to_copy -= chunk;
-
-            if (flash_writer.buffer_filled == FLASH_PAGE_SIZE) {
-                flush_page_to_flash();
-            }
-        }
-        upload_session.total_received += copied;
+        process_binary_upload_chunk(buffer, copied, "LOGO");
         tcp_recved(tpcb, copied);
-        // sleep_ms(5);
         debug_log("UPLOAD LOGO: Additional chunk (%d bytes, total %d)\n", copied, (int)upload_session.total_received);
-    }else if (upload_session.active && upload_session.type == UPLOAD_FIRMWARE) {
-        size_t to_copy = copied;
-        const uint8_t *src = (const uint8_t *)buffer;
-
-        while (to_copy > 0) {
-            size_t space = FLASH_PAGE_SIZE - flash_writer.buffer_filled;
-            size_t chunk = (to_copy < space) ? to_copy : space;
-
-            memcpy(flash_writer.buffer + flash_writer.buffer_filled, src, chunk);
-            flash_writer.buffer_filled += chunk;
-            src += chunk;
-            to_copy -= chunk;
-
-            if (flash_writer.buffer_filled == FLASH_PAGE_SIZE) {
-                flush_page_to_flash();
-            }
-        }
-        upload_session.total_received += copied;
-        // upload_session.flash_offset += copied;
+    } else if (upload_session.active && upload_session.type == UPLOAD_FIRMWARE) {
+        process_binary_upload_chunk(buffer, copied, "FIRMWARE");
         tcp_recved(tpcb, copied);
-        // sleep_ms(5);
-        // debug_log("UPLOAD FIRMWARE: /*Addition*/al chunk (%d bytes, total %d)\n", copied, (int)upload_session.total_received);
-        // Add this static variable at the top of your upload handler (or make it part of upload_session)
+        
+        // Progress logging for firmware updates
         static int last_logged_percent = -10;
-
-        // In your upload handler, inside the loop or after receiving a chunk:
         int percent = (int)((100ULL * upload_session.total_received) / upload_session.expected_length);
-
-        // Only log every 10% step (i.e., 10%, 20%, ..., 100%)
         if (percent >= last_logged_percent + 10) {
             last_logged_percent = percent;
             debug_log("UPLOAD FIRMWARE: Progress = %d%%\n", percent);
         }
-
-    }else if (upload_session.active && upload_session.type == UPLOAD_FORM_WIFI) {
-        size_t to_copy = copied;
-        if (upload_session.total_received + to_copy > upload_session.expected_length) {
-            to_copy = upload_session.expected_length - upload_session.total_received;
-        }
-
-        memcpy(upload_session.form_buffer + upload_session.total_received, buffer, to_copy);
-        upload_session.total_received += to_copy;
-        tcp_recved(tpcb, copied);
-
-        if (upload_session.total_received >= upload_session.expected_length) {
-            upload_session.form_buffer[upload_session.expected_length] = '\0';
-            handle_form_wifi(tpcb, upload_session.form_buffer, upload_session.expected_length);
-            upload_session.active = false;
-            upload_session.header_complete = false;
-            upload_session.header_length = 0;
-        }
-    }else if (upload_session.active &&
-        (upload_session.type == UPLOAD_FORM_SEATSURFING ||
-         upload_session.type == UPLOAD_FORM_DEVICE ||
-         upload_session.type == UPLOAD_FORM_CLOCK
-        )) {
-                size_t to_copy = copied;
-            if (upload_session.total_received + to_copy > upload_session.expected_length) {
-                to_copy = upload_session.expected_length - upload_session.total_received;
-            }
-
-            memcpy(upload_session.form_buffer + upload_session.total_received, buffer, to_copy);
-            upload_session.total_received += to_copy;
-            tcp_recved(tpcb, copied);
-
-            if (upload_session.total_received >= upload_session.expected_length) {
-                upload_session.form_buffer[upload_session.expected_length] = '\0';
-
-                if (upload_session.type == UPLOAD_FORM_SEATSURFING) {
-                    handle_form_seatsurfing(tpcb, upload_session.form_buffer, upload_session.expected_length);
-                } else if (upload_session.type == UPLOAD_FORM_DEVICE) {
-                    handle_form_device_config(tpcb, upload_session.form_buffer, upload_session.expected_length);
-                }
-                upload_session.active = false;
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-            }
-        }
+    } else if (upload_session.active && 
+               (upload_session.type == UPLOAD_FORM_WIFI ||
+                upload_session.type == UPLOAD_FORM_SEATSURFING ||
+                upload_session.type == UPLOAD_FORM_DEVICE ||
+                upload_session.type == UPLOAD_FORM_CLOCK)) {
+        process_form_upload_chunk(buffer, copied, tpcb);
+    }
     if (upload_session.active && upload_session.total_received >= upload_session.expected_length) {
         debug_log_with_color(COLOR_GREEN, "UPLOAD: Complete (%d bytes)\n", (int)upload_session.total_received);
 
-        flush_page_to_flash();  // letzte unvollständige Seite schreiben
+        flush_page_to_flash();  // Write last incomplete page
         __dsb();
         __isb();
-        // sleep_ms(50);  // Zeit für Cache/Flash-Sync
+        // sleep_ms(50);  // Time for Cache/Flash sync
 
-        // Logging für Debug
+        // Debug logging
         debug_log("FLASH end offset: 0x%X\n", flash_writer.flash_offset);
 
         if (upload_session.type == UPLOAD_FIRMWARE) {
