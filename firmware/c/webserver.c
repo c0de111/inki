@@ -477,9 +477,6 @@ static void handle_post_seatsurfing(struct tcp_pcb* tpcb, struct pbuf* p, const 
     }
 }
 
-
-
-
 static void handle_post_device_config(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {

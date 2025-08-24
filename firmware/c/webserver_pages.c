@@ -1,11 +1,15 @@
 /*
  * ==============================================================================
- * webserver_pages.c - HTML Page Generation for inki Webserver
+ * webserver_pages.c - HTML Page Generation & Form Processing for inki Webserver
  * ==============================================================================
  *
- * Contains all HTML page generation functions for webserver.c
- * These functions generate complete HTML responses for the web configuration
- * interface.
+ * Contains all HTML page generation functions and form processing handlers
+ * for webserver.c. This module handles:
+ * 
+ * - HTML page generation for the web configuration interface
+ * - Form data processing and validation
+ * - Configuration saving to flash memory
+ * - User feedback and error handling
  *
  */
 
@@ -26,11 +30,18 @@
 #include "pico/cyw43_arch.h"
 #include "ds3231.h"
 #include "webserver_utils.h"
-#include "main.h"
-#include "flash.h"
-#include "pico/cyw43_arch.h"
-#include "ds3231.h"
 
+// =============================================================================
+// HTML PAGE GENERATION FUNCTIONS
+// =============================================================================
+
+/**
+ * @brief Generates and sends the main landing page with navigation menu
+ * @param tpcb TCP connection pointer
+ * 
+ * Creates the main setup page with links to all configuration sections.
+ * Includes auto-refresh and timeout countdown display.
+ */
 void send_landing_page(struct tcp_pcb *tpcb) {
     char page[4096];
     char timeout_info[64];
@@ -70,6 +81,17 @@ void send_landing_page(struct tcp_pcb *tpcb) {
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the device status page showing system information
+ * @param tpcb TCP connection pointer
+ * 
+ * Displays comprehensive device status including:
+ * - Current configuration (room name, Wi-Fi settings)
+ * - RTC time (raw and DST-adjusted)
+ * - Voltage readings (VCC, backup battery)
+ * - MAC address, flash logo info
+ * - Active firmware slot information
+ */
 void send_device_status_page(struct tcp_pcb* tpcb) {
     char page[4096];
     char timeout_info[64];
@@ -94,7 +116,7 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     float vcc = read_battery_voltage(device_config_flash.data.conversion_factor);
     float vbat = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
 
-    // // Spannungsbewertung (für einfache Farbcodierung)
+    // Voltage assessment (for simple color coding)
     const char* vcc_color = (vcc > 3.5) ? "green" : (vcc > 3.0 ? "orange" : "red");
     const char* vbat_color = (vbat > 3.1) ? "green" : (vbat > 2.9 ? "orange" : "red");
 
@@ -214,14 +236,14 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
                  "<div>Slot 0:</div>\n"
                  "<div>Version: <span class='value'>%s</span></div>\n"
                  "<div>Build: <span class='value'>%s</span></div>\n"
-                 "<div>Größe: <span class='value'>%u Bytes</span></div>\n"
+                 "<div>Size: <span class='value'>%u Bytes</span></div>\n"
                  "<div>CRC32: <span class='value'>0x%08X</span></div>\n"
                  "<div>Slot: <span class='value'>%u</span></div>\n"
                  "<div>Valid: <span class='value'>%u</span></div><br>\n\n\n",
                  version0, build0, size0, crc0, slot_index0, valid0);
     } else {
         snprintf(buffer, sizeof(buffer),
-                 "<li>Slot 0: <span class='value red'>leer oder ungültig</span></li>\n");
+                 "<li>Slot 0: <span class='value red'>empty or invalid</span></li>\n");
     }
     strcat(page, buffer);
 
@@ -231,26 +253,34 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
                  "<div>Slot 1:</div>\n"
                  "<div>Version: <span class='value'>%s</span></div>\n"
                  "<div>Build: <span class='value'>%s</span></div>\n"
-                 "<div>Größe: <span class='value'>%u Bytes</span></div>\n"
+                 "<div>Size: <span class='value'>%u Bytes</span></div>\n"
                  "<div>CRC32: <span class='value'>0x%08X</span></div>\n"
                  "<div>Slot: <span class='value'>%u</span></div>\n"
                  "<div>Valid: <span class='value'>%u</span></div>\n",
                  version1, build1, size1, crc1, slot_index1, valid1);
     } else {
         snprintf(buffer, sizeof(buffer),
-                 "<li>Slot 1: <span class='value red'>leer oder ungültig</span></li>\n");
+                 "<li>Slot 1: <span class='value red'>empty or invalid</span></li>\n");
     }
     strcat(page, buffer);
 
-        // Liste schließen
+        // Close list
         strcat(page, "</ul></div>\n");
 
-    // Zurück-Link
+    // Back link
     strcat(page, "<a href=\"/\">back</a></body></html>");
 
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the logo upload page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (success/error feedback)
+ * 
+ * Creates an HTML page with file upload interface for logo images.
+ * Includes JavaScript for client-side file validation and upload progress.
+ */
 void send_upload_logo_page(struct tcp_pcb* tpcb, const char* message) {
     char page[4096];
     char timeout_info[64];
@@ -277,7 +307,7 @@ void send_upload_logo_page(struct tcp_pcb* tpcb, const char* message) {
              "<button onclick='upload()'>Upload</button><br>"
              "<progress id='progressBar' max='100' value='0'></progress>"
              "<p id='status'></p>"
-             "<a href='/'>Zurück</a>"
+             "<a href='/'>Back</a>"
              "<script>"
              "const MAX_SIZE = %d;"  // Wird korrekt ersetzt
              "function upload() {"
@@ -332,6 +362,14 @@ void send_upload_logo_page(struct tcp_pcb* tpcb, const char* message) {
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the firmware update page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (upload result feedback)
+ * 
+ * Creates an HTML page for firmware binary uploads with slot management.
+ * Shows current firmware status and provides upload interface.
+ */
 void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
     // Wenn `message` mit "<div" oder "<h2" beginnt, nur das Fragment senden
     if (message && *message && (
@@ -342,7 +380,7 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
     return;
         }
 
-        // Normale vollständige Seite
+        // Normal complete page
         char page[4096];
         char buffer[256];
         char timeout_info[64];
@@ -383,7 +421,7 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                "<progress id='progressBar' max='100' value='0'></progress>"
                "<p id='status'></p>"
                "<div id='uploadResult'></div>"
-               "<a href='/'>Zurück</a>\n");
+               "<a href='/'>Back</a>\n");
 
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
                  "<script>"
@@ -408,7 +446,7 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                  "  const file = document.getElementById('fileInput').files[0];"
                  "  if (!file) return;"
                  "  if (file.size > MAX_SIZE) {"
-                 "    document.getElementById('status').innerText = '❌ Datei zu groß (' + file.size + ' Bytes, maximal ' + MAX_SIZE + ' Bytes erlaubt)';"
+                 "    document.getElementById('status').innerText = '❌ File too large (' + file.size + ' bytes, maximum ' + MAX_SIZE + ' bytes allowed)';"
                  "    return;"
                  "  }"
                  "  const xhr = new XMLHttpRequest();"
@@ -450,7 +488,7 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                          "<div>Slot 0: %s (%s), %u Bytes</div>\n",
                          version0, build0, size0);
             } else {
-                strcat(page, "<div>Slot 0: <i>leer oder ungültig</i></div>\n");
+                strcat(page, "<div>Slot 0: <i>empty or invalid</i></div>\n");
             }
 
             if (has1) {
@@ -458,12 +496,12 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                          "<div>Slot 1: %s (%s), %u Bytes</div>\n",
                          version1, build1, size1);
             } else {
-                strcat(page, "<div>Slot 1: <i>leer oder ungültig</i></div>\n");
+                strcat(page, "<div>Slot 1: <i>empty or invalid</i></div>\n");
             }
 
             strcat(page, "</ul>\n");
         } else {
-            strcat(page, "<p><i>Keine gültige Firmware in Slot 0 oder 1 gefunden.</i></p>\n");
+            strcat(page, "<p><i>No valid firmware found in Slot 0 or 1.</i></p>\n");
         }
 
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
@@ -473,6 +511,14 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
         send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the Wi-Fi configuration page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (save confirmation/error)
+ * 
+ * Creates an HTML form for Wi-Fi network configuration including
+ * SSID, password, and SeatSurfing server connection settings.
+ */
 void send_wifi_config_page(struct tcp_pcb *tpcb, const char *message) {
     char page[2048];
     char timeout_info[64];
@@ -516,6 +562,14 @@ void send_wifi_config_page(struct tcp_pcb *tpcb, const char *message) {
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the SeatSurfing API configuration page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (save confirmation/error)
+ * 
+ * Creates an HTML form for SeatSurfing integration settings including
+ * server URL, API credentials, and location configuration.
+ */
 void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
     char page[2048];
     char timeout_info[64];
@@ -560,7 +614,7 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
              "<label>Location ID:<br><input type=\"text\" name=\"text7\" value=\"%s\"></label>"
              "<input type=\"submit\" value=\"store\">"
              "</form>"
-             "<a href=\"/\">Zurück zum Start</a>"
+             "<a href=\"/\">Back to Start</a>"
              "<p>%s</p>"
              "</body></html>",
              seatsurfing_config_flash.data.host,
@@ -575,6 +629,14 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the RTC clock configuration page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (time set confirmation/error)
+ * 
+ * Creates an HTML form for setting the DS3231 RTC time and date.
+ * Includes current time display and manual time entry fields.
+ */
 void send_clock_page(struct tcp_pcb *tpcb, const char *message) {
     char page[8192];
     char timeout_info[64];
@@ -621,7 +683,7 @@ void send_clock_page(struct tcp_pcb *tpcb, const char *message) {
              "<input type=\"submit\" value=\"Uhr stellen\">"
              "</form>"
 
-             "<p><a href=\"/\">Zurück</a></p>"
+             "<p><a href=\"/\">Back</a></p>"
              "<p>%s</p>"
 
              "<script>"
@@ -649,6 +711,16 @@ void send_clock_page(struct tcp_pcb *tpcb, const char *message) {
     send_response(tpcb, page);
 }
 
+/**
+ * @brief Generates and sends the device configuration page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (save confirmation/error)
+ * 
+ * Creates an HTML form for device-specific settings including:
+ * - Room name and display type
+ * - Refresh intervals for button combinations
+ * - Power management and watchdog settings
+ */
 void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
     char page[8192];
     char timeout_info[64];
@@ -840,7 +912,19 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
     send_response(tpcb, page);
 }
 
-// Form handler functions
+// =============================================================================
+// FORM PROCESSING HANDLERS
+// =============================================================================
+
+/**
+ * @brief Processes Wi-Fi configuration form submissions
+ * @param tpcb TCP connection pointer
+ * @param body Form data from HTTP POST request
+ * @param len Length of form data
+ * 
+ * Parses Wi-Fi settings form, validates input, and saves configuration
+ * to flash memory. Sends confirmation page with result status.
+ */
 void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
     web_submission_t result = {0};
     char timeout_info[64];
@@ -856,15 +940,24 @@ void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
 
     bool ok = save_wifi_config(&new_cfg);
 
-    send_wifi_config_page(tpcb, "✔ WLAN-Daten gespeichert");
+    send_wifi_config_page(tpcb, "✔ WiFi data saved");
 
     if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "SSID & password gespeichert\n");
+        debug_log_with_color(COLOR_YELLOW, "SSID & password saved\n");
     } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern\n");
+        debug_log_with_color(COLOR_RED, "Error saving data\n");
     }
 }
 
+/**
+ * @brief Processes SeatSurfing API configuration form submissions
+ * @param tpcb TCP connection pointer
+ * @param body Form data from HTTP POST request
+ * @param len Length of form data
+ * 
+ * Parses SeatSurfing integration settings, validates server connection,
+ * and saves configuration to flash memory.
+ */
 void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len) {
     webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
 
@@ -888,7 +981,7 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
         new_cfg.data.ip[2] = (uint8_t)ip2;
         new_cfg.data.ip[3] = (uint8_t)ip3;
     } else {
-        debug_log_with_color(COLOR_RED, "Ungültige IP-Adresse: %s\n", result.text[3]);
+        debug_log_with_color(COLOR_RED, "Invalid IP address: %s\n", result.text[3]);
     }
 
     new_cfg.data.port = (uint16_t)atoi(result.text[4]);
@@ -905,6 +998,15 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
     send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
 }
 
+/**
+ * @brief Processes device configuration form submissions
+ * @param tpcb TCP connection pointer
+ * @param body Form data from HTTP POST request
+ * @param len Length of form data
+ * 
+ * Parses device settings including room name, refresh intervals,
+ * power management settings, and saves to flash memory.
+ */
 void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len) {
     web_submission_t result = {0};
     char timeout_info[64];
@@ -912,9 +1014,9 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
 
     parse_form_fields(body, len, &result);
 
-    device_config_t new_cfg = { .crc32 = 0 }; // wichtig: struct enthält .data + .crc32
+    device_config_t new_cfg = { .crc32 = 0 }; // Important: struct contains .data + .crc32
 
-    // Bestehende Werte übernehmen
+    // Take over existing values
     memcpy(&new_cfg.data, &device_config_flash.data, sizeof(device_config_data_t));
 
     // Neue Werte eintragen
@@ -938,15 +1040,24 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
 
     bool ok = save_device_config(&new_cfg);
 
-    send_device_config_page(tpcb, ok ? "✔ Geräteeinstellungen gespeichert" : "⚠ Fehler beim Speichern");
+    send_device_config_page(tpcb, ok ? "✔ Device settings saved" : "⚠ Error saving settings");
 
     if (ok) {
-        debug_log_with_color(COLOR_GREEN, "Gerätekonfiguration gespeichert\n");
+        debug_log_with_color(COLOR_GREEN, "Device configuration saved\n");
     } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Gerätekonfiguration\n");
+        debug_log_with_color(COLOR_RED, "Error saving device configuration\n");
     }
 }
 
+/**
+ * @brief Processes RTC clock setting form submissions
+ * @param tpcb TCP connection pointer
+ * @param body Form data from HTTP POST request
+ * @param len Length of form data
+ * 
+ * Parses time/date values from form and updates the DS3231 RTC.
+ * Validates input and provides feedback on setting success/failure.
+ */
 void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len) {
     const char *line_param = strstr(body, "line=");
     if (!line_param) {
