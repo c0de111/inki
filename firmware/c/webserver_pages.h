@@ -1,11 +1,14 @@
 /*
  * ==============================================================================
- * webserver_pages.h - HTML Page Generation for inki Webserver
+ * webserver_pages.h - HTML Page Generation & Form Processing for inki Webserver
  * ==============================================================================
  *
- * Contains all HTML page generation functions extracted from webserver.c
- * These functions generate complete HTML responses for the web configuration
- * interface.
+ * Function declarations for HTML page generation and form processing handlers
+ * extracted from webserver.c. This module provides:
+ * 
+ * - HTML page generation functions for the web configuration interface
+ * - Form data processing handlers for configuration updates
+ * - Integration with flash memory storage and user feedback
  *
  */
 
