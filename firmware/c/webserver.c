@@ -856,47 +856,52 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             debug_log("HEADER LINE: %s\n", first_line);
             // debug_log("HEADER COMPLETE: %s\n", route_line);
 
-            // Try route table dispatch first
+            // Try route table dispatch
             char method_str[8], path_str[64];
+            bool route_handled = false;
+            
             if (sscanf(first_line, "%7s %63s", method_str, path_str) == 2) {
                 http_method_t method = (strcmp(method_str, "GET") == 0) ? HTTP_GET : 
                                       (strcmp(method_str, "POST") == 0) ? HTTP_POST : -1;
                 
                 if (method != -1) {
                     const route_t *route = find_route(path_str, method);
-                    if (route && dispatch_route(route, tpcb, p, buffer, copied)) {
+                    if (route) {
+                        dispatch_route(route, tpcb, p, buffer, copied);
                         debug_log("ROUTE TABLE: Handled %s %s\n", method_str, path_str);
+                        route_handled = true;
+                        
+                        // Only GET routes and special POST routes need immediate cleanup
                         if (route->type == ROUTE_SIMPLE || route->type == ROUTE_INLINE) {
                             tcp_recved(tpcb, copied);
                             upload_session.header_complete = false;
                             upload_session.header_length = 0;
                             pbuf_free(p);
                             return ERR_OK;
-                        } else if (route->type == ROUTE_FORM) {
-                            // Form handlers need pbuf cleanup by caller
-                            pbuf_free(p);
-                            return ERR_OK;
-                        } else if (route->type == ROUTE_BINARY) {
-                            // Binary upload handlers manage their own pbuf lifecycle  
-                            return ERR_OK;
                         }
+                        // Form/binary handlers set upload_session.active - let chunked logic handle them
                     }
                 }
             }
-
+            
             // Handle remaining unmigrated routes
-            else if (strncmp(first_line, "GET /logo", strlen("GET /logo")) == 0) {
-                debug_log("GET /logo called\n");
-                // handle_logo_request(tpcb);
-                tcp_recved(tpcb, copied);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-            else {
-                tcp_recved(tpcb, copied);
-                upload_session.header_complete = false;
-                upload_session.header_length = 0;
-                debug_log_with_color(COLOR_RED, "not implemented! \n");
+            if (!route_handled) {
+                if (strncmp(first_line, "GET /logo", strlen("GET /logo")) == 0) {
+                    debug_log("GET /logo called\n");
+                    // handle_logo_request(tpcb);
+                    tcp_recved(tpcb, copied);
+                    upload_session.header_complete = false;
+                    upload_session.header_length = 0;
+                    pbuf_free(p);
+                    return ERR_OK;
+                } else {
+                    debug_log_with_color(COLOR_RED, "Route not implemented: %s\n", first_line);
+                    tcp_recved(tpcb, copied);
+                    upload_session.header_complete = false;
+                    upload_session.header_length = 0;
+                    pbuf_free(p);
+                    return ERR_OK;
+                }
             }
         } else {
             debug_log_with_color(COLOR_RED, "HEADER: buffer overflow\n");
