@@ -82,11 +82,16 @@
 #include "ds3231.h"
 #include "webserver_utils.h"
 #include "webserver_pages.h"
+#include "webserver_flash.h"
 
 #define TCP_CHUNK_SIZE 1024
 
 #include <stdint.h>
 #include <stddef.h>
+
+// =============================================================================
+// ROUTE TABLE STRUCTURES & TYPES
+// =============================================================================
 
 // Route table structures
 typedef enum {
@@ -113,12 +118,22 @@ typedef struct {
     } handler;
 } route_t;
 
+// =============================================================================
+// FORWARD DECLARATIONS
+// =============================================================================
+
 // Forward declarations for route handlers
 static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static int64_t shutdown_callback(alarm_id_t id, void *user_data);
-void flush_page_to_flash(void);
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+//
+// For new GET routes: Add wrapper function here if page handler needs parameters
+// Pattern: static void send_xxx_page_wrapper(struct tcp_pcb *tpcb) { send_xxx_page(tpcb, ""); }
 
 // Wrapper functions for page handlers that take parameters
 static void send_wifi_config_page_wrapper(struct tcp_pcb *tpcb) {
@@ -217,11 +232,15 @@ static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp
     return false; // Form still in progress
 }
 
+// =============================================================================
+// INLINE ROUTE HANDLERS
+// =============================================================================
+
 // Inline route handlers for special cases
 static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
     static bool shutdown_triggered = false;
     if (shutdown_triggered) {
-        debug_log("Shutdown bereits in Vorbereitung, Ignorieren\n");
+        debug_log("Shutdown already in progress, ignoring\n");
         return;
     }
     
@@ -263,50 +282,10 @@ static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *
     // handle_logo_request(tpcb); // Commented out - no implementation
 }
 
+// =============================================================================
+// CORE WEBSERVER FUNCTIONS
+// =============================================================================
 
-
-void reset_upload_session(void) {
-    upload_session.active = false;
-    upload_session.header_complete = false;
-    upload_session.header_length = 0;
-    upload_session.total_received = 0;
-    upload_session.expected_length = 0;
-    upload_session.flash_offset = 0;
-    upload_session.type = UPLOAD_NONE;
-}
-
-
-// Marks a firmware slot as valid by setting valid_flag = 1
-// in its 256-byte firmware_header_t structure at the start of the slot.
-// The header resides at offset 0x000 within a 4 KB flash sector.
-// The sector must be erased and rewritten as a whole.
-void mark_firmware_valid(uint32_t flash_offset) {
-    // 1. Read the 4 KB flash sector that contains the firmware header
-    uint8_t sector_buffer[FLASH_SECTOR_SIZE];
-    memcpy(sector_buffer, FLASH_PTR(flash_offset), FLASH_SECTOR_SIZE);
-
-    // 2. Patch the valid_flag inside the firmware_header_t
-    firmware_header_t* header = (firmware_header_t*)sector_buffer;
-
-    debug_log("Firmware header before setting valid_flag:\n");
-    debug_log("  magic         : '%.*s'\n", (int)sizeof(header->magic), header->magic);
-    debug_log("  valid_flag    : %u\n", header->valid_flag);
-    debug_log("  build_date    : '%.*s'\n", (int)sizeof(header->build_date), header->build_date);
-    debug_log("  git_version   : '%.*s'\n", (int)sizeof(header->git_version), header->git_version);
-    debug_log("  firmware_size : %u\n", header->firmware_size);
-    debug_log("  slot          : %u\n", header->slot);
-    debug_log("  crc32         : 0x%08X\n", header->crc32);
-
-    header->valid_flag = 1;
-
-    // 3. Erase and reprogram the 4 KB flash sector
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(flash_offset, FLASH_SECTOR_SIZE);
-    flash_range_program(flash_offset, sector_buffer, FLASH_SECTOR_SIZE);
-    restore_interrupts(ints);
-
-    debug_log("Firmware marked valid (sector-based rewrite).\n");
-}
 
 static absolute_time_t shutdown_time = {0};
 extern const unsigned char gImage_eSign_100x100_3[];
@@ -338,8 +317,6 @@ typedef struct {
 
 static upload_state_t logo_upload = {0};
 
-// Wandelt URL-kodierten String src in dst um (z. B. %20 → Leerzeichen, + → Leerzeichen)
-
 void webserver_set_shutdown_time(absolute_time_t t) {
     shutdown_time = t;
 }
@@ -360,8 +337,6 @@ void add_timeout_info(char *buf, size_t buf_size) {
                  "<small>Setup period expired</small>");
     }
 }
-
-
 
 static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len);
 void send_response(struct tcp_pcb* tpcb, const char* body) {
@@ -445,57 +420,23 @@ static err_t send_next_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
     return ERR_OK;
 }
 
-static int copy_pbuf_chain(const struct pbuf *p, uint8_t *dest, size_t max_len) {
-    size_t copied = 0;
-    while (p && copied < max_len) {
-        size_t to_copy = p->len;
-        if (copied + to_copy > max_len) {
-            to_copy = max_len - copied;
-        }
-        memcpy(dest + copied, p->payload, to_copy);
-        copied += to_copy;
-        p = p->next;
-    }
-    return copied;
-}
 
-void flush_page_to_flash() {
-    if (flash_writer.buffer_filled == 0) {
-        debug_log("FLASH: flush_page_to_flash() called, but buffer is empty – skipping\n");
-        return;
-    }
-    watchdog_update();
-
-    // Padding bei Bedarf
-    if (flash_writer.buffer_filled % FLASH_PAGE_SIZE != 0) {
-        size_t pad_size = FLASH_PAGE_SIZE - flash_writer.buffer_filled;
-        memset(flash_writer.buffer + flash_writer.buffer_filled, 0xFF, pad_size);
-        debug_log("FLASH: padding %u bytes with 0xFF\n", (unsigned)pad_size);
-    }
-
-    // debug_log("FLASH: writing page at offset 0x%X (%u bytes)\n",
-              // (unsigned)flash_writer.flash_offset, FLASH_PAGE_SIZE);
-
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_program(flash_writer.flash_offset,
-                        flash_writer.buffer,
-                        FLASH_PAGE_SIZE);
-    restore_interrupts(ints);
-
-    // debug_log("FLASH: write successful at 0x%X\n", (unsigned)flash_writer.flash_offset);
-
-    flash_writer.flash_offset += FLASH_PAGE_SIZE;
-    flash_writer.buffer_filled = 0;
-}
-
-
-
+// =============================================================================
+// POST ROUTE HANDLERS
+// =============================================================================
+//
+// To add a new POST handler:
+// 1. Add function declaration above in FORWARD DECLARATIONS section
+// 2. Implement handler here following existing patterns
+// 3. Add route entry in ROUTE TABLE section below
+// 4. Form handlers: collect data, call handle_form_xxx() (create in webserver_pages.c)
+// 5. Binary handlers: setup upload_session, let chunked logic handle it
 
 static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: Content-Length missing\n");
-        send_seatsurfing_config_page(tpcb, "Fehlender Content-Length");
+        send_seatsurfing_config_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
     }
@@ -832,6 +773,10 @@ static void handle_post_clockcopied(struct tcp_pcb* tpcb, struct pbuf* p, const 
     }
 }
 
+// =============================================================================
+// ROUTE TABLE & DISPATCH
+// =============================================================================
+
 // Route table implementation
 static const route_t routes[] = {
     // GET routes
@@ -846,6 +791,11 @@ static const route_t routes[] = {
     {"/logo", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_logo_route}},
     {"/shutdown", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_shutdown_route}},
     
+    // ADD NEW GET ROUTES HERE:
+    // 1. Create send_new_page() function in webserver_pages.c
+    // 2. Add declaration to webserver_pages.h  
+    // 3. Add route: {"/new_page", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_new_page}},
+    
     // POST routes
     {"/delete_logo", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_delete_logo_route}},
     {"/wifi", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_wificopied}},
@@ -854,7 +804,15 @@ static const route_t routes[] = {
     {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clockcopied}},
     {"/upload_logo", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_upload_logo}},
     {"/firmware_update", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_firmware_update}},
-    // Add more POST routes here as we migrate them
+    
+    // ADD NEW POST ROUTES HERE:
+    // Form handlers: 1. Create handle_form_xxx() in webserver_pages.c, 2. Add handle_post_xxx() here, 3. Add route
+    // Binary uploads: 1. Add handle_post_xxx() here (setup upload_session), 2. Add route  
+    // Special actions: 1. Add handle_xxx_route() above, 2. Add route
+    // Examples:
+    // {"/new_form", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_new_form}},
+    // {"/new_upload", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_new_upload}},
+    // {"/new_action", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_new_action_route}},
 };
 
 static const size_t num_routes = sizeof(routes) / sizeof(routes[0]);
@@ -890,6 +848,10 @@ static bool dispatch_route(const route_t *route, struct tcp_pcb *tpcb, struct pb
     }
     return true;
 }
+
+// =============================================================================
+// MAIN HTTP REQUEST HANDLER
+// =============================================================================
 
 /*
  * recv_cb():
@@ -1108,6 +1070,10 @@ static err_t accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
     tcp_recv(newpcb, recv_cb);
     return ERR_OK;
 }
+
+// =============================================================================
+// WEBSERVER SETUP & INITIALIZATION
+// =============================================================================
 
 void start_setup_webserver() {
     struct tcp_pcb *pcb = tcp_new();

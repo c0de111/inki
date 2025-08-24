@@ -37,6 +37,7 @@ add_executable(inki_slot0
     webserver.c
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
+    webserver_flash.c   # Flash operations for webserver
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot0.c
 )
 
@@ -50,6 +51,7 @@ add_executable(inki_slot1
     webserver.c
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
+    webserver_flash.c   # Flash operations for webserver
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot1.c
 )
 
