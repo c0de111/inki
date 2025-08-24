@@ -83,7 +83,6 @@
 #include "webserver_utils.h"
 #include "webserver_pages.h"
 
-#define USER_INTERACTION_TIMEOUT_MS (5 * 60 * 1000)  // reset active time for user interaction: 5 minutes
 #define TCP_CHUNK_SIZE 1024
 
 #include <stdint.h>
@@ -188,107 +187,6 @@ void add_timeout_info(char *buf, size_t buf_size) {
 }
 
 
-static void parse_form_fields(const char *body, int len, web_submission_t *result) {
-    memset(result, 0, sizeof(web_submission_t));
-
-    const char *ptr = body;
-    while (ptr < body + len) {
-        const char *eq = strchr(ptr, '=');
-        if (!eq || eq >= body + len) break;
-
-        const char *key = ptr;
-        const char *val = eq + 1;
-
-        // Fehler behoben: Suche nach '&' nur im erlaubten Bereich
-        const char *amp = memchr(val, '&', body + len - val);
-        if (!amp) amp = body + len;
-
-        int key_len = eq - key;
-        int val_len = amp - val;
-
-        // Hilfsbuffer zur temporären Entschlüsselung
-        char value_buf[MAX_FIELD_LENGTH] = {0};
-        int j = 0;
-        for (int i = 0; i < val_len && j < (int)sizeof(value_buf) - 1; i++) {
-            if (val[i] == '+') {
-                value_buf[j++] = ' ';
-            } else if (val[i] == '%' && i + 2 < val_len) {
-                char hex[3] = {val[i+1], val[i+2], 0};
-                value_buf[j++] = (char)strtol(hex, NULL, 16);
-                i += 2;
-            } else {
-                value_buf[j++] = val[i];
-            }
-        }
-        value_buf[j] = 0;
-
-        // Allgemeine Textfelder (optional)
-        if (key_len >= 5 && strncmp(key, "text", 4) == 0) {
-            int idx = atoi(&key[4]) - 1;
-            if (idx >= 0 && idx < 128) {
-                strncpy(result->text[idx], value_buf, MAX_FIELD_LENGTH - 1);
-                result->text[idx][MAX_FIELD_LENGTH - 1] = 0;
-            }
-        }
-
-        // Abbruchfeld
-        else if (key_len == 5 && strncmp(key, "abort", 5) == 0) {
-            result->aborted = true;
-        }
-
-        // Zeit- und Datumsfelder
-        else if (key_len == 4 && strncmp(key, "hour", 4) == 0) result->hour = atoi(value_buf);
-        else if (key_len == 6 && strncmp(key, "minute", 6) == 0) result->minute = atoi(value_buf);
-        else if (key_len == 6 && strncmp(key, "second", 6) == 0) result->second = atoi(value_buf);
-        else if (key_len == 3 && strncmp(key, "day", 3) == 0) result->day = atoi(value_buf);
-        else if (key_len == 4 && strncmp(key, "date", 4) == 0) result->date = atoi(value_buf);
-        else if (key_len == 5 && strncmp(key, "month", 5) == 0) result->month = atoi(value_buf);
-        else if (key_len == 4 && strncmp(key, "year", 4) == 0) result->year = atoi(value_buf);
-
-        // Gerätekonfiguration
-        else if (key_len == 8 && strncmp(key, "roomname", 8) == 0) {
-            strncpy(result->roomname, value_buf, sizeof(result->roomname) - 1);
-        }
-        else if (key_len == 4 && strncmp(key, "type", 4) == 0) {
-            result->type = atoi(value_buf);
-        }
-        else if (key_len == 10 && strncmp(key, "epapertype", 10) == 0) {
-            result->epapertype = atoi(value_buf);
-        }
-        else if (key_len >= 7 && strncmp(key, "refresh", 7) == 0 && key[7] >= '0' && key[7] <= '7') {
-            int idx = key[7] - '0';
-            result->refresh_minutes_by_pushbutton[idx] = atoi(value_buf);
-        }
-        else if (key_len == 15 && strncmp(key, "number_of_seats", 15) == 0) {
-            result->number_of_seats = atoi(value_buf);
-        }
-        else if (key_len == 15 && strncmp(key, "show_query_date", 15) == 0) {
-            result->show_query_date = true;
-        }
-        else if (key_len == 25 && strncmp(key, "query_only_at_officehours", 25) == 0) {
-            result->query_only_at_officehours = true;
-        }
-        else if (key_len == 22 && strncmp(key, "wifi_reconnect_minutes", 22) == 0) {
-            result->wifi_reconnect_minutes = atoi(value_buf);
-        }
-        else if (key_len == 13 && strncmp(key, "watchdog_time", 13) == 0) {
-            result->watchdog_time = atoi(value_buf);
-        }
-        else if (key_len == 20 && strncmp(key, "number_wifi_attempts", 20) == 0) {
-            result->number_wifi_attempts = atoi(value_buf);
-        }
-        else if (key_len == 12 && strncmp(key, "wifi_timeout", 12) == 0) {
-            result->wifi_timeout = atoi(value_buf);
-        }
-        else if (key_len == 18 && strncmp(key, "max_wait_data_wifi", 18) == 0) {
-            result->max_wait_data_wifi = atoi(value_buf);
-        }
-        else if (key_len == 17 && strncmp(key, "conversion_factor", 17) == 0) {
-            result->conversion_factor = atof(value_buf);
-        }
-        ptr = amp + 1;
-    }
-}
 
 static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len);
 void send_response(struct tcp_pcb* tpcb, const char* body) {
@@ -418,73 +316,6 @@ void flush_page_to_flash() {
 
 
 
-
-
-void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
-    web_submission_t result = {0};
-    char timeout_info[64];
-    add_timeout_info(timeout_info, sizeof(timeout_info));
-
-    parse_form_fields(body, len, &result);
-
-    wifi_config_t new_cfg = {
-        .crc32 = 0
-    };
-    strncpy(new_cfg.ssid, result.text[0], sizeof(new_cfg.ssid) - 1);
-    strncpy(new_cfg.password, result.text[1], sizeof(new_cfg.password) - 1);
-
-    bool ok = save_wifi_config(&new_cfg);
-
-    send_wifi_config_page(tpcb, "✔ WLAN-Daten gespeichert");
-
-    if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "SSID & password gespeichert\n");
-    } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern\n");
-    }
-}
-
-
-void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len) {
-    webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
-
-    char timeout_info[64];
-    add_timeout_info(timeout_info, sizeof(timeout_info));
-
-    web_submission_t result = {0};
-
-    parse_form_fields(body, len, &result);
-
-    seatsurfing_config_t new_cfg = { .crc32 = 0 };
-
-    strncpy(new_cfg.data.host,        result.text[0], sizeof(new_cfg.data.host)        - 1);
-    strncpy(new_cfg.data.username,    result.text[1], sizeof(new_cfg.data.username)    - 1);
-    strncpy(new_cfg.data.password,    result.text[2], sizeof(new_cfg.data.password)    - 1);
-
-    int ip0, ip1, ip2, ip3;
-    if (sscanf(result.text[3], "%d.%d.%d.%d", &ip0, &ip1, &ip2, &ip3) == 4) {
-        new_cfg.data.ip[0] = (uint8_t)ip0;
-        new_cfg.data.ip[1] = (uint8_t)ip1;
-        new_cfg.data.ip[2] = (uint8_t)ip2;
-        new_cfg.data.ip[3] = (uint8_t)ip3;
-    } else {
-        debug_log_with_color(COLOR_RED, "Ungültige IP-Adresse: %s\n", result.text[3]);
-    }
-
-    new_cfg.data.port = (uint16_t)atoi(result.text[4]);
-
-    strncpy(new_cfg.data.space_id,    result.text[5], sizeof(new_cfg.data.space_id)    - 1);
-    strncpy(new_cfg.data.location_id, result.text[6], sizeof(new_cfg.data.location_id) - 1);
-
-    bool ok = save_seatsurfing_config(&new_cfg);
-    if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "Seatsurfing-Konfiguration gespeichert.\n");
-    } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Seatsurfing-Konfiguration.\n");
-    }
-    send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
-}
-
 static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
@@ -532,47 +363,6 @@ static void handle_post_seatsurfingcopied(struct tcp_pcb* tpcb, struct pbuf* p, 
 
 
 
-void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len) {
-    web_submission_t result = {0};
-    char timeout_info[64];
-    add_timeout_info(timeout_info, sizeof(timeout_info));
-
-    parse_form_fields(body, len, &result);
-
-    device_config_t new_cfg = { .crc32 = 0 }; // wichtig: struct enthält .data + .crc32
-
-    // Bestehende Werte übernehmen
-    memcpy(&new_cfg.data, &device_config_flash.data, sizeof(device_config_data_t));
-
-    // Neue Werte eintragen
-    strncpy(new_cfg.data.roomname, result.roomname, sizeof(new_cfg.data.roomname) - 1);
-    new_cfg.data.type = (RoomType)result.type;
-    new_cfg.data.epapertype = (EpaperType)result.epapertype;
-
-    for (int i = 0; i < 8; i++) {
-        new_cfg.data.refresh_minutes_by_pushbutton[i] = result.refresh_minutes_by_pushbutton[i];
-    }
-
-    new_cfg.data.number_of_seats = result.number_of_seats;
-    new_cfg.data.show_query_date = result.show_query_date;
-    new_cfg.data.query_only_at_officehours = result.query_only_at_officehours;
-    new_cfg.data.wifi_reconnect_minutes = result.wifi_reconnect_minutes;
-    new_cfg.data.watchdog_time = result.watchdog_time;
-    new_cfg.data.number_wifi_attempts = result.number_wifi_attempts;
-    new_cfg.data.wifi_timeout = result.wifi_timeout;
-    new_cfg.data.max_wait_data_wifi = result.max_wait_data_wifi;
-    new_cfg.data.conversion_factor = result.conversion_factor;
-
-    bool ok = save_device_config(&new_cfg);
-
-    send_device_config_page(tpcb, ok ? "✔ Geräteeinstellungen gespeichert" : "⚠ Fehler beim Speichern");
-
-    if (ok) {
-        debug_log_with_color(COLOR_GREEN, "Gerätekonfiguration gespeichert\n");
-    } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Gerätekonfiguration\n");
-    }
-}
 
 static void handle_post_devicecopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
@@ -825,46 +615,6 @@ static void handle_post_wificopied(struct tcp_pcb* tpcb, struct pbuf* p, const c
             upload_session.header_length = 0;
         }
     }
-}
-void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len) {
-    const char *line_param = strstr(body, "line=");
-    if (!line_param) {
-        debug_log_with_color(COLOR_RED, "POST /clock: Kein line= Parameter\n");
-        send_clock_page(tpcb, "❌ Kein line= Parameter.");
-        return;
-    }
-
-    char raw_line[128] = {0};
-    char decoded_line[128] = {0};
-    sscanf(line_param + 5, "%127[^&\r\n]", raw_line);  // robust
-    url_decode(decoded_line, raw_line, sizeof(decoded_line));
-
-    debug_log("POST /clock: line = ");
-    debug_log(decoded_line);
-    debug_log("\n");
-
-    extern ds3231_t ds3231;
-    ds3231_data_t old_time, new_time;
-
-    ds3231_read_current_time(&ds3231, &old_time);
-    set_rtc_from_display_string(&ds3231, decoded_line);
-    ds3231_read_current_time(&ds3231, &new_time);
-
-    int old_min = old_time.hours * 60 + old_time.minutes;
-    int new_min = new_time.hours * 60 + new_time.minutes;
-    int delta = new_min - old_min;
-
-    char msg[256];
-    snprintf(msg, sizeof(msg),
-             "✔️ Uhrzeit gesetzt<br>"
-             "Vorher: %02d:%02d&nbsp;am&nbsp;%02d.%02d.%04d<br>"
-             "Jetzt: %02d:%02d&nbsp;am&nbsp;%02d.%02d.%04d<br>"
-             "Differenz: <b>%d&nbsp;Minute%s</b>",
-             old_time.hours, old_time.minutes, old_time.date, old_time.month, old_time.year + 2000,
-             new_time.hours, new_time.minutes, new_time.date, new_time.month, new_time.year + 2000,
-             abs(delta), abs(delta) == 1 ? "" : "n");
-
-    send_clock_page(tpcb, msg);
 }
 
 static void handle_post_clockcopied(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {

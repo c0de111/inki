@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 static const uint32_t crc32_table[256] = {
     0x00000000U, 0x77073096U, 0xEE0E612CU, 0x990951BAU, 0x076DC419U, 0x706AF48FU, 0xE963A535U, 0x9E6495A3U,
@@ -123,4 +124,106 @@ void url_decode(char *dst, const char *src, size_t dst_len) {
         }
     }
     dst[i] = '\0';
+}
+
+void parse_form_fields(const char *body, int len, web_submission_t *result) {
+    memset(result, 0, sizeof(web_submission_t));
+
+    const char *ptr = body;
+    while (ptr < body + len) {
+        const char *eq = strchr(ptr, '=');
+        if (!eq || eq >= body + len) break;
+
+        const char *key = ptr;
+        const char *val = eq + 1;
+
+        // Fehler behoben: Suche nach '&' nur im erlaubten Bereich
+        const char *amp = memchr(val, '&', body + len - val);
+        if (!amp) amp = body + len;
+
+        int key_len = eq - key;
+        int val_len = amp - val;
+
+        // Hilfsbuffer zur temporären Entschlüsselung
+        char value_buf[MAX_FIELD_LENGTH] = {0};
+        int j = 0;
+        for (int i = 0; i < val_len && j < (int)sizeof(value_buf) - 1; i++) {
+            if (val[i] == '+') {
+                value_buf[j++] = ' ';
+            } else if (val[i] == '%' && i + 2 < val_len) {
+                char hex[3] = {val[i+1], val[i+2], 0};
+                value_buf[j++] = (char)strtol(hex, NULL, 16);
+                i += 2;
+            } else {
+                value_buf[j++] = val[i];
+            }
+        }
+        value_buf[j] = 0;
+
+        // Allgemeine Textfelder (optional)
+        if (key_len >= 5 && strncmp(key, "text", 4) == 0) {
+            int idx = atoi(&key[4]) - 1;
+            if (idx >= 0 && idx < 128) {
+                strncpy(result->text[idx], value_buf, MAX_FIELD_LENGTH - 1);
+                result->text[idx][MAX_FIELD_LENGTH - 1] = 0;
+            }
+        }
+
+        // Abbruchfeld
+        else if (key_len == 5 && strncmp(key, "abort", 5) == 0) {
+            result->aborted = true;
+        }
+
+        // Zeit- und Datumsfelder
+        else if (key_len == 4 && strncmp(key, "hour", 4) == 0) result->hour = atoi(value_buf);
+        else if (key_len == 6 && strncmp(key, "minute", 6) == 0) result->minute = atoi(value_buf);
+        else if (key_len == 6 && strncmp(key, "second", 6) == 0) result->second = atoi(value_buf);
+        else if (key_len == 3 && strncmp(key, "day", 3) == 0) result->day = atoi(value_buf);
+        else if (key_len == 4 && strncmp(key, "date", 4) == 0) result->date = atoi(value_buf);
+        else if (key_len == 5 && strncmp(key, "month", 5) == 0) result->month = atoi(value_buf);
+        else if (key_len == 4 && strncmp(key, "year", 4) == 0) result->year = atoi(value_buf);
+
+        // Gerätekonfiguration
+        else if (key_len == 8 && strncmp(key, "roomname", 8) == 0) {
+            strncpy(result->roomname, value_buf, sizeof(result->roomname) - 1);
+        }
+        else if (key_len == 4 && strncmp(key, "type", 4) == 0) {
+            result->type = atoi(value_buf);
+        }
+        else if (key_len == 10 && strncmp(key, "epapertype", 10) == 0) {
+            result->epapertype = atoi(value_buf);
+        }
+        else if (key_len >= 7 && strncmp(key, "refresh", 7) == 0 && key[7] >= '0' && key[7] <= '7') {
+            int idx = key[7] - '0';
+            result->refresh_minutes_by_pushbutton[idx] = atoi(value_buf);
+        }
+        else if (key_len == 15 && strncmp(key, "number_of_seats", 15) == 0) {
+            result->number_of_seats = atoi(value_buf);
+        }
+        else if (key_len == 15 && strncmp(key, "show_query_date", 15) == 0) {
+            result->show_query_date = true;
+        }
+        else if (key_len == 25 && strncmp(key, "query_only_at_officehours", 25) == 0) {
+            result->query_only_at_officehours = true;
+        }
+        else if (key_len == 22 && strncmp(key, "wifi_reconnect_minutes", 22) == 0) {
+            result->wifi_reconnect_minutes = atoi(value_buf);
+        }
+        else if (key_len == 13 && strncmp(key, "watchdog_time", 13) == 0) {
+            result->watchdog_time = atoi(value_buf);
+        }
+        else if (key_len == 20 && strncmp(key, "number_wifi_attempts", 20) == 0) {
+            result->number_wifi_attempts = atoi(value_buf);
+        }
+        else if (key_len == 12 && strncmp(key, "wifi_timeout", 12) == 0) {
+            result->wifi_timeout = atoi(value_buf);
+        }
+        else if (key_len == 18 && strncmp(key, "max_wait_data_wifi", 18) == 0) {
+            result->max_wait_data_wifi = atoi(value_buf);
+        }
+        else if (key_len == 17 && strncmp(key, "conversion_factor", 17) == 0) {
+            result->conversion_factor = atof(value_buf);
+        }
+        ptr = amp + 1;
+    }
 }

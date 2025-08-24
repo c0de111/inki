@@ -839,3 +839,151 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
     debug_log("device settings page length: %d\n", strlen(page));
     send_response(tpcb, page);
 }
+
+// Form handler functions
+void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    web_submission_t result = {0};
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    parse_form_fields(body, len, &result);
+
+    wifi_config_t new_cfg = {
+        .crc32 = 0
+    };
+    strncpy(new_cfg.ssid, result.text[0], sizeof(new_cfg.ssid) - 1);
+    strncpy(new_cfg.password, result.text[1], sizeof(new_cfg.password) - 1);
+
+    bool ok = save_wifi_config(&new_cfg);
+
+    send_wifi_config_page(tpcb, "✔ WLAN-Daten gespeichert");
+
+    if (ok) {
+        debug_log_with_color(COLOR_YELLOW, "SSID & password gespeichert\n");
+    } else {
+        debug_log_with_color(COLOR_RED, "Fehler beim Speichern\n");
+    }
+}
+
+void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
+
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    web_submission_t result = {0};
+
+    parse_form_fields(body, len, &result);
+
+    seatsurfing_config_t new_cfg = { .crc32 = 0 };
+
+    strncpy(new_cfg.data.host,        result.text[0], sizeof(new_cfg.data.host)        - 1);
+    strncpy(new_cfg.data.username,    result.text[1], sizeof(new_cfg.data.username)    - 1);
+    strncpy(new_cfg.data.password,    result.text[2], sizeof(new_cfg.data.password)    - 1);
+
+    int ip0, ip1, ip2, ip3;
+    if (sscanf(result.text[3], "%d.%d.%d.%d", &ip0, &ip1, &ip2, &ip3) == 4) {
+        new_cfg.data.ip[0] = (uint8_t)ip0;
+        new_cfg.data.ip[1] = (uint8_t)ip1;
+        new_cfg.data.ip[2] = (uint8_t)ip2;
+        new_cfg.data.ip[3] = (uint8_t)ip3;
+    } else {
+        debug_log_with_color(COLOR_RED, "Ungültige IP-Adresse: %s\n", result.text[3]);
+    }
+
+    new_cfg.data.port = (uint16_t)atoi(result.text[4]);
+
+    strncpy(new_cfg.data.space_id,    result.text[5], sizeof(new_cfg.data.space_id)    - 1);
+    strncpy(new_cfg.data.location_id, result.text[6], sizeof(new_cfg.data.location_id) - 1);
+
+    bool ok = save_seatsurfing_config(&new_cfg);
+    if (ok) {
+        debug_log_with_color(COLOR_YELLOW, "Seatsurfing-Konfiguration gespeichert.\n");
+    } else {
+        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Seatsurfing-Konfiguration.\n");
+    }
+    send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
+}
+
+void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    web_submission_t result = {0};
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    parse_form_fields(body, len, &result);
+
+    device_config_t new_cfg = { .crc32 = 0 }; // wichtig: struct enthält .data + .crc32
+
+    // Bestehende Werte übernehmen
+    memcpy(&new_cfg.data, &device_config_flash.data, sizeof(device_config_data_t));
+
+    // Neue Werte eintragen
+    strncpy(new_cfg.data.roomname, result.roomname, sizeof(new_cfg.data.roomname) - 1);
+    new_cfg.data.type = (RoomType)result.type;
+    new_cfg.data.epapertype = (EpaperType)result.epapertype;
+
+    for (int i = 0; i < 8; i++) {
+        new_cfg.data.refresh_minutes_by_pushbutton[i] = result.refresh_minutes_by_pushbutton[i];
+    }
+
+    new_cfg.data.number_of_seats = result.number_of_seats;
+    new_cfg.data.show_query_date = result.show_query_date;
+    new_cfg.data.query_only_at_officehours = result.query_only_at_officehours;
+    new_cfg.data.wifi_reconnect_minutes = result.wifi_reconnect_minutes;
+    new_cfg.data.watchdog_time = result.watchdog_time;
+    new_cfg.data.number_wifi_attempts = result.number_wifi_attempts;
+    new_cfg.data.wifi_timeout = result.wifi_timeout;
+    new_cfg.data.max_wait_data_wifi = result.max_wait_data_wifi;
+    new_cfg.data.conversion_factor = result.conversion_factor;
+
+    bool ok = save_device_config(&new_cfg);
+
+    send_device_config_page(tpcb, ok ? "✔ Geräteeinstellungen gespeichert" : "⚠ Fehler beim Speichern");
+
+    if (ok) {
+        debug_log_with_color(COLOR_GREEN, "Gerätekonfiguration gespeichert\n");
+    } else {
+        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Gerätekonfiguration\n");
+    }
+}
+
+void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    const char *line_param = strstr(body, "line=");
+    if (!line_param) {
+        debug_log_with_color(COLOR_RED, "POST /clock: Kein line= Parameter\n");
+        send_clock_page(tpcb, "❌ Kein line= Parameter.");
+        return;
+    }
+
+    char raw_line[128] = {0};
+    char decoded_line[128] = {0};
+    sscanf(line_param + 5, "%127[^&\r\n]", raw_line);  // robust
+    url_decode(decoded_line, raw_line, sizeof(decoded_line));
+
+    debug_log("POST /clock: line = ");
+    debug_log(decoded_line);
+    debug_log("\n");
+
+    extern ds3231_t ds3231;
+    ds3231_data_t old_time, new_time;
+
+    ds3231_read_current_time(&ds3231, &old_time);
+    set_rtc_from_display_string(&ds3231, decoded_line);
+    ds3231_read_current_time(&ds3231, &new_time);
+
+    int old_min = old_time.hours * 60 + old_time.minutes;
+    int new_min = new_time.hours * 60 + new_time.minutes;
+    int delta = new_min - old_min;
+
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "✔️ Uhrzeit gesetzt<br>"
+             "Vorher: %02d:%02d&nbsp;am&nbsp;%02d.%02d.%04d<br>"
+             "Jetzt: %02d:%02d&nbsp;am&nbsp;%02d.%02d.%04d<br>"
+             "Differenz: <b>%d&nbsp;Minute%s</b>",
+             old_time.hours, old_time.minutes, old_time.date, old_time.month, old_time.year + 2000,
+             new_time.hours, new_time.minutes, new_time.date, new_time.month, new_time.year + 2000,
+             abs(delta), abs(delta) == 1 ? "" : "n");
+
+    send_clock_page(tpcb, msg);
+}
