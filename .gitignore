@@ -86,3 +86,7 @@ ds3231_clock_setup/
 CLAUDE.md
 .claude/
 
+# External UF2 tools (auto-downloaded by create_uf2.sh)
+firmware/c/uf2conv.py
+firmware/c/uf2families.json
+
