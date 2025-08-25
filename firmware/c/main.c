@@ -18,6 +18,7 @@
 #include "debug.h"
 #include "flash.h"
 #include "webserver.h"
+#include "base64.h"
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
@@ -57,47 +58,13 @@ bool pb1 = false;
 bool pb2 = false;
 bool pb3 = false;
 
-static const char base64_table[] =
-"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-void base64_encode(const uint8_t *input, size_t len, char *output) {
-
-    size_t i = 0, j = 0;
-
-while (i + 2 < len) {
-    uint32_t triple = (input[i] << 16) | (input[i+1] << 8) | input[i+2];
-    output[j++] = base64_table[(triple >> 18) & 0x3F];
-    output[j++] = base64_table[(triple >> 12) & 0x3F];
-    output[j++] = base64_table[(triple >> 6) & 0x3F];
-    output[j++] = base64_table[triple & 0x3F];
-    i += 3;
-}
-
-if (i < len) {
-    uint32_t triple = input[i] << 16;
-    if (i + 1 < len) {
-        triple |= input[i+1] << 8;
-    }
-
-    output[j++] = base64_table[(triple >> 18) & 0x3F];
-    output[j++] = base64_table[(triple >> 12) & 0x3F];
-
-    if (i + 1 < len) {
-        output[j++] = base64_table[(triple >> 6) & 0x3F];
-        output[j++] = '=';
-    } else {
-        output[j++] = '=';
-        output[j++] = '=';
-    }
-}
-
-output[j] = '\0';
-}
+// HTTP Basic Auth base64 encoding now uses base64.c module
 
 void create_basic_auth_header(const char *username, const char *password, char *output_base64) {
     char userpass[128];
     snprintf(userpass, sizeof(userpass), "%s:%s", username, password);
-    base64_encode((const uint8_t*)userpass, strlen(userpass), output_base64);
+    // Use base64.c module with buffer protection (max output: 192 bytes for 128 input)
+    base64_encode(userpass, strlen(userpass), output_base64, 192);
 }
 
 /**
@@ -660,7 +627,7 @@ WifiResult wifi_server_communication(float voltage) {
 
     // Encode the userpass string to Base64 (output will be used in Authorization header)
     char auth_b64[192];  // Safe size: 4/3 * 128 + null terminator
-    base64_encode((const uint8_t*)userpass, strlen(userpass), auth_b64);
+    base64_encode(userpass, strlen(userpass), auth_b64, sizeof(auth_b64));
 
     // Construct HTTP/1.0 request including the dynamically generated Authorization header
     char header[1024];
