@@ -58,15 +58,6 @@ bool pb1 = false;
 bool pb2 = false;
 bool pb3 = false;
 
-// HTTP Basic Auth base64 encoding now uses base64.c module
-
-void create_basic_auth_header(const char *username, const char *password, char *output_base64) {
-    char userpass[128];
-    snprintf(userpass, sizeof(userpass), "%s:%s", username, password);
-    // Use base64.c module with buffer protection (max output: 192 bytes for 128 input)
-    base64_encode(userpass, strlen(userpass), output_base64, 192);
-}
-
 /**
  * @brief Draws a sub-image onto the ePaper buffer at the specified position.
  *
