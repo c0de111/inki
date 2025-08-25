@@ -30,24 +30,24 @@ set_valid_flag() {
 }
 
 # ----- Flash bootloader -----
-echo -e "${YELLOW}Flashing bootloader to 0x10000000...${RESET}"
-openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
-  -c "adapter speed 5000" \
-  -c "program build/inki_bootloader.bin 0x10000000 reset exit"
-sleep 1.5
-
-# ----- Flash firmware slot 0 -----
-# echo -e "${YELLOW}Flashing firmware (slot 0) to 0x10010000...${RESET}"
-# echo -e "${CYAN}Creating temporary copy of inki_slot0.bin to avoid modifying the original...${RESET}"
-# TMP_SLOT0=$(mktemp /tmp/inki_slot0_patched_XXXXXX.bin)
-# cp build/inki_slot0.bin "$TMP_SLOT0"
-# set_valid_flag "$TMP_SLOT0"
+# echo -e "${YELLOW}Flashing bootloader to 0x10000000...${RESET}"
 # openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
 #   -c "adapter speed 5000" \
-#   -c "program $TMP_SLOT0 0x10010000 reset exit"
-# rm -f "$TMP_SLOT0"
-# echo -e "${GREEN}✓ Temporary file deleted after flashing.${RESET}"
+#   -c "program build/inki_bootloader.bin 0x10000000 reset exit"
 # sleep 1.5
+
+# ----- Flash firmware slot 0 -----
+echo -e "${YELLOW}Flashing firmware (slot 0) to 0x10010000...${RESET}"
+echo -e "${CYAN}Creating temporary copy of inki_slot0.bin to avoid modifying the original...${RESET}"
+TMP_SLOT0=$(mktemp /tmp/inki_slot0_patched_XXXXXX.bin)
+cp build/inki_slot0.bin "$TMP_SLOT0"
+set_valid_flag "$TMP_SLOT0"
+openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+  -c "adapter speed 5000" \
+  -c "program $TMP_SLOT0 0x10010000 reset exit"
+rm -f "$TMP_SLOT0"
+echo -e "${GREEN}✓ Temporary file deleted after flashing.${RESET}"
+sleep 1.5
 
 # # ----- Flash firmware slot 1 -----
 echo -e "${YELLOW}Flashing firmware (slot 1) to 0x100FB800...${RESET}"
@@ -63,10 +63,10 @@ echo -e "${GREEN}✓ Temporary file deleted after flashing.${RESET}"
 # sleep 1.5
 
 # # ----- Flash default config / factory reset (at 0x101E7000) -----
-echo -e "${YELLOW}Flashing default config to 0x101E7000...${RESET}"
-openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
-  -c "adapter speed 5000" \
-  -c "program build/inki_default_config.bin 0x101E7000 reset exit"
+# echo -e "${YELLOW}Flashing default config to 0x101E7000...${RESET}"
+# openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+#   -c "adapter speed 5000" \
+#   -c "program build/inki_default_config.bin 0x101E7000 reset exit"
 
 # ----- Done -----
 end_time=$(date +%s)
