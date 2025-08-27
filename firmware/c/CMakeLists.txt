@@ -31,6 +31,7 @@ add_executable(inki_slot0
     main.c          # Main application logic
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
+    http_client.c   # Robust HTTP client with historian architecture
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -45,6 +46,7 @@ add_executable(inki_slot1
     main.c          # Main application logic
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
+    http_client.c   # Robust HTTP client with historian architecture
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
