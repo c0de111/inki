@@ -18,26 +18,14 @@
 #include "debug.h"
 #include "flash.h"
 #include "webserver.h"
+#include "http_client.h"
 #include "base64.h"
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
 #endif
 
-/**
- * Global buffer for collecting server responses.
- * - Used exclusively in the `recv` function to accumulate data received from the server.
- * - This buffer is processed later to extract required information for updating the ePaper display.
- * - Assumes single-threaded usage and is not thread-safe.
- */
-static char server_response_buf[2048];
-
-/**
- * Temporary buffer for handling one chunk of TCP data.
- * - Used in the `recv` function to copy data from the incoming packet
- *   before appending it to the global `server_response_buf` buffer.
- */
-static char recv_chunk_buf[1024];
+// HTTP client functionality moved to http_client.c
 
 static char submitted_text[128] = "";
 
@@ -351,70 +339,7 @@ void read_mac_address() {
     debug_log_with_color(COLOR_GREEN, "CYW43 deinitialized successfully.\n");
 }
 
-//  ---------------------functions for handling wifi--------------------------------
-/**
- * Callback function for handling received TCP data.
- *
- * This function appends received data chunks to the global `server_response_buf` buffer, which accumulates
- * the complete response from the server. The data in `server_response_buf` is then used by other parts
- * of the program.
- *
- * Notes:
- * - Uses the global buffers `server_response_buf` and `recv_chunk_buf`. Ensure these buffers are large enough
- *   to hold the maximum expected data size.
- * - Includes a size check to prevent buffer overflow. If the received data exceeds the
- *   available space in `server_response_buf`, the function will log a warning and discard the excess data.
- * - Assumes single-threaded execution. In a multi-threaded environment, additional
- *   synchronization mechanisms would be required to avoid race conditions.
- *
- * Parameters:
- * - arg: Not used directly but can be used for context in a more advanced design.
- * - pcb: Pointer to the TCP protocol control block.
- * - p: Pointer to the received buffer (if NULL, indicates connection closed).
- * - err: Error status of the received data.
- *
- * Returns:
- * - ERR_OK if successful.
- * - ERR_BUF if a buffer overflow risk is detected.
- */
-
-err_t recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
-    if (p != NULL) {
-        size_t current_data_len = strlen(server_response_buf);
-        size_t remaining_space = sizeof(server_response_buf) - current_data_len - 1; // Leave space for null terminator
-
-        if (p->tot_len > remaining_space) {
-            debug_log("Buffer overflow risk: received data exceeds buffer size.\n");
-            altcp_recved(pcb, p->tot_len);
-            pbuf_free(p);
-            return ERR_BUF; // Indicate buffer error
-        }
-
-        pbuf_copy_partial(p, recv_chunk_buf, p->tot_len, 0);
-        recv_chunk_buf[p->tot_len] = 0;
-
-        // #ifdef HIGH_VERBOSE_DEBUG
-        debug_log("Buffer= %s\n", recv_chunk_buf);
-        // #endif
-
-        strcat(server_response_buf, recv_chunk_buf); // Append chunk to global buffer
-        altcp_recved(pcb, p->tot_len);
-        pbuf_free(p);
-    }
-    return ERR_OK;
-}
-
-static err_t altcp_client_connected(void *arg, struct altcp_pcb *pcb, err_t err) {
-    const char* header = (const char*)arg; // Cast arg to header
-    err = altcp_write(pcb, header, strlen(header), 0);
-    if (err != ERR_OK) {
-        debug_log_with_color(COLOR_RED, "Error writing to PCB: %d\n", err);
-    }
-    err = altcp_output(pcb);
-    return err;
-}
-
-//  ---------------------functions for handling wifi--------------------------------
+// Old HTTP functions removed - now using http_client.c
 
 //  ---------------------start functions for data from server --------------------------------
 
@@ -538,191 +463,6 @@ void setup_and_read_pushbuttons() {
     // }
 }
 
-/**
- * @brief Communicates with the server via Wi-Fi.
- *
- * This function establishes a Wi-Fi connection, transmits data (e.g., voltage),
- * and retrieves responses from the server. The responses are accumulated in
- * the global `server_response_buf` buffer for subsequent use (e.g., rendering content on the ePaper display).
- *
- * The function also returns detailed status information through the `WifiResult` enum,
- * allowing differentiation between connection errors, server errors, and cases where Wi-Fi
- * is not required.
- *
- * @param voltage The voltage value to be transmitted to the server.
- *
- * @return WifiResult
- * - `WIFI_SUCCESS`: Wi-Fi and server communication succeeded, and `server_response_buf` is populated.
- * - `WIFI_ERROR_CONNECTION`: Wi-Fi connection failed.
- * - `WIFI_ERROR_SERVER`: Server communication failed (e.g., timeout or invalid response).
- * - `WIFI_NOT_REQUIRED`: Wi-Fi communication was skipped (not needed for this operation).
- *
- * @note
- * - The function uses the global `server_response_buf` buffer to store server responses. Ensure this
- *   buffer is adequately sized and initialized before calling this function.
- * - The `recv_chunk_buf` buffer is used for intermediate processing of incoming chunks of server_response_buf.
- * - This function assumes a single-threaded context. In multi-threaded environments, additional
- *   synchronization mechanisms are required to avoid race conditions.
- *
- * @see
- * - `WifiResult`: Enum for Wi-Fi operation results.
- * - `server_response_buf`, `recv_chunk_buf`: Global buffers used for processing and storing data.
- * - `cyw43_arch.h`: SDK header for Wi-Fi functions.
- */
-
-WifiResult wifi_server_communication(float voltage) {
-    memset(recv_chunk_buf, 0, sizeof(recv_chunk_buf));
-    memset(server_response_buf, 0, sizeof(server_response_buf));
-
-    debug_log_with_color(COLOR_BOLD_GREEN, "Initialization of Wi-Fi [switching cyw43 module on]...\n");
-
-    if (cyw43_arch_init_with_country(country)) {
-        debug_log_with_color(COLOR_RED, "Wi-Fi initialization failed.\n");
-        return WIFI_ERROR_CONNECTION;
-    }
-    cyw43_arch_enable_sta_mode();
-
-    if (device_config_flash.data.roomname != NULL) {
-        netif_set_hostname(netif_default, device_config_flash.data.roomname);
-    }
-
-    watchdog_update();
-    debug_log("Attempt to connect to the specified network...\n");
-
-    int wifi_connected = -1;
-    int wifi_attempt_count = 0;
-    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
-        wifi_attempt_count++;
-        wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
-            wifi_config_flash.ssid,
-            wifi_config_flash.password,
-            auth,
-            device_config_flash.data.wifi_timeout
-        );
-        watchdog_update();
-        // debug_log_with_color(COLOR_YELLOW, "ssid %s\n", wifi_config_flash.ssid);
-
-        debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n", wifi_config_flash.ssid, wifi_attempt_count);
-    }
-
-    if (wifi_connected != 0) {
-        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
-        cyw43_arch_deinit();
-        return WIFI_ERROR_CONNECTION;
-    }
-    debug_log("Connected to Wi-Fi successfully.\n");
-
-    // Build "username:password" string for HTTP Basic Auth
-    char userpass[128];
-    snprintf(userpass, sizeof(userpass), "%s:%s", seatsurfing_config_flash.data.username, seatsurfing_config_flash.data.password);
-
-    // Encode the userpass string to Base64 (output will be used in Authorization header)
-    char auth_b64[192];  // Safe size: 4/3 * 128 + null terminator
-    base64_encode(userpass, strlen(userpass), auth_b64, sizeof(auth_b64));
-
-    // Construct HTTP/1.0 request including the dynamically generated Authorization header
-    char header[1024];
-    snprintf(header, sizeof(header),
-            "GET /location/%s/space/%s/availability HTTP/1.0\r\n"
-            "Host: %s\r\n"
-            "Authorization: Basic %s\r\n"
-            "\r\n",
-            seatsurfing_config_flash.data.location_id,
-            seatsurfing_config_flash.data.space_id,
-            seatsurfing_config_flash.data.host,
-            auth_b64
-    );
-
-    debug_log("Constructed HTTP Header:\n%s\n", header);
-    watchdog_update();
-
-    struct altcp_pcb* pcb = altcp_new(NULL);
-    altcp_recv(pcb, recv);
-
-    ip_addr_t ip;
-    // IP4_ADDR(&ip, device_config_flash.data.ip[0], device_config_flash.data.ip[1], device_config_flash.data.ip[2], device_config_flash.data.ip[3]);
-    IP4_ADDR(&ip,
-             seatsurfing_config_flash.data.ip[0],
-             seatsurfing_config_flash.data.ip[1],
-             seatsurfing_config_flash.data.ip[2],
-             seatsurfing_config_flash.data.ip[3]);
-
-    altcp_arg(pcb, header);
-    err_t err = altcp_connect(pcb, &ip, seatsurfing_config_flash.data.port, altcp_client_connected);
-
-    if (err != ERR_OK) {
-        debug_log_with_color(COLOR_RED, "TCP connection failed: %d\n", err);
-        cyw43_arch_disable_sta_mode();
-        cyw43_arch_deinit();
-        return WIFI_ERROR_SERVER;
-    }
-
-    debug_log("Data transmission in progress...\n");
-
-    watchdog_update();
-
-    // Wait for complete HTTP header
-    int max_waits = 0;
-    int content_length = -1;
-    int body_received = 0;
-    bool header_done = false;
-
-    debug_log_with_color(COLOR_YELLOW, "50 ms wait time for header/body #: ");
-    while (max_waits++ < device_config_flash.data.max_wait_data_wifi) {
-        sleep_ms(50);
-        debug_log_with_color(COLOR_YELLOW, " ");
-
-        char* header_end = strstr(server_response_buf, "\r\n\r\n");
-        if (!header_done && header_end) {
-            header_done = true;
-
-            // Parse Content-Length
-            char* cl = strstr(server_response_buf, "Content-Length:");
-            if (cl) {
-                cl += strlen("Content-Length:");
-                while (*cl == ' ') cl++;
-                content_length = atoi(cl);
-                debug_log("Parsed Content-Length: %d\n", content_length);
-            } else {
-                // debug_log_with_color(COLOR_RED, "No Content-Length found.\n");
-                break;
-            }
-        }
-
-        if (header_done && content_length > 0) {
-            char* body = strstr(server_response_buf, "\r\n\r\n");
-            if (body) {
-                body += 4; // Skip past "\r\n\r\n"
-                body_received = strlen(body);
-
-                if (body_received >= content_length) {
-                    debug_log("Received full JSON body (%d bytes)\n", body_received);
-                    break;
-                }
-            }
-        }
-        watchdog_update();
-    }
-
-    cyw43_arch_disable_sta_mode();
-    cyw43_arch_deinit();
-
-    if (content_length <= 0 || body_received < content_length) {
-        debug_log_with_color(COLOR_RED, "Incomplete or missing response.\n");
-        return WIFI_ERROR_SERVER;
-    }
-
-    debug_log_with_color(COLOR_BOLD_GREEN, "✅ JSON response complete - Wi-Fi off.\n");
-
-    // Optional: Übergib JSON zur Auswertung
-    const char* body = strstr(server_response_buf, "\r\n\r\n");
-    if (body) {
-        body += 4;
-       // parse_json_response(body);  // <--- Implementiere je nach Bedarf
-    }
-
-    return WIFI_SUCCESS;
-}
 
 /**
  * Reads the battery voltage using the ADC.
@@ -1195,7 +935,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     // Display room name & logo
     Paint_DrawString_EN(40, 50, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
 
-    seat_info_t seat = parse_seat_info(server_response_buf);
+    seat_info_t seat = parse_seat_info(get_server_response_buf());
 
     char linebuf[64];
     if (seat.is_available) {
@@ -1225,7 +965,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
     }
 
-    seat_info_t seat = parse_seat_info(server_response_buf);
+    seat_info_t seat = parse_seat_info(get_server_response_buf());
 
     // Top line: desk name (e.g. "Desk 3")
     Paint_DrawString_EN(40, 220, seat.desk_name, &font_ubuntu_mono_14pt, WHITE, BLACK);
