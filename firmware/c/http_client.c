@@ -11,28 +11,29 @@
  * 
  */
 
-// Include required headers for SeatSurfing integration
+// All required headers (no conditional compilation for includes)
+#include "http_client.h"
+#include "debug.h"
 #include "wifi.h"
 #include "base64.h"
-#include "pico/cyw43_arch.h"
-#include "lwip/netif.h"
 #include "flash.h"
+#include "historian_config.h"
+#include "cJSON.h"
+
+// Pico SDK headers
+#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 
-#include "http_client.h"
-#include "debug.h"
+// lwIP headers
+#include "lwip/netif.h"
+
+// Standard C headers
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <float.h>
-#include "historian_config.h"
-
-#ifdef USE_CASE_HISTORIAN
-#include "pico/cyw43_arch.h"
-#include "hardware/watchdog.h"
-#include "flash.h"
-#endif
+#include <time.h>
 
 // Global session (single session for now, can be extended later)
 static http_session_t g_session = {0};
@@ -521,14 +522,11 @@ bool http_session_is_active(void) {
 
 #ifdef USE_CASE_HISTORIAN
 
-#include "historian_config.h"
-#include "cJSON.h"
-#include <time.h>
 
 // Callback type for historian data (esign compatible)
 typedef void (*historian_callback_fn)(const char* json_data, size_t length, void* arg);
 
-// Historian callback mechanism (esign compatible)
+// Historian callback mechanism
 static historian_callback_fn historian_callback = NULL;
 static void* historian_callback_arg = NULL;
 
@@ -701,12 +699,6 @@ static int historian_build_http_request(char* buffer, size_t buffer_size,
 // SHARED HELPER FUNCTIONS
 // =============================================================================
 
-// Include required headers for shared functions
-#include "wifi.h"
-#include "pico/cyw43_arch.h"
-#include "lwip/netif.h"
-#include "hardware/watchdog.h"
-#include "flash.h"
 
 /**
  * @brief Initialize Wi-Fi and connect to network
