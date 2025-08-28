@@ -11,6 +11,15 @@
  * 
  */
 
+// Include required headers for SeatSurfing integration
+#include "wifi.h"
+#include "base64.h"
+#include "pico/cyw43_arch.h"
+#include "lwip/netif.h"
+#include "flash.h"
+#include "pico/stdlib.h"
+#include "hardware/watchdog.h"
+
 #include "http_client.h"
 #include "debug.h"
 #include <stdio.h>
@@ -688,18 +697,27 @@ static int historian_build_http_request(char* buffer, size_t buffer_size,
 
 #endif // USE_CASE_HISTORIAN
 
-#ifdef USE_CASE_HISTORIAN
+// =============================================================================
+// SHARED HELPER FUNCTIONS
+// =============================================================================
+
+// Include required headers for shared functions
+#include "wifi.h"
+#include "pico/cyw43_arch.h"
+#include "lwip/netif.h"
+#include "hardware/watchdog.h"
+#include "flash.h"
 
 /**
- * @brief Historian communication function (similar to wifi_server_communication)
- * @param voltage Battery voltage (for logging/monitoring)
+ * @brief Initialize Wi-Fi and connect to network
+ * @param use_case_name Use case name for logging (e.g., "HISTORIAN", "SEATSURFING")
  * @return WifiResult status code
  */
-WifiResult historian_server_communication(float voltage) {
-    debug_log_with_color(COLOR_BOLD_GREEN, "[HISTORIAN] Initializing Wi-Fi...\n");
+static WifiResult wifi_connect() {
+    debug_log_with_color(COLOR_BOLD_GREEN, "Initializing Wi-Fi...\n");
     
     if (cyw43_arch_init_with_country(country)) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] Wi-Fi initialization failed.\n");
+        debug_log_with_color(COLOR_RED, "Wi-Fi initialization failed.\n");
         return WIFI_ERROR_CONNECTION;
     }
     cyw43_arch_enable_sta_mode();
@@ -708,7 +726,7 @@ WifiResult historian_server_communication(float voltage) {
         netif_set_hostname(netif_default, device_config_flash.data.roomname);
     }
 
-    debug_log("[HISTORIAN] Attempting to connect to network...\n");
+    debug_log("Attempting to connect to network...\n");
     int wifi_connected = -1;
     int wifi_attempt_count = 0;
     while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
@@ -720,95 +738,78 @@ WifiResult historian_server_communication(float voltage) {
             device_config_flash.data.wifi_timeout
         );
         watchdog_update();
-        debug_log_with_color(COLOR_YELLOW, "[HISTORIAN] Trying to connect to %s ... Attempt %d\n", 
+        debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n",
                             wifi_config_flash.ssid, wifi_attempt_count);
     }
 
     if (wifi_connected != 0) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
+        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
         cyw43_arch_deinit();
         return WIFI_ERROR_CONNECTION;
     }
 
-    debug_log("[HISTORIAN] Connected to Wi-Fi successfully.\n");
+    debug_log("Connected to Wi-Fi successfully.\n");
+    return WIFI_SUCCESS;
+}
 
+#ifdef USE_CASE_HISTORIAN
+
+/**
+ * @brief Make complete historian HTTP request with full encapsulation
+ * @return true on success (request sent), false on error
+ */
+static bool historian_make_request(void) {
+    // Helper manages its own buffer
+    static char http_request[1024];
+    
     // TODO: Get from historian config
     const char* historian_host = "192.168.178.42";  // Default for testing
     int datapoint_id = 75;                          // Default temperature sensor
     int hours_back = 24;                           // Last 24 hours
 
-    // Calculate time window using RTC
+    // Calculate time window using inki's RTC
     extern ds3231_t ds3231;  // Global RTC instance from main.c
-    uint64_t end_time = historian_get_current_unix_ms(&ds3231);
-    uint64_t start_time = historian_get_unix_ms_hours_ago(&ds3231, hours_back);
+    uint64_t end_time = historian_get_current_unix_ms(&ds3231); // from now to
+    uint64_t start_time = historian_get_unix_ms_hours_ago(&ds3231, hours_back); // hours_back
 
-    // Debug time window
-    char time_str[64];
-    historian_unix_ms_to_local_string(start_time, time_str, sizeof(time_str));
-    debug_log("[HISTORIAN] Start time: %s (%llu ms)\n", time_str, start_time);
-    historian_unix_ms_to_local_string(end_time, time_str, sizeof(time_str));
-    debug_log("[HISTORIAN] End time: %s (%llu ms)\n", time_str, end_time);
+    // Debug time window (commented out for production)
+    // char time_str[64];
+    // historian_unix_ms_to_local_string(start_time, time_str, sizeof(time_str));
+    // debug_log("[HISTORIAN] Start time: %s (%llu ms)\n", time_str, start_time);
+    // historian_unix_ms_to_local_string(end_time, time_str, sizeof(time_str));
+    // debug_log("[HISTORIAN] End time: %s (%llu ms)\n", time_str, end_time);
 
-    // Build HTTP request
-    static char http_request[1024];
     int request_len = historian_build_http_request(http_request, sizeof(http_request),
                                                   historian_host, datapoint_id, 
                                                   start_time, end_time);
     
     if (request_len < 0) {
         debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to build HTTP request\n");
-        cyw43_arch_deinit();
-        return WIFI_ERROR_SERVER;
+        return false;
     }
 
     debug_log("[HISTORIAN] Constructed HTTP request:\n%s\n", http_request);
     watchdog_update();
 
-    // Set up IP address (TODO: from config)
+    // Set up IP address (historian-specific)
     ip_addr_t ip;
     IP4_ADDR(&ip, 192, 168, 178, 42);  // Default historian server IP
 
-    // Make HTTP request using our robust client
     sync_operation_complete = false;
     sync_operation_success = false;
-    
+
+    // Make HTTP request (historian-specific)
     http_result_t result = http_request_async(&ip, 81, http_request, 
                                              historian_completion_callback, NULL);
     
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed to start: %d\n", result);
-        cyw43_arch_deinit();
-        return WIFI_ERROR_SERVER;
+        return false;
     }
 
-    // Wait for completion with timeout
-    int max_waits = 0;
-    debug_log_with_color(COLOR_YELLOW, "[HISTORIAN] Waiting for HTTP response: ");
-    while (!sync_operation_complete && max_waits < device_config_flash.data.max_wait_data_wifi) {
-        sleep_ms(50);
-        debug_log_with_color(COLOR_YELLOW, ".");
-        max_waits++;
-    }
-    
-    debug_log("\n");
-    
-    if (!sync_operation_complete) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request timeout\n");
-        cyw43_arch_deinit();
-        return WIFI_ERROR_SERVER;
-    }
-    
-    if (!sync_operation_success) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed or server returned error\n");
-        cyw43_arch_deinit();
-        return WIFI_ERROR_SERVER;
-    }
-
-    debug_log_with_color(COLOR_BOLD_GREEN, "✅ [HISTORIAN] JSON-RPC response complete - Wi-Fi off.\n");
-    cyw43_arch_deinit();
-    
-    return WIFI_SUCCESS;
+    return true;  // Request started successfully
 }
+
 
 #endif // USE_CASE_HISTORIAN
 
@@ -825,73 +826,12 @@ WifiResult historian_server_communication(float voltage) {
  * - Identical error handling and display behavior
  */
 
-// Include required headers for SeatSurfing integration
-#include "wifi.h"
-#include "base64.h" 
-#include "pico/cyw43_arch.h"
-#include "lwip/netif.h"
-#include "flash.h"
-#include "pico/stdlib.h"
-#include "hardware/watchdog.h"
-
-// WifiResult enum now defined in http_client.h
 
 /**
- * @brief SeatSurfing server communication (compatibility function)
- * @param voltage Battery voltage (for transmission to server)
- * @return WifiResult status code
- * 
- * This function maintains the exact same API and behavior as the original
- * implementation while using the new robust HTTP client internally.
- * 
- * Flow:
- * 1. Initialize Wi-Fi and connect to network
- * 2. Build HTTP Basic Auth request for SeatSurfing API  
- * 3. Send request using robust HTTP client
- * 4. Wait for response and handle errors
- * 5. Return appropriate WifiResult for main.c processing
- * 
- * The response data is accessible via get_server_response_buf() for
- * compatibility with existing parse_seat_info() function.
+ * @brief Make complete SeatSurfing HTTP request with full encapsulation
+ * @return true on success (request sent), false on error
  */
-WifiResult wifi_server_communication(float voltage) {
-    // Clear compatibility buffer
-    memset(server_response_buf, 0, sizeof(server_response_buf));
-    
-    debug_log_with_color(COLOR_BOLD_GREEN, "Initialization of Wi-Fi [switching cyw43 module on]...\n");
-    if (cyw43_arch_init_with_country(country)) {
-        debug_log_with_color(COLOR_RED, "Wi-Fi initialization failed.\n");
-        return WIFI_ERROR_CONNECTION;
-    }
-    cyw43_arch_enable_sta_mode();
-    
-    if (device_config_flash.data.roomname != NULL) {
-        netif_set_hostname(netif_default, device_config_flash.data.roomname);
-    }
-    
-    debug_log("Attempt to connect to the specified network...\n");
-    int wifi_connected = -1;
-    int wifi_attempt_count = 0;
-    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
-        wifi_attempt_count++;
-        wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
-            wifi_config_flash.ssid,
-            wifi_config_flash.password,
-            auth,
-            device_config_flash.data.wifi_timeout
-        );
-        watchdog_update();
-        debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n", wifi_config_flash.ssid, wifi_attempt_count);
-    }
-    
-    if (wifi_connected != 0) {
-        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
-        cyw43_arch_deinit();
-        return WIFI_ERROR_CONNECTION;
-    }
-    
-    debug_log("Connected to Wi-Fi successfully.\n");
-
+static bool seatsurfing_make_request(void) {
     // Build "username:password" string for HTTP Basic Auth
     char userpass[128];
     snprintf(userpass, sizeof(userpass), "%s:%s", seatsurfing_config_flash.data.username, seatsurfing_config_flash.data.password);
@@ -932,6 +872,46 @@ WifiResult wifi_server_communication(float voltage) {
     
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "HTTP request failed to start: %d\n", result);
+        return false;
+    }
+
+    return true;  // Request started successfully
+}
+
+/**
+ * @brief SeatSurfing server communication (compatibility function)
+ * @param voltage Battery voltage (for transmission to server)
+ * @return WifiResult status code
+ * 
+ * This function maintains the exact same API and behavior as the original
+ * implementation while using the new robust HTTP client internally.
+ * 
+ * Flow:
+ * 1. Initialize Wi-Fi and connect to network
+ * 2. Build HTTP Basic Auth request for SeatSurfing API  
+ * 3. Send request using robust HTTP client
+ * 4. Wait for response and handle errors
+ * 5. Return appropriate WifiResult for main.c processing
+ * 
+ * The response data is accessible via get_server_response_buf() for
+ * compatibility with existing parse_seat_info() function.
+ */
+WifiResult wifi_server_communication(float voltage) {
+    // Clear compatibility buffer
+    // memset(server_response_buf, 0, sizeof(server_response_buf));
+    
+    // Initialize Wi-Fi and connect using shared function
+    WifiResult wifi_result = wifi_connect();
+    if (wifi_result != WIFI_SUCCESS) {
+        return wifi_result;
+    }
+
+    // Make use-case specific request (fully encapsulated)
+#ifdef USE_CASE_HISTORIAN
+    if (!historian_make_request()) {
+#elif defined(USE_CASE_SEATSURFING)
+    if (!seatsurfing_make_request()) {
+#endif
         cyw43_arch_deinit();
         return WIFI_ERROR_SERVER;
     }
@@ -978,7 +958,7 @@ WifiResult wifi_server_communication(float voltage) {
 char* get_server_response_buf(void) {
 #ifdef USE_CASE_HISTORIAN
     // Return clean JSON body for cJSON parsing
-    debug_log("get_server_response_buf: g_http_response_body=%p, length=%zu\n", 
+    debug_log("get_server_response_buf: g_http_response_body=%p, length=%zu\n",
               g_http_response_body, g_http_response_length);
     if (g_http_response_body) {
         debug_log("JSON body preview: %.1000s\n", g_http_response_body);

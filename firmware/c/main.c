@@ -2252,26 +2252,13 @@ int main(void)
     WifiResult wifi_result = WIFI_NOT_REQUIRED;
 
     if (is_wifi_required(pushbutton)) {
-#ifdef USE_CASE_SEATSURFING
-        debug_log_with_color(COLOR_CYAN, "SeatSurfing mode: fetching room data\n");
-        wifi_result = wifi_server_communication(battery_voltage);
-#elif defined(USE_CASE_HISTORIAN)
-        debug_log_with_color(COLOR_CYAN, "Historian mode: fetching time-series data\n");
-        
-        // Set up callback for historian data (esign compatible architecture)
+        // Set up callback for historian data (if historian mode)
+#ifdef USE_CASE_HISTORIAN
         historian_set_callback(historian_data_received, NULL);
-        
-        wifi_result = historian_server_communication(battery_voltage);
-        
-        // Parse historian response if successful
-        if (wifi_result == WIFI_SUCCESS) {
-            // Historian data is processed automatically via callback during HTTP transfer
-            debug_log_with_color(COLOR_CYAN, "[HISTORIAN] Data processing complete via callback\n");
-        }
-#else
-        debug_log_with_color(COLOR_RED, "No use case defined!\n");
-        wifi_result = WIFI_ERROR_CONFIG;
 #endif
+        
+        // Unified communication function handles use case selection internally
+        wifi_result = wifi_server_communication(battery_voltage);
     }
 
     UBYTE* BlackImage = init_epaper();
