@@ -20,6 +20,7 @@
 #include "webserver.h"
 #include "http_client.h"
 #include "base64.h"
+#include "historian_config.h"
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
@@ -28,6 +29,44 @@
 // HTTP client functionality moved to http_client.c
 
 static char submitted_text[128] = "";
+
+#ifdef USE_CASE_HISTORIAN
+// Historian data storage
+static TimeSeries historian_data = {0};
+extern size_t g_http_response_length; // From http_client.c
+
+// Callback for Historian data (like esign)
+void historian_data_received(const char* json_data, size_t length, void* arg) {
+    if (!json_data || length == 0) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] Transfer failed or incomplete\n");
+        return;
+    }
+
+    debug_log_with_color(COLOR_GREEN,
+                         "[HISTORIAN] Received %d bytes of JSON data\n", (int)length);
+
+    // Parse JSON into TimeSeries
+    if (historian_parse_timeseries(json_data, &historian_data)) {
+        debug_log("[HISTORIAN] Successfully parsed %d data points\n",
+                  historian_data.count);
+        debug_log("[HISTORIAN] Temperature range: %.2f - %.2f °C\n",
+                  historian_data.min_value, historian_data.max_value);
+        
+        // Debug: Print first few data points like esign
+        for (int i = 0; i < historian_data.count && i < 10; i++) {
+            debug_log("[HISTORIAN] #%03d: timestamp=%" PRIu64 " ms UTC, "
+                      "value=%.2f %s, state=%u\n",
+                      i,
+                      historian_data.points[i].timestamp,
+                      historian_data.points[i].value,
+                      historian_data.unit,
+                      historian_data.points[i].state);
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to parse JSON\n");
+    }
+}
+#endif
 
 ds3231_t ds3231; // RTC definition
 // extern const wifi_config_t wifi_config_flash;
@@ -927,8 +966,168 @@ void format_name_from_email(const char* email, char* outbuf, size_t outbuf_len) 
     outbuf[outbuf_len - 1] = '\0';
 }
 
+#ifdef USE_CASE_HISTORIAN
+/**
+ * @brief Render temperature graph for historian data
+ * @param image_buffer ePaper image buffer
+ * @param x X position for graph
+ * @param y Y position for graph  
+ * @param width Graph width in pixels
+ * @param height Graph height in pixels
+ */
+void render_temperature_graph(UBYTE* image_buffer, int x, int y, int width, int height) {
+    if (historian_data.count == 0) {
+        Paint_DrawString_EN(x + 10, y + height/2,
+                            "Loading data...",
+                            &font_ubuntu_mono_10pt, WHITE, BLACK);
+        return;
+    }
+
+    // Draw frame
+    Paint_DrawRectangle(x, y, x + width, y + height, BLACK,
+                        DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+
+    // Draw horizontal grid lines
+    for (int i = 1; i < 4; i++) {
+        int grid_y = y + (height * i) / 4;
+        Paint_DrawLine(x + 1, grid_y, x + width - 1, grid_y,
+                       BLACK, DOT_PIXEL_1X1, LINE_STYLE_DOTTED);
+    }
+
+    // Draw vertical grid lines (10 Ticks)
+    int tick_spacing = width / 10;
+
+    // Time range in milliseconds
+    uint64_t time_range_ms = historian_data.points[historian_data.count-1].timestamp -
+    historian_data.points[0].timestamp;
+
+    for (int i = 0; i <= 10; i++) {
+        int tick_x = x + (i * tick_spacing);
+        // Vertical line
+        Paint_DrawLine(tick_x, y + 1, tick_x, y + height - 1,
+                       BLACK, DOT_PIXEL_1X1, LINE_STYLE_DOTTED);
+
+        // Time labels for x-axis
+        if (i % 2 == 0) {  // At 0, 2, 4, 6, 8, 10
+            // Interpolate timestamp for this position
+            uint64_t tick_time_ms = historian_data.points[0].timestamp +
+            (time_range_ms * i) / 10;
+
+            // Convert to seconds for time_t
+            time_t tick_time_sec = tick_time_ms / 1000;
+
+            // UTC to local time (MEZ/MESZ)
+            struct tm* tick_tm = gmtime(&tick_time_sec);
+
+            // Determine if DST applies for this date
+            bool is_dst = false;
+            if (tick_tm->tm_mon >= 2 && tick_tm->tm_mon <= 9) {  // March to October
+                // Simplified: April-September = definitely DST
+                if (tick_tm->tm_mon >= 3 && tick_tm->tm_mon <= 8) {
+                    is_dst = true;
+                }
+            }
+
+            // UTC -> MEZ/MESZ
+            tick_time_sec += 3600;  // +1h for MEZ
+            if (is_dst) {
+                tick_time_sec += 3600;  // +1h additional for MESZ
+            }
+
+            // Convert again with adjusted time
+            tick_tm = gmtime(&tick_time_sec);
+
+            char time_label[8];
+            snprintf(time_label, sizeof(time_label), "%02d:%02d",
+                     tick_tm->tm_hour, tick_tm->tm_min);
+
+            // Time below x-axis
+            Paint_DrawString_EN(tick_x - 15, y + height + 5, time_label,
+                                &font_ubuntu_mono_6pt, WHITE, BLACK);
+        }
+    }
+
+    // Calculate scale
+    float temp_range = historian_data.max_value - historian_data.min_value;
+    if (temp_range < 0.1f) temp_range = 0.1f;
+
+    // Draw temperature curve (with thicker line)
+    int prev_x = -1, prev_y = -1;
+    uint64_t start_time_ms = historian_data.points[0].timestamp;
+    uint64_t end_time_ms = historian_data.points[historian_data.count-1].timestamp;
+    uint64_t total_time_range_ms = end_time_ms - start_time_ms;
+
+    for (int i = 0; i < historian_data.count; i++) {
+        // X-position based on actual timestamp
+        uint64_t time_offset_ms = historian_data.points[i].timestamp - start_time_ms;
+        int point_x = x + (time_offset_ms * width) / total_time_range_ms;
+
+        float normalized = (historian_data.points[i].value - historian_data.min_value) / temp_range;
+        int point_y = y + height - (int)(normalized * height) - 1;
+
+        // Clamp to graph bounds
+        if (point_y < y) point_y = y;
+        if (point_y > y + height) point_y = y + height;
+
+        if (prev_x >= 0) {
+            // Thicker line for better visibility
+            Paint_DrawLine(prev_x, prev_y, point_x, point_y,
+                           BLACK, DOT_PIXEL_3X3, LINE_STYLE_SOLID);
+        }
+
+        // Draw points for better visibility
+        if (historian_data.count < 50) {  // Only if not too many points
+            Paint_DrawCircle(point_x, point_y, 2, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+        }
+
+        prev_x = point_x;
+        prev_y = point_y;
+    }
+
+    // Labels without degree symbol (not displayable)
+    char label[32];
+
+    // Min temperature (bottom left)
+    snprintf(label, sizeof(label), "Min: %.1f C", historian_data.min_value);
+    Paint_DrawString_EN(x + 5, y + height - 40, label,
+                        &font_ubuntu_mono_9pt, WHITE, BLACK);
+
+    // Max temperature (top left)
+    snprintf(label, sizeof(label), "Max: %.1f C", historian_data.max_value);
+    Paint_DrawString_EN(x + 5, y + 30, label,
+                        &font_ubuntu_mono_9pt, WHITE, BLACK);
+
+    // Current temperature (right side)
+    snprintf(label, sizeof(label), "Now: %.1f C", historian_data.last_value);
+    Paint_DrawString_EN(x + width - 240, y + height - 40, label,
+                        &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+
+    // Title with actual time range from data
+    time_t start_sec = historian_data.points[0].timestamp / 1000;
+    time_t end_sec = historian_data.points[historian_data.count-1].timestamp / 1000;
+
+    // UTC -> Local time for display
+    bool is_dst_now = true;  // August = MESZ
+    start_sec += 3600 + (is_dst_now ? 3600 : 0);  // MEZ/MESZ
+    end_sec += 3600 + (is_dst_now ? 3600 : 0);    // MEZ/MESZ
+
+    struct tm* start_tm = gmtime(&start_sec);
+    struct tm* end_tm = gmtime(&end_sec);
+
+    char title[64];
+    snprintf(title, sizeof(title), "Temperature (%02d:%02d - %02d:%02d %s)",
+             start_tm->tm_hour, start_tm->tm_min,
+             end_tm->tm_hour, end_tm->tm_min,
+             is_dst_now ? "MESZ" : "MEZ");
+    Paint_DrawString_EN(x, y - 20, title,
+                        &font_ubuntu_mono_8pt, WHITE, BLACK);
+}
+#endif // USE_CASE_HISTORIAN
+
 // Render the default page with room-specific information and QR codes if enabled. This is the page without any user interaction
 void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+    
+#ifdef USE_CASE_SEATSURFING
     if (device_config_flash.data.type == ROOM_TYPE_OFFICE && device_config_flash.data.number_of_seats == 3 &&
         device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
@@ -979,6 +1178,33 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     }
     Paint_DrawString_EN(40, 150, linebuf, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
         }
+
+#elif defined(USE_CASE_HISTORIAN)
+    // Historian use case - render temperature graph
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        // Large temperature graph for 7.5" display
+        render_temperature_graph(image_buffer, 20, 20, 760, 400);
+        
+        // Additional info below graph  
+        char info[128];
+        snprintf(info, sizeof(info), "%d data points", historian_data.count);
+        Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
+        
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        // Smaller graph for 4.2" display
+        render_temperature_graph(image_buffer, 10, 10, 380, 250);
+        
+        // Info below graph
+        char info[64];  
+        snprintf(info, sizeof(info), "%d points", historian_data.count);
+        Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
+    }
+    
+#else
+    // No use case defined - show error
+    Paint_DrawString_EN(50, 100, "No use case configured", &font_ubuntu_mono_14pt, WHITE, BLACK);
+    Paint_DrawString_EN(50, 130, "Check config.h", &font_ubuntu_mono_12pt, WHITE, BLACK);
+#endif
 }
 
 /**
@@ -2022,11 +2248,30 @@ int main(void)
      //   return 0;  // The device will shut down inside setup mode (after timeout or user action)
     }
 
-    debug_log_with_color(COLOR_GREEN, "wifi_server_communication\n");
+    debug_log_with_color(COLOR_GREEN, "server_communication\n");
     WifiResult wifi_result = WIFI_NOT_REQUIRED;
 
     if (is_wifi_required(pushbutton)) {
+#ifdef USE_CASE_SEATSURFING
+        debug_log_with_color(COLOR_CYAN, "SeatSurfing mode: fetching room data\n");
         wifi_result = wifi_server_communication(battery_voltage);
+#elif defined(USE_CASE_HISTORIAN)
+        debug_log_with_color(COLOR_CYAN, "Historian mode: fetching time-series data\n");
+        
+        // Set up callback for historian data (esign compatible architecture)
+        historian_set_callback(historian_data_received, NULL);
+        
+        wifi_result = historian_server_communication(battery_voltage);
+        
+        // Parse historian response if successful
+        if (wifi_result == WIFI_SUCCESS) {
+            // Historian data is processed automatically via callback during HTTP transfer
+            debug_log_with_color(COLOR_CYAN, "[HISTORIAN] Data processing complete via callback\n");
+        }
+#else
+        debug_log_with_color(COLOR_RED, "No use case defined!\n");
+        wifi_result = WIFI_ERROR_CONFIG;
+#endif
     }
 
     UBYTE* BlackImage = init_epaper();

@@ -1,17 +1,14 @@
 /**
  * @file http_client.c
- * @brief Robust HTTP client with chunked transfer support
+ * @brief HTTP client with chunked transfer support
  * 
- * This module provides a robust HTTP client implementation based on the historian
- * branch architecture. It supports:
+ * This module provides a HTTP client implementation. It supports:
  * - Dynamic memory allocation based on Content-Length
- * - Proper HTTP header/body separation
- * - Fallback mode for responses without Content-Length (SeatSurfing compatibility)
+ * - HTTP header/body separation
+ * - Fallback mode for responses without Content-Length
  * - Session-based connection management
  * - Async callback processing ready for historian integration
  * 
- * The module maintains full backward compatibility with the original SeatSurfing
- * implementation while providing enhanced reliability and scalability.
  */
 
 #include "http_client.h"
@@ -19,10 +16,46 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <float.h>
+#include "historian_config.h"
+
+#ifdef USE_CASE_HISTORIAN
+#include "pico/cyw43_arch.h"
+#include "hardware/watchdog.h"
+#include "flash.h"
+#endif
 
 // Global session (single session for now, can be extended later)
 static http_session_t g_session = {0};
 static bool g_transfer_was_successful = false;
+
+// Global compatibility buffers - for parse_seat_info compatibility  
+static char server_response_buf[8192];  // Larger buffer for robustness
+
+// Synchronous operation tracking for both SeatSurfing and historian compatibility
+static bool sync_operation_complete = false;
+static bool sync_operation_success = false;
+
+/**
+ * @brief Completion callback for synchronous HTTP operations
+ * @param body Response body data
+ * @param length Response body length
+ * @param success Operation success flag
+ * @param arg User argument (unused)
+ * 
+ * Copies successful response data to compatibility buffer for parse_seat_info().
+ */
+static void sync_completion_callback(const char* body, size_t length, bool success, void* arg) {
+    sync_operation_complete = true;
+    sync_operation_success = success;
+    
+    if (success && body && length > 0) {
+        // Copy to compatibility buffer for parse_seat_info
+        size_t copy_len = length < sizeof(server_response_buf) - 1 ? length : sizeof(server_response_buf) - 1;
+        memcpy(server_response_buf, body, copy_len);
+        server_response_buf[copy_len] = '\0';
+    }
+}
 
 // Global response access (for main.c integration)
 char* g_http_response_body = NULL;
@@ -475,6 +508,310 @@ bool http_session_is_active(void) {
     return g_session.active;
 }
 
+// === Historian Implementation ===
+
+#ifdef USE_CASE_HISTORIAN
+
+#include "historian_config.h"
+#include "cJSON.h"
+#include <time.h>
+
+// Callback type for historian data (esign compatible)
+typedef void (*historian_callback_fn)(const char* json_data, size_t length, void* arg);
+
+// Historian callback mechanism (esign compatible)
+static historian_callback_fn historian_callback = NULL;
+static void* historian_callback_arg = NULL;
+
+/**
+ * @brief Set callback function for historian data (esign compatible API)
+ * @param callback Function to call when data is received
+ * @param arg User argument to pass to callback
+ */
+void historian_set_callback(historian_callback_fn callback, void* arg) {
+    historian_callback = callback;
+    historian_callback_arg = arg;
+    debug_log("[HISTORIAN] Callback set: %p (arg: %p)\n", callback, arg);
+}
+
+/**
+ * @brief HTTP completion callback for historian requests
+ * Calls the registered historian callback with JSON data (esign compatible)
+ */
+static void historian_completion_callback(const char* body, size_t length, bool success, void* arg) {
+    sync_operation_complete = true;
+    sync_operation_success = success;
+    
+    debug_log("[HISTORIAN] HTTP completion: success=%s, body=%p, length=%zu\n", 
+              success ? "YES" : "NO", body, length);
+    
+    // Call historian callback if registered and transfer successful
+    if (historian_callback) {
+        if (success && body && length > 0) {
+            debug_log("[HISTORIAN] Calling registered callback with data\n");
+            historian_callback(body, length, historian_callback_arg);
+        } else {
+            debug_log("[HISTORIAN] Calling registered callback with NULL (error)\n");
+            historian_callback(NULL, 0, historian_callback_arg);
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] No callback registered!\n");
+    }
+}
+
+// Forward declaration for DST function from main.c
+extern bool is_dst_europe(const ds3231_data_t* t);
+
+/**
+ * @brief Convert RTC time (MEZ/MESZ) to Unix timestamp (ms UTC)
+ * @param rtc_time RTC data structure (always in local time MEZ/MESZ)
+ * @return Unix timestamp in milliseconds UTC
+ */
+uint64_t historian_rtc_to_unix_ms(const ds3231_data_t* rtc_time) {
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = rtc_time->year + 100;  // tm_year is years since 1900
+    timeinfo.tm_mon = rtc_time->month - 1;    // tm_mon is 0-11
+    timeinfo.tm_mday = rtc_time->date;
+    timeinfo.tm_hour = rtc_time->hours;
+    timeinfo.tm_min = rtc_time->minutes;
+    timeinfo.tm_sec = rtc_time->seconds;
+    timeinfo.tm_isdst = 0;  // RTC has no DST info
+
+    // Set timezone to MEZ for mktime
+    setenv("TZ", "CET-1", 1);  // MEZ = UTC+1
+    tzset();
+
+    // mktime now interprets timeinfo as MEZ and returns UTC
+    time_t unix_seconds = mktime(&timeinfo);
+
+    // Convert to milliseconds
+    return (uint64_t)unix_seconds * 1000ULL;
+}
+
+/**
+ * @brief Get current time as Unix timestamp (ms UTC)
+ */
+uint64_t historian_get_current_unix_ms(ds3231_t* clock) {
+    ds3231_data_t current_time;
+    ds3231_read_current_time(clock, &current_time);
+    return historian_rtc_to_unix_ms(&current_time);
+}
+
+/**
+ * @brief Get timestamp for X hours ago
+ */
+uint64_t historian_get_unix_ms_hours_ago(ds3231_t* clock, int hours) {
+    uint64_t now_ms = historian_get_current_unix_ms(clock);
+    uint64_t hours_in_ms = (uint64_t)hours * 3600ULL * 1000ULL;
+    return now_ms - hours_in_ms;
+}
+
+/**
+ * @brief Convert Unix timestamp to readable string (for debug)
+ */
+void historian_unix_ms_to_local_string(uint64_t unix_ms, char* buffer, size_t size) {
+    time_t unix_seconds = unix_ms / 1000;
+    struct tm* timeinfo = gmtime(&unix_seconds);
+
+    // Simple DST rule for Europe
+    bool is_dst = false;
+    if (timeinfo->tm_mon >= 2 && timeinfo->tm_mon <= 9) {  // March(2) to October(9)
+        is_dst = true;
+    }
+
+    // UTC to MEZ/MESZ
+    time_t local_seconds = unix_seconds + 3600;  // +1h for MEZ
+    if (is_dst) {
+        local_seconds += 3600;  // +1h additional for MESZ
+    }
+
+    struct tm* local_time = gmtime(&local_seconds);
+
+    snprintf(buffer, size, "%04d-%02d-%02d %02d:%02d:%02d %s",
+             local_time->tm_year + 1900,
+             local_time->tm_mon + 1,
+             local_time->tm_mday,
+             local_time->tm_hour,
+             local_time->tm_min,
+             local_time->tm_sec,
+             is_dst ? "MESZ" : "MEZ");
+}
+
+/**
+ * @brief Build JSON-RPC request for historian server
+ * @param buffer Output buffer for HTTP request
+ * @param buffer_size Size of output buffer
+ * @param host Historian server host
+ * @param datapoint_id ID of datapoint to query
+ * @param start_time_ms Start time in milliseconds (Unix timestamp)
+ * @param end_time_ms End time in milliseconds (Unix timestamp)
+ * @return Length of request on success, -1 on error
+ */
+static int historian_build_http_request(char* buffer, size_t buffer_size,
+                                       const char* host,
+                                       int datapoint_id,
+                                       uint64_t start_time_ms,
+                                       uint64_t end_time_ms) {
+    // Build JSON-RPC body (using exact esign format without "jsonrpc":"2.0")
+    static char json_body[512];
+    int json_len = snprintf(json_body, sizeof(json_body),
+                           "{"
+                           "\"id\":%d,"
+                           "\"method\":\"getTimeSeries\","
+                           "\"params\":[%d,%llu,%llu]"
+                           "}",
+                           123,  // Request-ID (could be dynamic)
+                           datapoint_id, start_time_ms, end_time_ms);
+
+    if (json_len >= sizeof(json_body)) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] JSON body too large\n");
+        return -1;
+    }
+
+    // Build complete HTTP request
+    int request_len = snprintf(buffer, buffer_size,
+                              "POST /query/jsonrpc.gy HTTP/1.0\r\n"
+                              "Host: %s\r\n"
+                              "Content-Type: application/json\r\n"
+                              "Content-Length: %d\r\n"
+                              "\r\n"
+                              "%s",
+                              host, json_len, json_body);
+
+    if (request_len >= buffer_size) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request too large\n");
+        return -1;
+    }
+
+    return request_len;
+}
+
+#endif // USE_CASE_HISTORIAN
+
+#ifdef USE_CASE_HISTORIAN
+
+/**
+ * @brief Historian communication function (similar to wifi_server_communication)
+ * @param voltage Battery voltage (for logging/monitoring)
+ * @return WifiResult status code
+ */
+WifiResult historian_server_communication(float voltage) {
+    debug_log_with_color(COLOR_BOLD_GREEN, "[HISTORIAN] Initializing Wi-Fi...\n");
+    
+    if (cyw43_arch_init_with_country(country)) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] Wi-Fi initialization failed.\n");
+        return WIFI_ERROR_CONNECTION;
+    }
+    cyw43_arch_enable_sta_mode();
+
+    if (device_config_flash.data.roomname != NULL) {
+        netif_set_hostname(netif_default, device_config_flash.data.roomname);
+    }
+
+    debug_log("[HISTORIAN] Attempting to connect to network...\n");
+    int wifi_connected = -1;
+    int wifi_attempt_count = 0;
+    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
+        wifi_attempt_count++;
+        wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
+            wifi_config_flash.ssid,
+            wifi_config_flash.password,
+            auth,
+            device_config_flash.data.wifi_timeout
+        );
+        watchdog_update();
+        debug_log_with_color(COLOR_YELLOW, "[HISTORIAN] Trying to connect to %s ... Attempt %d\n", 
+                            wifi_config_flash.ssid, wifi_attempt_count);
+    }
+
+    if (wifi_connected != 0) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
+        cyw43_arch_deinit();
+        return WIFI_ERROR_CONNECTION;
+    }
+
+    debug_log("[HISTORIAN] Connected to Wi-Fi successfully.\n");
+
+    // TODO: Get from historian config
+    const char* historian_host = "192.168.178.42";  // Default for testing
+    int datapoint_id = 75;                          // Default temperature sensor
+    int hours_back = 24;                           // Last 24 hours
+
+    // Calculate time window using RTC
+    extern ds3231_t ds3231;  // Global RTC instance from main.c
+    uint64_t end_time = historian_get_current_unix_ms(&ds3231);
+    uint64_t start_time = historian_get_unix_ms_hours_ago(&ds3231, hours_back);
+
+    // Debug time window
+    char time_str[64];
+    historian_unix_ms_to_local_string(start_time, time_str, sizeof(time_str));
+    debug_log("[HISTORIAN] Start time: %s (%llu ms)\n", time_str, start_time);
+    historian_unix_ms_to_local_string(end_time, time_str, sizeof(time_str));
+    debug_log("[HISTORIAN] End time: %s (%llu ms)\n", time_str, end_time);
+
+    // Build HTTP request
+    static char http_request[1024];
+    int request_len = historian_build_http_request(http_request, sizeof(http_request),
+                                                  historian_host, datapoint_id, 
+                                                  start_time, end_time);
+    
+    if (request_len < 0) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to build HTTP request\n");
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+
+    debug_log("[HISTORIAN] Constructed HTTP request:\n%s\n", http_request);
+    watchdog_update();
+
+    // Set up IP address (TODO: from config)
+    ip_addr_t ip;
+    IP4_ADDR(&ip, 192, 168, 178, 42);  // Default historian server IP
+
+    // Make HTTP request using our robust client
+    sync_operation_complete = false;
+    sync_operation_success = false;
+    
+    http_result_t result = http_request_async(&ip, 81, http_request, 
+                                             historian_completion_callback, NULL);
+    
+    if (result != HTTP_SUCCESS) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed to start: %d\n", result);
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+
+    // Wait for completion with timeout
+    int max_waits = 0;
+    debug_log_with_color(COLOR_YELLOW, "[HISTORIAN] Waiting for HTTP response: ");
+    while (!sync_operation_complete && max_waits < device_config_flash.data.max_wait_data_wifi) {
+        sleep_ms(50);
+        debug_log_with_color(COLOR_YELLOW, ".");
+        max_waits++;
+    }
+    
+    debug_log("\n");
+    
+    if (!sync_operation_complete) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request timeout\n");
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+    
+    if (!sync_operation_success) {
+        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed or server returned error\n");
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+
+    debug_log_with_color(COLOR_BOLD_GREEN, "✅ [HISTORIAN] JSON-RPC response complete - Wi-Fi off.\n");
+    cyw43_arch_deinit();
+    
+    return WIFI_SUCCESS;
+}
+
+#endif // USE_CASE_HISTORIAN
+
 // === SeatSurfing Compatibility Layer ===
 
 /**
@@ -498,34 +835,6 @@ bool http_session_is_active(void) {
 #include "hardware/watchdog.h"
 
 // WifiResult enum now defined in http_client.h
-
-// Global compatibility buffers - for parse_seat_info compatibility  
-static char server_response_buf[8192];  // Larger buffer for robustness
-
-// Synchronous operation tracking for SeatSurfing compatibility
-static bool sync_operation_complete = false;
-static bool sync_operation_success = false;
-
-/**
- * @brief Completion callback for synchronous HTTP operations
- * @param body Response body data
- * @param length Response body length
- * @param success Operation success flag
- * @param arg User argument (unused)
- * 
- * Copies successful response data to compatibility buffer for parse_seat_info().
- */
-static void sync_completion_callback(const char* body, size_t length, bool success, void* arg) {
-    sync_operation_complete = true;
-    sync_operation_success = success;
-    
-    if (success && body && length > 0) {
-        // Copy to compatibility buffer for parse_seat_info
-        size_t copy_len = length < sizeof(server_response_buf) - 1 ? length : sizeof(server_response_buf) - 1;
-        memcpy(server_response_buf, body, copy_len);
-        server_response_buf[copy_len] = '\0';
-    }
-}
 
 /**
  * @brief SeatSurfing server communication (compatibility function)
@@ -662,7 +971,167 @@ WifiResult wifi_server_communication(float voltage) {
  * 
  * Provides access to the response buffer for the existing parse_seat_info()
  * function, maintaining full backward compatibility.
+ * 
+ * For historian use case, returns clean JSON body without HTTP headers.
+ * For SeatSurfing use case, returns full response for compatibility.
  */
 char* get_server_response_buf(void) {
+#ifdef USE_CASE_HISTORIAN
+    // Return clean JSON body for cJSON parsing
+    debug_log("get_server_response_buf: g_http_response_body=%p, length=%zu\n", 
+              g_http_response_body, g_http_response_length);
+    if (g_http_response_body) {
+        debug_log("JSON body preview: %.1000s\n", g_http_response_body);
+        debug_log("JSON null termination check: last char = %d\n", (int)g_http_response_body[g_http_response_length-1]);
+    }
+    return g_http_response_body;
+#else
+    // Return full response buffer for SeatSurfing compatibility
     return server_response_buf;
+#endif
 }
+
+#ifdef USE_CASE_HISTORIAN
+
+// =============================================================================
+// HISTORIAN JSON-RPC RESPONSE PARSING
+// =============================================================================
+
+
+/**
+ * @brief Parse JSON-RPC response into TimeSeries structure
+ * @param json JSON response from historian server
+ * @param result Output TimeSeries structure
+ * @return true on success, false on error
+ */
+bool historian_parse_timeseries(const char* json, TimeSeries* result) {
+    if (!json || !result) return false;
+
+    cJSON* root = cJSON_Parse(json);
+    if (!root) {
+        debug_log("[HISTORIAN] JSON parse failed\n");
+        return false;
+    }
+
+    cJSON* res = cJSON_GetObjectItem(root, "result");
+    if (!res) {
+        debug_log("[HISTORIAN] No 'result' in JSON\n");
+        cJSON_Delete(root);
+        return false;
+    }
+
+    // Parse dataPoint metadata if available
+    cJSON* dataPoint = cJSON_GetObjectItem(res, "dataPoint");
+    if (dataPoint) {
+        cJSON* dp_id = cJSON_GetObjectItem(dataPoint, "id");
+        if (dp_id) {
+            cJSON* interfaceId = cJSON_GetObjectItem(dp_id, "interfaceId");
+            if (interfaceId && cJSON_IsString(interfaceId)) {
+                strncpy(result->name, interfaceId->valuestring, sizeof(result->name) - 1);
+            }
+        }
+
+        cJSON* attributes = cJSON_GetObjectItem(dataPoint, "attributes");
+        if (attributes) {
+            cJSON* unit = cJSON_GetObjectItem(attributes, "unit");
+            if (unit && cJSON_IsString(unit)) {
+                strncpy(result->unit, unit->valuestring, sizeof(result->unit) - 1);
+            }
+        }
+    }
+
+    // Parse timestamps and values arrays
+    cJSON* timestamps = cJSON_GetObjectItem(res, "timestamps");
+    cJSON* values = cJSON_GetObjectItem(res, "values");
+    cJSON* states = cJSON_GetObjectItem(res, "states");  // Optional states array
+
+    if (!timestamps || !values) {
+        debug_log("[HISTORIAN] Missing timestamps or values\n");
+        cJSON_Delete(root);
+        return false;
+    }
+
+    int count = cJSON_GetArraySize(timestamps);
+    if (count > MAX_DATA_POINTS) count = MAX_DATA_POINTS;
+
+    for (int i = 0; i < count; i++) {
+        cJSON* ts = cJSON_GetArrayItem(timestamps, i);
+        cJSON* val = cJSON_GetArrayItem(values, i);
+
+        if (ts && val) {
+            // Store in DataPoint structure
+            result->points[i].timestamp = (uint64_t)cJSON_GetNumberValue(ts);
+            result->points[i].value = (float)cJSON_GetNumberValue(val);
+
+            // Parse state if available
+            if (states) {
+                cJSON* state = cJSON_GetArrayItem(states, i);
+                if (state) {
+                    result->points[i].state = (uint8_t)cJSON_GetNumberValue(state);
+                } else {
+                    result->points[i].state = 0;  // Default: good
+                }
+            } else {
+                result->points[i].state = 0;  // Default: good
+            }
+        }
+    }
+
+    result->count = count;
+
+    // Calculate min/max/last values
+    if (count > 0) {
+        result->min_value = result->max_value = result->points[0].value;
+        for (int i = 1; i < count; i++) {
+            if (result->points[i].value < result->min_value)
+                result->min_value = result->points[i].value;
+            if (result->points[i].value > result->max_value)
+                result->max_value = result->points[i].value;
+        }
+        result->last_value = result->points[count - 1].value;
+    }
+
+    cJSON_Delete(root);
+
+    debug_log("[HISTORIAN] Parsed %d data points (min=%.2f, max=%.2f)\n",
+              count, result->min_value, result->max_value);
+
+    return true;
+}
+
+/**
+ * @brief Prepare time series data for display (downsampling if needed)
+ * @param series Time series data to process
+ * @param target_points Target number of points for display
+ */
+void historian_prepare_display_data(TimeSeries* series, int target_points) {
+    if (!series || series->count <= target_points) {
+        return; // No downsampling needed
+    }
+    
+    debug_log("historian_prepare_display_data: downsampling %d points to %d\n", 
+              series->count, target_points);
+    
+    // Simple downsampling: take every nth point
+    int step = series->count / target_points;
+    if (step < 2) step = 2;
+    
+    int new_count = 0;
+    for (int i = 0; i < series->count && new_count < target_points; i += step) {
+        if (new_count < i) {
+            series->points[new_count] = series->points[i];
+        }
+        new_count++;
+    }
+    
+    // Always keep the last point
+    if (new_count < target_points && series->count > 0) {
+        series->points[new_count] = series->points[series->count - 1];
+        new_count++;
+    }
+    
+    series->count = new_count;
+    debug_log("historian_prepare_display_data: result has %d points\n", new_count);
+}
+
+#endif // USE_CASE_HISTORIAN

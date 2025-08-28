@@ -39,6 +39,7 @@ add_executable(inki_slot0
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
     base64.c        # Base64 encoding for HTTP auth
+    cJSON.c         # JSON parsing library for historian functionality
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot0.c
 )
 
@@ -54,6 +55,7 @@ add_executable(inki_slot1
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
     base64.c        # Base64 encoding for HTTP auth
+    cJSON.c         # JSON parsing library for historian functionality
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot1.c
 )
 
