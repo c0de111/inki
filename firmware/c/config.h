@@ -33,8 +33,15 @@
  * - Which configuration structures are included
  */
 
-#define USE_CASE_SEATSURFING    // SeatSurfing room booking
-// #define USE_CASE_HISTORIAN   // Historian time-series data display
+// Use case selection - can be overridden by build script (./build.sh --historian)
+// Default fallback if no build-time define is provided
+#ifndef USE_CASE_SEATSURFING
+    #ifndef USE_CASE_HISTORIAN
+        #ifndef USE_CASE_NEW_USECASE
+            #define USE_CASE_SEATSURFING    // Default fallback
+        #endif
+    #endif
+#endif
 
 // Validate use case selection
 #ifdef USE_CASE_SEATSURFING

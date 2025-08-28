@@ -23,7 +23,58 @@
 export PICO_SDK_PATH="${PICO_SDK_PATH:-$HOME/pico/pico-sdk}"
 
 # Enable or disable USB <-> Serial support for debugging in the bootloader (1 = enabled, 0 = disabled)
+# Default configuration
 USB_BOOTLOADER_ENABLE=0
+USE_CASE="SEATSURFING"  # Default use case
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --use-case|-u)
+      USE_CASE="$2"
+      shift 2
+      ;;
+    --historian)
+      USE_CASE="HISTORIAN"
+      shift
+      ;;
+    --seatsurfing)
+      USE_CASE="SEATSURFING" 
+      shift
+      ;;
+    --new-usecase)
+      USE_CASE="NEW_USECASE"
+      shift
+      ;;
+    --help|-h)
+      echo "Usage: $0 [OPTIONS]"
+      echo "Options:"
+      echo "  --use-case|-u <CASE>   Set use case: SEATSURFING (default), HISTORIAN, NEW_USECASE"
+      echo "  --historian            Build for Historian use case"
+      echo "  --seatsurfing          Build for SeatSurfing use case (default)"
+      echo "  --new-usecase          Build for new use case template"
+      echo "  --help|-h              Show this help"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Use --help for usage information"
+      exit 1
+      ;;
+  esac
+done
+
+# Validate use case
+case $USE_CASE in
+  SEATSURFING|HISTORIAN|NEW_USECASE)
+    # Valid use case
+    ;;
+  *)
+    echo "Error: Invalid use case '$USE_CASE'"
+    echo "Valid options: SEATSURFING, HISTORIAN, NEW_USECASE"
+    exit 1
+    ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -64,8 +115,11 @@ fi
 # Navigate to the build directory
 cd "$BUILD_DIR" || exit 1
 
-# Run CMake with USB option passed as a variable
-cmake -DUSB_BOOTLOADER_ENABLE=${USB_BOOTLOADER_ENABLE} "$SCRIPT_DIR"
+# Run CMake with USB option and use case passed as variables
+echo "Building for use case: $USE_CASE"
+cmake -DUSB_BOOTLOADER_ENABLE=${USB_BOOTLOADER_ENABLE} \
+      -DUSE_CASE_DEFINE="USE_CASE_${USE_CASE}" \
+      "$SCRIPT_DIR"
 
 # Force a rebuild
 make -j4
