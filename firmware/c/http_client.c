@@ -39,8 +39,6 @@
 static http_session_t g_session = {0};
 static bool g_transfer_was_successful = false;
 
-// Global compatibility buffers - for parse_seat_info compatibility  
-static char server_response_buf[8192];  // Larger buffer for robustness
 
 // Synchronous operation tracking for both SeatSurfing and historian compatibility
 static bool sync_operation_complete = false;
@@ -504,6 +502,76 @@ bool http_session_is_active(void) {
 // UNIFIED CALLBACK SYSTEM FOR ALL USE CASES
 // =============================================================================
 
+/**
+ * @section use_case_integration Use Case Integration Guide
+ * 
+ * This HTTP client supports multiple use cases through a unified callback architecture.
+ * Each use case (SeatSurfing, Historian, Weather, etc.) follows the same integration pattern.
+ * 
+ * @subsection adding_use_case Adding a New Use Case
+ * 
+ * To add a new use case (e.g., Weather), implement these components:
+ * 
+ * @par 1. Configuration (config.h)
+ * @code
+ * #define USE_CASE_WEATHER    // Weather data display
+ * @endcode
+ * 
+ * @par 2. Data Callback Function (main.c)
+ * @code
+ * void weather_data_received(const char* response_data, size_t length, void* arg) {
+ *     // Parse response_data (JSON, XML, etc.)
+ *     // Store in global variable for display functions
+ *     // Handle errors gracefully
+ * }
+ * @endcode
+ * 
+ * @par 3. Request Builder Function (http_client.c)
+ * @code
+ * #ifdef USE_CASE_WEATHER
+ * static bool weather_make_request(void) {
+ *     // Build HTTP request (GET, POST, headers, etc.)
+ *     // Set up IP address and port
+ *     // Call http_request_async() with unified_completion_callback
+ *     // Return success/failure
+ * }
+ * #endif
+ * @endcode
+ * 
+ * @par 4. Communication Integration (http_client.c)
+ * Add to wifi_server_communication():
+ * @code
+ * #elif defined(USE_CASE_WEATHER)
+ *     if (!weather_make_request()) {
+ * @endcode
+ * 
+ * @par 5. Callback Registration (main.c)
+ * Add to main() Wi-Fi section:
+ * @code
+ * #elif defined(USE_CASE_WEATHER)
+ *     set_data_callback(weather_data_received, NULL);
+ * @endcode
+ * 
+ * @subsection communication_flow Communication Flow
+ * 
+ * 1. **Callback Registration**: main.c calls set_data_callback() with use-case specific function
+ * 2. **Request Initiation**: wifi_server_communication() calls use-case specific make_request()
+ * 3. **HTTP Transfer**: Robust HTTP client handles connection, headers, chunked transfer
+ * 4. **Data Processing**: unified_completion_callback() calls registered callback with response
+ * 5. **Display Update**: Callback parses data and stores in global variables for display
+ * 
+ * @subsection architecture_benefits Architecture Benefits
+ * 
+ * - **Consistent Pattern**: All use cases follow identical integration steps
+ * - **Automatic Processing**: Data parsed immediately when received via callbacks
+ * - **Error Handling**: Unified timeout, retry, and cleanup logic for all use cases
+ * - **Clean Separation**: HTTP communication vs data processing cleanly separated
+ * - **Build Optimization**: Only active use case compiled, others excluded
+ * 
+ * @note The unified callback system replaces manual parsing after communication.
+ *       Display functions should use parsed global data, not raw response buffers.
+ */
+
 // Universal callback type for all use cases
 typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
 
@@ -842,9 +910,6 @@ static bool seatsurfing_make_request(void) {
  * @param voltage Battery voltage (for transmission to server)
  * @return WifiResult status code
  * 
- * This function maintains the exact same API and behavior as the original
- * implementation while using the new robust HTTP client internally.
- * 
  * Flow:
  * 1. Initialize Wi-Fi and connect to network
  * 2. Build HTTP Basic Auth request for SeatSurfing API  
@@ -852,12 +917,9 @@ static bool seatsurfing_make_request(void) {
  * 4. Wait for response and handle errors
  * 5. Return appropriate WifiResult for main.c processing
  * 
- * The response data is accessible via get_server_response_buf() for
- * compatibility with existing parse_seat_info() function.
+ * Response data is automatically processed via registered callbacks.
  */
 WifiResult wifi_server_communication(float voltage) {
-    // Clear compatibility buffer
-    // memset(server_response_buf, 0, sizeof(server_response_buf));
     
     // Initialize Wi-Fi and connect using shared function
     WifiResult wifi_result = wifi_connect();
@@ -904,31 +966,6 @@ WifiResult wifi_server_communication(float voltage) {
     return WIFI_SUCCESS;
 }
 
-/**
- * @brief Get server response buffer for parse_seat_info compatibility
- * @return Pointer to response buffer containing JSON data
- * 
- * Provides access to the response buffer for the existing parse_seat_info()
- * function, maintaining full backward compatibility.
- * 
- * For historian use case, returns clean JSON body without HTTP headers.
- * For SeatSurfing use case, returns full response for compatibility.
- */
-char* get_server_response_buf(void) {
-#ifdef USE_CASE_HISTORIAN
-    // Return clean JSON body for cJSON parsing
-    debug_log("get_server_response_buf: g_http_response_body=%p, length=%zu\n",
-              g_http_response_body, g_http_response_length);
-    if (g_http_response_body) {
-        debug_log("JSON body preview: %.1000s\n", g_http_response_body);
-        debug_log("JSON null termination check: last char = %d\n", (int)g_http_response_body[g_http_response_length-1]);
-    }
-    return g_http_response_body;
-#else
-    // Return full response buffer for SeatSurfing compatibility
-    return server_response_buf;
-#endif
-}
 
 #ifdef USE_CASE_HISTORIAN
 

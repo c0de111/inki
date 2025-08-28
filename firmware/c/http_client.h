@@ -94,8 +94,6 @@ bool http_session_is_active(void);
 extern char* g_http_response_body;
 extern size_t g_http_response_length;
 
-// SeatSurfing compatibility - access to response buffer for parse_seat_info
-extern char* get_server_response_buf(void);
 
 // Universal callback system for all use cases
 typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
