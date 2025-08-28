@@ -68,6 +68,7 @@ void historian_data_received(const char* json_data, size_t length, void* arg) {
 }
 #endif
 
+
 ds3231_t ds3231; // RTC definition
 // extern const wifi_config_t wifi_config_flash;
 // extern const seatsurfing_config_t seatsurfing_config_flash;
@@ -387,6 +388,30 @@ typedef struct {
     char user_email[64];  // empty if available
     char desk_name[32];   // "Desk 3", "Platz 1", etc.
 } seat_info_t;
+
+// Forward declaration
+seat_info_t parse_seat_info(const char* json);
+
+// Global variable to store SeatSurfing data (accessible to display functions)
+static seat_info_t seatsurfing_data = {0};
+
+// Callback for SeatSurfing data (unified callback architecture)
+void seatsurfing_data_received(const char* response_data, size_t length, void* arg) {
+    if (!response_data || length == 0) {
+        debug_log_with_color(COLOR_RED, "[SEATSURFING] Transfer failed or incomplete\n");
+        return;
+    }
+
+    debug_log_with_color(COLOR_GREEN,
+                         "[SEATSURFING] Received %d bytes of response data\n", (int)length);
+
+    // Parse JSON into seat_info_t using existing parse_seat_info function
+    seatsurfing_data = parse_seat_info(response_data);
+    
+    debug_log("[SEATSURFING] Parsed seat info - Available: %s, Occupant: %s\n",
+              seatsurfing_data.is_available ? "YES" : "NO",
+              seatsurfing_data.user_email[0] ? seatsurfing_data.user_email : "None");
+}
 
 seat_info_t parse_seat_info(const char* json) {
     seat_info_t info = {
@@ -1134,7 +1159,8 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     // Display room name & logo
     Paint_DrawString_EN(40, 50, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
 
-    seat_info_t seat = parse_seat_info(get_server_response_buf());
+    // Use parsed data from callback (data processing already done)
+    seat_info_t seat = seatsurfing_data;
 
     char linebuf[64];
     if (seat.is_available) {
@@ -1164,7 +1190,8 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
     }
 
-    seat_info_t seat = parse_seat_info(get_server_response_buf());
+    // Use parsed data from callback (data processing already done)
+    seat_info_t seat = seatsurfing_data;
 
     // Top line: desk name (e.g. "Desk 3")
     Paint_DrawString_EN(40, 220, seat.desk_name, &font_ubuntu_mono_14pt, WHITE, BLACK);
@@ -2252,9 +2279,11 @@ int main(void)
     WifiResult wifi_result = WIFI_NOT_REQUIRED;
 
     if (is_wifi_required(pushbutton)) {
-        // Set up callback for historian data (if historian mode)
+        // Set up callback for data processing (unified pattern for all use cases)
 #ifdef USE_CASE_HISTORIAN
-        historian_set_callback(historian_data_received, NULL);
+        set_data_callback(historian_data_received, NULL);
+#elif defined(USE_CASE_SEATSURFING)
+        set_data_callback(seatsurfing_data_received, NULL);
 #endif
         
         // Unified communication function handles use case selection internally
