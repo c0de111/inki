@@ -40,17 +40,36 @@ cd inki/firmware/c
 ```
 
 ## 2. Build
-Run 
 
+### Basic Build (SeatSurfing - Default)
 ```bash
 ./build.sh
 ```
-This should give you (among others) the following files (numbers show size):
+
+### Use Case Selection
+The firmware supports multiple use cases that can be selected at build time:
+
+```bash
+# SeatSurfing room booking (default)
+./build.sh --seatsurfing
+
+# Historian time-series data visualization  
+./build.sh --historian
+
+# Template for new use cases
+./build.sh --new-usecase
+
+# Show all available options
+./build.sh --help
+```
+
+### Build Output
+This should give you (among others) the following files (numbers show approximate size):
 
 ```bash
 46552   inki_bootloader.bin
  8332   inki_default_config.bin
-680012  inki_slot0.bin
+680012  inki_slot0.bin          # Size varies by use case: SeatSurfing ~681KB, Historian ~689KB  
 680012  inki_slot1.bin
 ```
 
