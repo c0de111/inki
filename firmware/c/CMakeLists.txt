@@ -191,6 +191,13 @@ target_link_libraries(inki_slot1
 target_link_libraries(inki_bootloader
     pico_stdlib
 )
+
+# Use case selection - can be overridden by build script
+if(USE_CASE_DEFINE)
+    target_compile_definitions(inki_slot0 PRIVATE ${USE_CASE_DEFINE})
+    target_compile_definitions(inki_slot1 PRIVATE ${USE_CASE_DEFINE})
+    message(STATUS "Use case override: ${USE_CASE_DEFINE}")
+endif()
 #[[
 target_link_libraries(inki_default_config
     pico_stdlib

@@ -28,7 +28,7 @@
 
 // HTTP client functionality moved to http_client.c
 
-static char submitted_text[128] = "";
+// static char submitted_text[128] = "";
 
 #ifdef USE_CASE_HISTORIAN
 // Historian data storage
