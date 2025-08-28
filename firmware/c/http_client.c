@@ -46,26 +46,6 @@ static char server_response_buf[8192];  // Larger buffer for robustness
 static bool sync_operation_complete = false;
 static bool sync_operation_success = false;
 
-/**
- * @brief Completion callback for synchronous HTTP operations
- * @param body Response body data
- * @param length Response body length
- * @param success Operation success flag
- * @param arg User argument (unused)
- * 
- * Copies successful response data to compatibility buffer for parse_seat_info().
- */
-static void sync_completion_callback(const char* body, size_t length, bool success, void* arg) {
-    sync_operation_complete = true;
-    sync_operation_success = success;
-    
-    if (success && body && length > 0) {
-        // Copy to compatibility buffer for parse_seat_info
-        size_t copy_len = length < sizeof(server_response_buf) - 1 ? length : sizeof(server_response_buf) - 1;
-        memcpy(server_response_buf, body, copy_len);
-        server_response_buf[copy_len] = '\0';
-    }
-}
 
 // Global response access (for main.c integration)
 char* g_http_response_body = NULL;
@@ -520,51 +500,54 @@ bool http_session_is_active(void) {
 
 // === Historian Implementation ===
 
-#ifdef USE_CASE_HISTORIAN
+// =============================================================================
+// UNIFIED CALLBACK SYSTEM FOR ALL USE CASES
+// =============================================================================
 
+// Universal callback type for all use cases
+typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
 
-// Callback type for historian data (esign compatible)
-typedef void (*historian_callback_fn)(const char* json_data, size_t length, void* arg);
-
-// Historian callback mechanism
-static historian_callback_fn historian_callback = NULL;
-static void* historian_callback_arg = NULL;
+// Unified callback mechanism for all use cases
+static data_callback_fn data_callback = NULL;
+static void* data_callback_arg = NULL;
 
 /**
- * @brief Set callback function for historian data (esign compatible API)
+ * @brief Set callback function for data processing (unified API for all use cases)
  * @param callback Function to call when data is received
  * @param arg User argument to pass to callback
  */
-void historian_set_callback(historian_callback_fn callback, void* arg) {
-    historian_callback = callback;
-    historian_callback_arg = arg;
-    debug_log("[HISTORIAN] Callback set: %p (arg: %p)\n", callback, arg);
+void set_data_callback(data_callback_fn callback, void* arg) {
+    data_callback = callback;
+    data_callback_arg = arg;
+    debug_log("[DATA] Callback set: %p (arg: %p)\n", callback, arg);
 }
 
 /**
- * @brief HTTP completion callback for historian requests
- * Calls the registered historian callback with JSON data (esign compatible)
+ * @brief HTTP completion callback for all use cases
+ * Calls the registered data callback with response data
  */
-static void historian_completion_callback(const char* body, size_t length, bool success, void* arg) {
+static void unified_completion_callback(const char* body, size_t length, bool success, void* arg) {
     sync_operation_complete = true;
     sync_operation_success = success;
     
-    debug_log("[HISTORIAN] HTTP completion: success=%s, body=%p, length=%zu\n", 
+    debug_log("[DATA] HTTP completion: success=%s, body=%p, length=%zu\n", 
               success ? "YES" : "NO", body, length);
     
-    // Call historian callback if registered and transfer successful
-    if (historian_callback) {
+    // Call registered callback if available and transfer successful
+    if (data_callback) {
         if (success && body && length > 0) {
-            debug_log("[HISTORIAN] Calling registered callback with data\n");
-            historian_callback(body, length, historian_callback_arg);
+            debug_log("[DATA] Calling registered callback with data\n");
+            data_callback(body, length, data_callback_arg);
         } else {
-            debug_log("[HISTORIAN] Calling registered callback with NULL (error)\n");
-            historian_callback(NULL, 0, historian_callback_arg);
+            debug_log("[DATA] Calling registered callback with NULL (error)\n");
+            data_callback(NULL, 0, data_callback_arg);
         }
     } else {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] No callback registered!\n");
+        debug_log_with_color(COLOR_RED, "[DATA] No callback registered!\n");
     }
 }
+
+#ifdef USE_CASE_HISTORIAN
 
 // Forward declaration for DST function from main.c
 extern bool is_dst_europe(const ds3231_data_t* t);
@@ -699,7 +682,6 @@ static int historian_build_http_request(char* buffer, size_t buffer_size,
 // SHARED HELPER FUNCTIONS
 // =============================================================================
 
-
 /**
  * @brief Initialize Wi-Fi and connect to network
  * @param use_case_name Use case name for logging (e.g., "HISTORIAN", "SEATSURFING")
@@ -790,9 +772,9 @@ static bool historian_make_request(void) {
     sync_operation_complete = false;
     sync_operation_success = false;
 
-    // Make HTTP request (historian-specific)
+    // Make HTTP request (unified callback)
     http_result_t result = http_request_async(&ip, 81, http_request, 
-                                             historian_completion_callback, NULL);
+                                             unified_completion_callback, NULL);
     
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed to start: %d\n", result);
@@ -802,22 +784,7 @@ static bool historian_make_request(void) {
     return true;  // Request started successfully
 }
 
-
 #endif // USE_CASE_HISTORIAN
-
-// === SeatSurfing Compatibility Layer ===
-
-/**
- * This section maintains full backward compatibility with the original SeatSurfing
- * implementation while using the new robust HTTP client internally.
- * 
- * Key compatibility features:
- * - wifi_server_communication() function with identical API
- * - Same WifiResult return codes  
- * - Global server_response_buf access for parse_seat_info()
- * - Identical error handling and display behavior
- */
-
 
 /**
  * @brief Make complete SeatSurfing HTTP request with full encapsulation
@@ -855,12 +822,12 @@ static bool seatsurfing_make_request(void) {
              seatsurfing_config_flash.data.ip[2],
              seatsurfing_config_flash.data.ip[3]);
 
-    // Make HTTP request using new robust client
+    // Make HTTP request using unified callback
     sync_operation_complete = false;
     sync_operation_success = false;
     
     http_result_t result = http_request_async(&ip, seatsurfing_config_flash.data.port, 
-                                             header, sync_completion_callback, NULL);
+                                             header, unified_completion_callback, NULL);
     
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "HTTP request failed to start: %d\n", result);
@@ -871,7 +838,7 @@ static bool seatsurfing_make_request(void) {
 }
 
 /**
- * @brief SeatSurfing server communication (compatibility function)
+ * @brief server communication
  * @param voltage Battery voltage (for transmission to server)
  * @return WifiResult status code
  * 

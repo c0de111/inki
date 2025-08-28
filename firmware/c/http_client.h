@@ -97,13 +97,10 @@ extern size_t g_http_response_length;
 // SeatSurfing compatibility - access to response buffer for parse_seat_info
 extern char* get_server_response_buf(void);
 
-#ifdef USE_CASE_HISTORIAN
-// Callback type for historian data (esign compatible)
-typedef void (*historian_callback_fn)(const char* json_data, size_t length, void* arg);
+// Universal callback system for all use cases
+typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
 
-// Set callback for historian data (esign compatible API)
-void historian_set_callback(historian_callback_fn callback, void* arg);
-
-#endif
+// Set callback for data processing (unified API for all use cases)
+void set_data_callback(data_callback_fn callback, void* arg);
 
 #endif // HTTP_CLIENT_H
