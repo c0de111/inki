@@ -15,6 +15,41 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// =============================================================================
+// USE CASE SELECTION - Build-Time Configuration
+// =============================================================================
+
+/**
+ * @brief Use case selection for inki firmware.
+ * 
+ * Uncomment exactly ONE of the following use cases to build firmware for:
+ * - USE_CASE_SEATSURFING: Room booking and availability display (default)
+ * - USE_CASE_HISTORIAN: Time-series data visualization and monitoring
+ * 
+ * The selected use case determines:
+ * - Which communication protocols are used
+ * - What configuration pages are shown in setup mode
+ * - How data is parsed and displayed on the ePaper
+ * - Which configuration structures are included
+ */
+
+#define USE_CASE_SEATSURFING    // SeatSurfing room booking
+// #define USE_CASE_HISTORIAN   // Historian time-series data display
+
+// Validate use case selection
+#ifdef USE_CASE_SEATSURFING
+    #ifdef USE_CASE_HISTORIAN
+        #error "Cannot define both USE_CASE_SEATSURFING and USE_CASE_HISTORIAN! Please choose exactly one."
+    #endif
+    #define USE_CASE_NAME "SeatSurfing"
+    #define USE_CASE_DESCRIPTION "Room Booking & Availability Display"
+#elif defined(USE_CASE_HISTORIAN)
+    #define USE_CASE_NAME "Historian"
+    #define USE_CASE_DESCRIPTION "Time-Series Data Visualization"
+#else
+    #error "No use case defined! Please define either USE_CASE_SEATSURFING or USE_CASE_HISTORIAN in config.h"
+#endif
+
 #define WIFI_SETUP_TIMEOUT_MS (15 * 60 * 1000)
 
 // -----------------------------------------------------------------------------
