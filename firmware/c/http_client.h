@@ -81,18 +81,9 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
                                 void (*callback)(const char* body, size_t length, bool success, void* arg),
                                 void* callback_arg);
 
-// Synchronous wrapper for simple use cases
-http_result_t http_request_sync(const ip_addr_t* server_ip, uint16_t port,
-                               const char* request_data,
-                               char** response_body, size_t* response_length);
-
 // Session management
-void http_session_cleanup(http_session_t* session);
 bool http_session_is_active(void);
 
-// Global access to last response (for current main.c integration)
-extern char* g_http_response_body;
-extern size_t g_http_response_length;
 
 
 // Universal callback system for all use cases
