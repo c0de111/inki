@@ -45,9 +45,6 @@ static bool sync_operation_complete = false;
 static bool sync_operation_success = false;
 
 
-// Global response access (for main.c integration)
-char* g_http_response_body = NULL;
-size_t g_http_response_length = 0;
 
 // === Helper Functions ===
 
@@ -333,8 +330,6 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
 
     // Set global flags
     g_transfer_was_successful = true;
-    g_http_response_body = session->body_buffer;
-    g_http_response_length = session->expected_length;
 
     // Call callback with complete data
     if (session->completion_callback) {
@@ -425,8 +420,6 @@ static void http_error_callback(void* arg, err_t err) {
 
 bool http_client_init(void) {
     reset_session(&g_session);
-    g_http_response_body = NULL;
-    g_http_response_length = 0;
     return true;
 }
 
@@ -485,12 +478,6 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
     return HTTP_SUCCESS;
 }
 
-void http_session_cleanup(http_session_t* session) {
-    if (session->pcb) {
-        altcp_close(session->pcb);
-    }
-    reset_session(session);
-}
 
 bool http_session_is_active(void) {
     return g_session.active;
