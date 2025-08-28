@@ -104,8 +104,6 @@ typedef void (*historian_callback_fn)(const char* json_data, size_t length, void
 // Set callback for historian data (esign compatible API)
 void historian_set_callback(historian_callback_fn callback, void* arg);
 
-// Historian communication function
-extern WifiResult historian_server_communication(float battery_voltage);
 #endif
 
 #endif // HTTP_CLIENT_H
