@@ -856,49 +856,7 @@ static int historian_build_http_request(char* buffer, size_t buffer_size,
 // SHARED HELPER FUNCTIONS
 // =============================================================================
 
-/**
- * @brief Initialize Wi-Fi and connect to network
- * @param use_case_name Use case name for logging (e.g., "HISTORIAN", "SEATSURFING")
- * @return WifiResult status code
- */
-static WifiResult wifi_connect() {
-    debug_log_with_color(COLOR_BOLD_GREEN, "Initializing Wi-Fi...\n");
-    
-    if (cyw43_arch_init_with_country(country)) {
-        debug_log_with_color(COLOR_RED, "Wi-Fi initialization failed.\n");
-        return WIFI_ERROR_CONNECTION;
-    }
-    cyw43_arch_enable_sta_mode();
-
-    if (device_config_flash.data.roomname[0] != '\0') {
-        netif_set_hostname(netif_default, device_config_flash.data.roomname);
-    }
-
-    debug_log("Attempting to connect to network...\n");
-    int wifi_connected = -1;
-    int wifi_attempt_count = 0;
-    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
-        wifi_attempt_count++;
-        wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
-            wifi_config_flash.ssid,
-            wifi_config_flash.password,
-            auth,
-            device_config_flash.data.wifi_timeout
-        );
-        watchdog_update();
-        debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n",
-                            wifi_config_flash.ssid, wifi_attempt_count);
-    }
-
-    if (wifi_connected != 0) {
-        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
-        cyw43_arch_deinit();
-        return WIFI_ERROR_CONNECTION;
-    }
-
-    debug_log("Connected to Wi-Fi successfully.\n");
-    return WIFI_SUCCESS;
-}
+// Wi‑Fi connection logic moved to wifi.c (wifi_connect())
 
 #ifdef USE_CASE_HISTORIAN
 
