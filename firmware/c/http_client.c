@@ -20,6 +20,7 @@
 #include "flash.h"
 #include "historian_config.h"
 #include "historian_client.h"
+#include "seatsurfing_client.h"
 #include "cJSON.h"
 
 // Pico SDK headers
@@ -663,7 +664,7 @@ bool http_session_is_active(void) {
  * 
  * 1. **Callback Registration**: main.c calls set_data_callback() with use-case specific function
  * 2. **Request Initiation**: wifi_server_communication() calls use-case specific make_request()
- * 3. **HTTP Transfer**: Robust HTTP client handles connection, headers, chunked transfer
+ * 3. **HTTP Transfer**: Robust HTTP client handles connection, headers, and body streaming (no chunked TE)
  * 4. **Data Processing**: unified_completion_callback() calls registered callback with response
  * 5. **Display Update**: Callback parses data and stores in global variables for display
  * 
@@ -722,8 +723,7 @@ static void unified_completion_callback(const char* body, size_t length, bool su
     }
 }
 
-#ifdef USE_CASE_HISTORIAN
-#endif // USE_CASE_HISTORIAN
+// (Historian-specific utilities moved to historian_client.*)
 
 // =============================================================================
 // SHARED HELPER FUNCTIONS
@@ -804,16 +804,16 @@ static bool seatsurfing_make_request(void) {
     
     // Construct HTTP/1.0 request
     char header[HTTP_REQUEST_MAX];
-    snprintf(header, sizeof(header),
-            "GET /location/%s/space/%s/availability HTTP/1.0\r\n"
-            "Host: %s\r\n"
-            "Authorization: Basic %s\r\n"
-            "\r\n",
-            seatsurfing_config_flash.data.location_id,
-            seatsurfing_config_flash.data.space_id,
-            seatsurfing_config_flash.data.host,
-            auth_b64
-    );
+    int hlen = seatsurfing_build_http_request(
+        header, sizeof(header),
+        seatsurfing_config_flash.data.host,
+        seatsurfing_config_flash.data.location_id,
+        seatsurfing_config_flash.data.space_id,
+        auth_b64);
+    if (hlen < 0) {
+        debug_log_with_color(COLOR_RED, "[SEATSURFING] Failed to build HTTP request\n");
+        return false;
+    }
 
     debug_log("Constructed HTTP Header:\n%s\n", header);
 
@@ -829,8 +829,8 @@ static bool seatsurfing_make_request(void) {
     sync_operation_complete = false;
     sync_operation_success = false;
     
-    http_result_t result = http_request_async(&ip, seatsurfing_config_flash.data.port, 
-                                             header, unified_completion_callback, NULL);
+    http_result_t result = http_request_async(&ip, seatsurfing_config_flash.data.port,
+                                              header, unified_completion_callback, NULL);
     
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "HTTP request failed to start: %d\n", result);
