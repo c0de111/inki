@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <float.h>
 #include <time.h>
+#include <limits.h>
 
 // Global session (single session for now, can be extended later)
 static http_session_t g_session = {0};
@@ -294,15 +295,10 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                     return ERR_OK;
                 } else {
                     session->fallback_mode = false;
-                    session->expected_length = content_length;
-                    debug_log("[HTTP] Content-Length: %d bytes\n", content_length);
-
-                    // Allocate body buffer
-                    session->body_buffer = (char*)malloc(content_length + 1);
-                    if (!session->body_buffer) {
-                        debug_log_with_color(COLOR_RED,
-                                             "[HTTP] Failed to allocate %d bytes for body\n",
-                                             content_length);
+                    size_t clen = (size_t)content_length;
+                    // Guard against overflow in allocation (clen + 1)
+                    if (clen > SIZE_MAX - 1) {
+                        debug_log_with_color(COLOR_RED, "[HTTP] Content-Length too large for platform\n");
                         altcp_recved(pcb, p->tot_len);
                         pbuf_free(p);
                         altcp_close(pcb);
@@ -314,13 +310,33 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         reset_session(session);
                         return ERR_OK;
                     }
-                    session->body_buffer_size = content_length + 1;
+                    session->expected_length = clen;
+                    debug_log("[HTTP] Content-Length: %u bytes\n", (unsigned)clen);
+
+                    // Allocate body buffer
+                    session->body_buffer = (char*)malloc(clen + 1);
+                    if (!session->body_buffer) {
+                        debug_log_with_color(COLOR_RED,
+                                             "[HTTP] Failed to allocate %u bytes for body\n",
+                                             (unsigned)clen);
+                        altcp_recved(pcb, p->tot_len);
+                        pbuf_free(p);
+                        altcp_close(pcb);
+                        session->state = HTTP_SESSION_ERROR;
+                        session->last_error = ERR_MEM;
+                        if (session->completion_callback) {
+                            session->completion_callback(NULL, 0, false, session->callback_arg);
+                        }
+                        reset_session(session);
+                        return ERR_OK;
+                    }
+                    session->body_buffer_size = clen + 1;
                     session->total_received = 0;
 
                     // Copy any body data that was already captured in header buffer
                     size_t body_in_header = session->header_length - (header_end - session->header_buffer);
                     if (body_in_header > 0) {
-                        if (body_in_header > (size_t)session->expected_length) {
+                        if (body_in_header > session->expected_length) {
                             body_in_header = session->expected_length;
                         }
                         memcpy(session->body_buffer, header_end, body_in_header);
@@ -340,7 +356,22 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
             if (session->fallback_mode) {
                 // Fallback mode: dynamically grow body buffer
                 if (step > 0) {
-                    size_t needed = session->total_received + (size_t)step + 1;
+                    size_t sstep = (size_t)step;
+                    // Overflow guard for needed calculation
+                    if (session->total_received > SIZE_MAX - (sstep + 1)) {
+                        debug_log_with_color(COLOR_RED, "[HTTP] Body size overflow in fallback mode\n");
+                        altcp_recved(pcb, p->tot_len);
+                        pbuf_free(p);
+                        altcp_close(pcb);
+                        session->state = HTTP_SESSION_ERROR;
+                        session->last_error = ERR_MEM;
+                        if (session->completion_callback) {
+                            session->completion_callback(NULL, 0, false, session->callback_arg);
+                        }
+                        reset_session(session);
+                        return ERR_OK;
+                    }
+                    size_t needed = session->total_received + sstep + 1;
                     if (needed > session->body_buffer_size) {
                         size_t new_cap = needed;
                         char* nb = (char*)realloc(session->body_buffer, new_cap);
@@ -360,8 +391,8 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         session->body_buffer = nb;
                         session->body_buffer_size = new_cap;
                     }
-                    memcpy(session->body_buffer + session->total_received, chunk, step);
-                    session->total_received += (size_t)step;
+                    memcpy(session->body_buffer + session->total_received, chunk, sstep);
+                    session->total_received += sstep;
                     session->body_buffer[session->total_received] = '\0';
                 }
             } else {
