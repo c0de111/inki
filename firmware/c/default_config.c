@@ -3,6 +3,10 @@
 #include "seatsurfing_config.h"
 #include "device_config.h"
 
+#ifdef USE_CASE_HISTORIAN
+#include "historian_config.h"
+#endif
+
 __attribute__((section(".wifi_config")))
 __attribute__((used))
 const wifi_config_t default_wifi_config = {
@@ -11,6 +15,7 @@ const wifi_config_t default_wifi_config = {
     .crc32 = 0
 };
 
+#ifdef USE_CASE_SEATSURFING
 // Seatsurfing Konfiguration
 __attribute__((section(".seatsurfing_config")))
 __attribute__((used))
@@ -26,6 +31,23 @@ const seatsurfing_config_t default_seatsurfing_config = {
     },
     .crc32 = 0
 };
+#elif defined(USE_CASE_HISTORIAN)
+// Historian Konfiguration  
+__attribute__((section(".historian_config")))
+__attribute__((used))
+const historian_config_t default_historian_config = {
+    .data = {
+        .host = "historian.local",
+        .port = 8080,
+        .path = "/query/jsonrpc.gy", 
+        .timeout_ms = 10000,
+        .datapoint_id = 12345,
+        .hours_back = 24,
+        .display_name = "Temperature Sensor"
+    },
+    .crc32 = 0
+};
+#endif
 
 // Geräte-/UI-Konfiguration
 __attribute__((section(".device_config")))

@@ -841,6 +841,7 @@ static bool historian_make_request(void) {
 
 #endif // USE_CASE_HISTORIAN
 
+#ifdef USE_CASE_SEATSURFING
 /**
  * @brief Make complete SeatSurfing HTTP request with full encapsulation
  * @return true on success (request sent), false on error
@@ -891,6 +892,7 @@ static bool seatsurfing_make_request(void) {
 
     return true;  // Request started successfully
 }
+#endif // USE_CASE_SEATSURFING
 
 /**
  * @brief server communication

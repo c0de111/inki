@@ -23,13 +23,21 @@ void send_upload_logo_page(struct tcp_pcb* tpcb, const char* message);
 void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message);
 void send_landing_page(struct tcp_pcb *tpcb);
 void send_wifi_config_page(struct tcp_pcb *tpcb, const char *message);
+#ifdef USE_CASE_SEATSURFING
 void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message);
+#elif defined(USE_CASE_HISTORIAN)
+void send_historian_config_page(struct tcp_pcb* tpcb, const char* message);
+#endif
 void send_clock_page(struct tcp_pcb *tpcb, const char *message);
 void send_device_config_page(struct tcp_pcb* tpcb, const char* message);
 
 // Form handler functions
 void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len);
+#ifdef USE_CASE_SEATSURFING
 void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len);
+#elif defined(USE_CASE_HISTORIAN)
+void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len);
+#endif
 void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len);
 void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len);
 
