@@ -44,4 +44,8 @@ extern uint32_t auth;
  */
 extern uint8_t mac_address[6];
 
+// Connect to Wi‑Fi using flash-stored configuration.
+// Returns a `WifiResult`; on success, station mode is enabled and connected.
+WifiResult wifi_connect(void);
+
 #endif // WIFI_H
