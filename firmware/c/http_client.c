@@ -102,6 +102,22 @@ static int parse_content_length(const char* header) {
     return atoi(cl);
 }
 
+/**
+ * @brief Parse HTTP status code from the status line
+ * @param header HTTP header string
+ * @return status code (e.g., 200) or -1 if not found
+ */
+static int parse_http_status_code(const char* header) {
+    const char* p = strstr(header, "HTTP/");
+    if (!p) return -1;
+    // Find first space after HTTP/version
+    p = strchr(p, ' ');
+    if (!p) return -1;
+    // Skip spaces and parse number
+    while (*p == ' ') p++;
+    return atoi(p);
+}
+
 // === TCP Callbacks (based on historian architecture) ===
 
 /**
@@ -126,23 +142,17 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         debug_log("[HTTP] Connection closed by server\n");
         altcp_close(pcb);
         session->pcb = NULL;
-
-        // Handle fallback mode (no Content-Length) - connection close means we're done
+        
+        // Handle fallback mode (no Content-Length): connection close marks completion
         if (session->active && !session->transfer_complete && session->header_complete && session->expected_length == 0) {
-            // In fallback mode, we use the header buffer as our response
-            char* body_start = strstr(session->header_buffer, "\r\n\r\n");
-            if (body_start) {
-                body_start += 4;  // Skip past "\r\n\r\n"
-                size_t response_len = strlen(body_start);
-                if (response_len > 0) {
-                    // Fallback mode complete with response data
-                    session->transfer_complete = true;
-                    if (session->completion_callback) {
-                        session->completion_callback(body_start, response_len, true, session->callback_arg);
-                    }
-                    reset_session(session);
-                    return ERR_OK;
+            if (session->body_buffer && session->total_received > 0) {
+                session->body_buffer[session->total_received] = '\0';
+                session->transfer_complete = true;
+                if (session->completion_callback) {
+                    session->completion_callback(session->body_buffer, session->total_received, true, session->callback_arg);
                 }
+                reset_session(session);
+                return ERR_OK;
             }
         }
 
@@ -154,169 +164,202 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         return ERR_OK;
     }
 
-    // Buffer for current chunk
+    // Buffer for streaming slices
     char chunk[1500];
-    int copied = pbuf_copy_partial(p, chunk, sizeof(chunk), 0);
+    size_t offset = 0;
+    
+    while (offset < p->tot_len) {
+        int step = pbuf_copy_partial(p, chunk, sizeof(chunk), offset);
+        if (step <= 0) break;
+        offset += step;
 
     // === Phase 1: Header collection ===
-    if (!session->header_complete) {
-        size_t space = sizeof(session->header_buffer) - session->header_length - 1;
-        size_t to_copy = (copied < space) ? copied : space;
+        if (!session->header_complete) {
+            size_t space = sizeof(session->header_buffer) - session->header_length - 1;
+            size_t to_copy = (step < (int)space) ? (size_t)step : space;
 
-        memcpy(session->header_buffer + session->header_length, chunk, to_copy);
-        session->header_length += to_copy;
-        session->header_buffer[session->header_length] = '\0';
-
-        debug_log("[HTTP] Header chunk: %d bytes (total: %d)\n",
-                  copied, (int)session->header_length);
-
-        // Check for header end
-        char* header_end = strstr(session->header_buffer, "\r\n\r\n");
-        if (header_end) {
-            session->header_complete = true;
-            session->state = HTTP_SESSION_RECEIVING_BODY;
-            header_end += 4;  // Skip past "\r\n\r\n"
-
-            // Parse Content-Length
-            int content_length = parse_content_length(session->header_buffer);
-            if (content_length <= 0) {
-                // No Content-Length - use fallback mode for compatibility
-                
-                // Fallback: Use header + any body data received so far as complete response
-                // This matches the original implementation's behavior
-                
-                // Check if there's body data in the header packet  
-                char* body_start = strstr(session->header_buffer, "\r\n\r\n");
-                if (body_start) {
-                    body_start += 4;  // Skip past "\r\n\r\n"
-                    size_t body_in_header = session->header_length - (body_start - session->header_buffer);
-                    
-                    if (body_in_header > 0) {
-                        // Found body data in header packet - complete response
-                        
-                        // Body data is already in the header buffer, no need to copy
-                        
-                        session->transfer_complete = true;
-                        session->state = HTTP_SESSION_COMPLETE;
-                        
-                        if (session->completion_callback) {
-                            session->completion_callback(body_start, body_in_header, true, session->callback_arg);
-                        }
-                        
-                        altcp_recved(pcb, p->tot_len);
-                        pbuf_free(p);
-                        altcp_close(pcb);
-                        session->pcb = NULL;
-                        return ERR_OK;
-                    }
-                }
-                
-                // If no body yet, wait for more data (fallback mode)
-                session->expected_length = 0;  // Signal fallback mode
-                altcp_recved(pcb, p->tot_len);
-                pbuf_free(p);
-                return ERR_OK;
-            }
-
-            session->expected_length = content_length;
-            debug_log("[HTTP] Content-Length: %d bytes\n", content_length);
-
-            // Allocate body buffer
-            session->body_buffer = malloc(content_length + 1);
-            if (!session->body_buffer) {
-                debug_log_with_color(COLOR_RED,
-                                     "[HTTP] Failed to allocate %d bytes for body\n",
-                                     content_length);
-                altcp_recved(pcb, p->tot_len);
-                pbuf_free(p);
-                altcp_close(pcb);
-                session->state = HTTP_SESSION_ERROR;
-                session->last_error = ERR_MEM;
-                if (session->completion_callback) {
-                    session->completion_callback(NULL, 0, false, session->callback_arg);
-                }
-                reset_session(session);
-                return ERR_MEM;
-            }
-            session->body_buffer_size = content_length + 1;
-            session->total_received = 0;
-
-            // Copy any body data that was in the header packet
-            size_t body_in_header = session->header_length - (header_end - session->header_buffer);
-            if (body_in_header > 0) {
-                if (body_in_header > session->expected_length) {
-                    body_in_header = session->expected_length;
-                }
-                memcpy(session->body_buffer, header_end, body_in_header);
-                session->total_received = body_in_header;
-
-                debug_log("[HTTP] Found %d body bytes in header packet\n",
-                          (int)body_in_header);
-            }
-        }
-
-        altcp_recved(pcb, p->tot_len);
-        pbuf_free(p);
-
-        // Check if we already have all data
-        if (session->header_complete &&
-            session->total_received >= session->expected_length) {
-            goto transfer_complete;
-        }
-
-        return ERR_OK;
-    }
-
-    // === Phase 2: Body reception ===
-    if (session->active && session->header_complete) {
-        // Handle fallback mode (no Content-Length)
-        if (session->expected_length == 0) {
-            // In fallback mode, extend the header buffer to include more data
-            size_t remaining_space = sizeof(session->header_buffer) - session->header_length - 1;
-            size_t to_copy = (copied < remaining_space) ? copied : remaining_space;
-            
             if (to_copy > 0) {
                 memcpy(session->header_buffer + session->header_length, chunk, to_copy);
                 session->header_length += to_copy;
                 session->header_buffer[session->header_length] = '\0';
             }
-            
-            altcp_recved(pcb, p->tot_len);
-            pbuf_free(p);
-            return ERR_OK;
+
+            debug_log("[HTTP] Header chunk: %d bytes (total: %d)\n",
+                      step, (int)session->header_length);
+
+            // If header buffer exhausted without CRLFCRLF, fail
+            if (to_copy < (size_t)step && !strstr(session->header_buffer, "\r\n\r\n")) {
+                debug_log_with_color(COLOR_RED, "[HTTP] Header too large for buffer\n");
+                altcp_recved(pcb, p->tot_len);
+                pbuf_free(p);
+                altcp_close(pcb);
+                session->state = HTTP_SESSION_ERROR;
+                session->last_error = ERR_BUF;
+                if (session->completion_callback) {
+                    session->completion_callback(NULL, 0, false, session->callback_arg);
+                }
+                reset_session(session);
+                return ERR_OK;
+            }
+
+            // Check for header end
+            char* header_end = strstr(session->header_buffer, "\r\n\r\n");
+            if (header_end) {
+                session->header_complete = true;
+                session->state = HTTP_SESSION_RECEIVING_BODY;
+                header_end += 4;  // Skip past CRLFCRLF
+
+                // Parse and validate HTTP status
+                int status = parse_http_status_code(session->header_buffer);
+                if (status >= 0 && (status < 200 || status >= 300)) {
+                    debug_log_with_color(COLOR_RED, "[HTTP] Error status: %d\n", status);
+                    altcp_recved(pcb, p->tot_len);
+                    pbuf_free(p);
+                    altcp_close(pcb);
+                    session->state = HTTP_SESSION_ERROR;
+                    session->last_error = ERR_CLSD;
+                    if (session->completion_callback) {
+                        session->completion_callback(NULL, 0, false, session->callback_arg);
+                    }
+                    reset_session(session);
+                    return ERR_OK;
+                }
+
+                // Parse Content-Length
+                int content_length = parse_content_length(session->header_buffer);
+                if (content_length <= 0) {
+                    // No Content-Length: start fallback dynamic accumulation
+                    session->expected_length = 0;  // fallback mode
+                    session->body_buffer = NULL;
+                    session->body_buffer_size = 0;
+                    session->total_received = 0;
+
+                    // Copy any body bytes already captured in header buffer
+                    size_t body_in_header = session->header_length - (header_end - session->header_buffer);
+                    if (body_in_header > 0) {
+                        session->body_buffer = (char*)malloc(body_in_header + 1);
+                        if (!session->body_buffer) {
+                            debug_log_with_color(COLOR_RED, "[HTTP] Failed to allocate fallback body buffer\n");
+                            altcp_recved(pcb, p->tot_len);
+                            pbuf_free(p);
+                            altcp_close(pcb);
+                            session->state = HTTP_SESSION_ERROR;
+                            session->last_error = ERR_MEM;
+                            if (session->completion_callback) {
+                                session->completion_callback(NULL, 0, false, session->callback_arg);
+                            }
+                            reset_session(session);
+                            return ERR_OK;
+                        }
+                        memcpy(session->body_buffer, header_end, body_in_header);
+                        session->total_received = body_in_header;
+                        session->body_buffer[session->total_received] = '\0';
+                        session->body_buffer_size = body_in_header + 1;
+                        debug_log("[HTTP] Fallback: captured %d body bytes in header packet\n", (int)body_in_header);
+                    }
+                } else {
+                    session->expected_length = content_length;
+                    debug_log("[HTTP] Content-Length: %d bytes\n", content_length);
+
+                    // Allocate body buffer
+                    session->body_buffer = (char*)malloc(content_length + 1);
+                    if (!session->body_buffer) {
+                        debug_log_with_color(COLOR_RED,
+                                             "[HTTP] Failed to allocate %d bytes for body\n",
+                                             content_length);
+                        altcp_recved(pcb, p->tot_len);
+                        pbuf_free(p);
+                        altcp_close(pcb);
+                        session->state = HTTP_SESSION_ERROR;
+                        session->last_error = ERR_MEM;
+                        if (session->completion_callback) {
+                            session->completion_callback(NULL, 0, false, session->callback_arg);
+                        }
+                        reset_session(session);
+                        return ERR_OK;
+                    }
+                    session->body_buffer_size = content_length + 1;
+                    session->total_received = 0;
+
+                    // Copy any body data that was already captured in header buffer
+                    size_t body_in_header = session->header_length - (header_end - session->header_buffer);
+                    if (body_in_header > 0) {
+                        if (body_in_header > (size_t)session->expected_length) {
+                            body_in_header = session->expected_length;
+                        }
+                        memcpy(session->body_buffer, header_end, body_in_header);
+                        session->total_received = body_in_header;
+                        debug_log("[HTTP] Found %d body bytes in header packet\n",
+                                  (int)body_in_header);
+                    }
+                }
+            }
+
+            // Continue loop to process remaining slices (if any)
+            continue;
         }
-        
-        // Normal mode with Content-Length
-        size_t remaining = session->expected_length - session->total_received;
-        size_t to_copy = (copied < remaining) ? copied : remaining;
 
-        memcpy(session->body_buffer + session->total_received, chunk, to_copy);
-        session->total_received += to_copy;
+        // === Phase 2: Body reception ===
+        if (session->active && session->header_complete) {
+            if (session->expected_length == 0) {
+                // Fallback mode: dynamically grow body buffer
+                if (step > 0) {
+                    size_t needed = session->total_received + (size_t)step + 1;
+                    if (needed > session->body_buffer_size) {
+                        size_t new_cap = needed;
+                        char* nb = (char*)realloc(session->body_buffer, new_cap);
+                        if (!nb) {
+                            debug_log_with_color(COLOR_RED, "[HTTP] realloc failed in fallback mode\n");
+                            altcp_recved(pcb, p->tot_len);
+                            pbuf_free(p);
+                            altcp_close(pcb);
+                            session->state = HTTP_SESSION_ERROR;
+                            session->last_error = ERR_MEM;
+                            if (session->completion_callback) {
+                                session->completion_callback(NULL, 0, false, session->callback_arg);
+                            }
+                            reset_session(session);
+                            return ERR_OK;
+                        }
+                        session->body_buffer = nb;
+                        session->body_buffer_size = new_cap;
+                    }
+                    memcpy(session->body_buffer + session->total_received, chunk, step);
+                    session->total_received += (size_t)step;
+                    session->body_buffer[session->total_received] = '\0';
+                }
+            } else {
+                // Normal mode with Content-Length
+                size_t remaining = session->expected_length - session->total_received;
+                size_t to_copy = ((size_t)step < remaining) ? (size_t)step : remaining;
+                if (to_copy > 0) {
+                    memcpy(session->body_buffer + session->total_received, chunk, to_copy);
+                    session->total_received += to_copy;
+                }
 
-        // Progress logging every 10%
-        static int last_percent = -10;
-        int percent = (session->total_received * 100) / session->expected_length;
-        if (percent >= last_percent + 10) {
-            debug_log("[HTTP] Progress: %d%% (%d/%d bytes)\n",
-                      percent, (int)session->total_received,
-                      (int)session->expected_length);
-            last_percent = percent;
+                // Progress logging every 10%
+                static int last_percent = -10;
+                int percent = (session->total_received * 100) / session->expected_length;
+                if (percent >= last_percent + 10) {
+                    debug_log("[HTTP] Progress: %d%% (%d/%d bytes)\n",
+                              percent, (int)session->total_received,
+                              (int)session->expected_length);
+                    last_percent = percent;
+                }
+            }
         }
-
-        altcp_recved(pcb, p->tot_len);
-        pbuf_free(p);
-
-        // Check if transfer complete
-        if (session->total_received >= session->expected_length) {
-            goto transfer_complete;
-        }
-
-        return ERR_OK;
     }
 
-    // Should not reach here
+    // Acknowledge and free pbuf chain
     altcp_recved(pcb, p->tot_len);
     pbuf_free(p);
+
+    // Check for completion in Content-Length mode
+    if (session->header_complete && session->expected_length > 0 &&
+        session->total_received >= session->expected_length) {
+        goto transfer_complete;
+    }
+
     return ERR_OK;
 
     transfer_complete:
@@ -751,7 +794,7 @@ static WifiResult wifi_connect() {
     }
     cyw43_arch_enable_sta_mode();
 
-    if (device_config_flash.data.roomname != NULL) {
+    if (device_config_flash.data.roomname[0] != '\0') {
         netif_set_hostname(netif_default, device_config_flash.data.roomname);
     }
 
