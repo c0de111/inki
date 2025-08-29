@@ -28,6 +28,7 @@ typedef struct {
     http_session_state_t state;
     bool header_complete;
     bool transfer_complete;
+    bool fallback_mode; // true when response has no Content-Length (connection-close delimits body)
     
     // Header processing
     char header_buffer[2048];

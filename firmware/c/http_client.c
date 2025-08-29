@@ -44,8 +44,6 @@ static bool g_transfer_was_successful = false;
 static bool sync_operation_complete = false;
 static bool sync_operation_success = false;
 
-
-
 // === Helper Functions ===
 
 /**
@@ -61,6 +59,7 @@ static void reset_session(http_session_t* session) {
     session->state = HTTP_SESSION_INACTIVE;
     session->header_complete = false;
     session->transfer_complete = false;
+    session->fallback_mode = false;
     session->header_length = 0;
     session->expected_length = 0;
     session->total_received = 0;
@@ -144,10 +143,11 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         session->pcb = NULL;
         
         // Handle fallback mode (no Content-Length): connection close marks completion
-        if (session->active && !session->transfer_complete && session->header_complete && session->expected_length == 0) {
+        if (session->active && !session->transfer_complete && session->header_complete && session->fallback_mode) {
             if (session->body_buffer && session->total_received > 0) {
                 session->body_buffer[session->total_received] = '\0';
                 session->transfer_complete = true;
+                g_transfer_was_successful = true;
                 if (session->completion_callback) {
                     session->completion_callback(session->body_buffer, session->total_received, true, session->callback_arg);
                 }
@@ -225,11 +225,29 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                     return ERR_OK;
                 }
 
+                // Reject unsupported Transfer-Encoding: chunked
+                const char* te1 = strstr(session->header_buffer, "Transfer-Encoding:");
+                const char* te2 = te1 ? te1 : strstr(session->header_buffer, "transfer-encoding:");
+                if (te2 && (strstr(te2, "chunked") || strstr(te2, "Chunked"))) {
+                    debug_log_with_color(COLOR_RED, "[HTTP] Chunked transfer-encoding not supported\n");
+                    altcp_recved(pcb, p->tot_len);
+                    pbuf_free(p);
+                    altcp_close(pcb);
+                    session->state = HTTP_SESSION_ERROR;
+                    session->last_error = ERR_VAL;
+                    if (session->completion_callback) {
+                        session->completion_callback(NULL, 0, false, session->callback_arg);
+                    }
+                    reset_session(session);
+                    return ERR_OK;
+                }
+
                 // Parse Content-Length
                 int content_length = parse_content_length(session->header_buffer);
-                if (content_length <= 0) {
+                if (content_length < 0) {
                     // No Content-Length: start fallback dynamic accumulation
-                    session->expected_length = 0;  // fallback mode
+                    session->fallback_mode = true;
+                    session->expected_length = 0;  // not used in fallback mode
                     session->body_buffer = NULL;
                     session->body_buffer_size = 0;
                     session->total_received = 0;
@@ -257,7 +275,24 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         session->body_buffer_size = body_in_header + 1;
                         debug_log("[HTTP] Fallback: captured %d body bytes in header packet\n", (int)body_in_header);
                     }
+                } else if (content_length == 0) {
+                    // Explicit zero-length body; complete immediately
+                    session->fallback_mode = false;
+                    session->expected_length = 0;
+                    session->total_received = 0;
+                    session->transfer_complete = true;
+                    session->state = HTTP_SESSION_COMPLETE;
+                    if (session->completion_callback) {
+                        session->completion_callback("", 0, true, session->callback_arg);
+                    }
+                    altcp_recved(pcb, p->tot_len);
+                    pbuf_free(p);
+                    altcp_close(pcb);
+                    session->pcb = NULL;
+                    reset_session(session);
+                    return ERR_OK;
                 } else {
+                    session->fallback_mode = false;
                     session->expected_length = content_length;
                     debug_log("[HTTP] Content-Length: %d bytes\n", content_length);
 
@@ -301,7 +336,7 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
 
         // === Phase 2: Body reception ===
         if (session->active && session->header_complete) {
-            if (session->expected_length == 0) {
+            if (session->fallback_mode) {
                 // Fallback mode: dynamically grow body buffer
                 if (step > 0) {
                     size_t needed = session->total_received + (size_t)step + 1;
@@ -355,7 +390,7 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     pbuf_free(p);
 
     // Check for completion in Content-Length mode
-    if (session->header_complete && session->expected_length > 0 &&
+    if (session->header_complete && !session->fallback_mode && session->expected_length > 0 &&
         session->total_received >= session->expected_length) {
         goto transfer_complete;
     }
@@ -418,6 +453,13 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
                              "[HTTP] Failed to send request: %d\n", write_err);
         session->state = HTTP_SESSION_ERROR;
         session->last_error = write_err;
+        // Close and reset to avoid dangling PCB or leaks
+        altcp_close(pcb);
+        session->pcb = NULL;
+        if (session->completion_callback) {
+            session->completion_callback(NULL, 0, false, session->callback_arg);
+        }
+        reset_session(session);
         return write_err;
     }
 
@@ -450,6 +492,8 @@ static void http_error_callback(void* arg, err_t err) {
         if (session->completion_callback) {
             session->completion_callback(NULL, 0, false, session->callback_arg);
         }
+        // Ensure all buffers and state are cleaned up on error
+        reset_session(session);
     } else {
         // Transfer was successful, connection close is normal
         debug_log("[HTTP] TCP connection closed normally after successful transfer\n");
