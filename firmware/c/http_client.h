@@ -10,6 +10,23 @@
 #include "lwip/err.h"
 #include "wifi.h"
 
+// Tunable limits and buffer sizes
+#ifndef HTTP_RECV_SLICE
+#define HTTP_RECV_SLICE 1500   // bytes processed per pbuf slice (approx. MTU)
+#endif
+
+#ifndef HTTP_HEADER_MAX
+#define HTTP_HEADER_MAX 4096   // max accumulated header size before CRLFCRLF
+#endif
+
+#ifndef HTTP_JSON_BODY_MAX
+#define HTTP_JSON_BODY_MAX 512 // historian JSON-RPC body build buffer
+#endif
+
+#ifndef HTTP_REQUEST_MAX
+#define HTTP_REQUEST_MAX 1024  // max HTTP request length we build
+#endif
+
 // HTTP session states
 typedef enum {
     HTTP_SESSION_INACTIVE,
@@ -31,7 +48,7 @@ typedef struct {
     bool fallback_mode; // true when response has no Content-Length (connection-close delimits body)
     
     // Header processing
-    char header_buffer[2048];
+    char header_buffer[HTTP_HEADER_MAX];
     size_t header_length;
     
     // Body processing - dynamic allocation
