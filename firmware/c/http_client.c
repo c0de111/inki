@@ -1,13 +1,14 @@
 /**
  * @file http_client.c
- * @brief HTTP client with chunked transfer support
+ * @brief Minimal HTTP/1.0 client (no chunked TE)
  * 
  * This module provides a HTTP client implementation. It supports:
- * - Dynamic memory allocation based on Content-Length
+ * - Dynamic body accumulation with Content-Length
  * - HTTP header/body separation
- * - Fallback mode for responses without Content-Length
+ * - Fallback mode for responses without Content-Length (connection-close)
  * - Session-based connection management
  * - Async callback processing ready for historian integration
+ * - Transfer-Encoding: chunked is NOT supported (explicitly rejected)
  * 
  */
 
@@ -165,7 +166,7 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     }
 
     // Buffer for streaming slices
-    char chunk[1500];
+    char chunk[HTTP_RECV_SLICE];
     size_t offset = 0;
     
     while (offset < p->tot_len) {
@@ -785,7 +786,7 @@ static int historian_build_http_request(char* buffer, size_t buffer_size,
                                        uint64_t start_time_ms,
                                        uint64_t end_time_ms) {
     // Build JSON-RPC body (using exact esign format without "jsonrpc":"2.0")
-    static char json_body[512];
+    static char json_body[HTTP_JSON_BODY_MAX];
     int json_len = snprintf(json_body, sizeof(json_body),
                            "{"
                            "\"id\":%d,"
@@ -876,7 +877,7 @@ static WifiResult wifi_connect() {
  */
 static bool historian_make_request(void) {
     // Helper manages its own buffer
-    static char http_request[1024];
+    static char http_request[HTTP_REQUEST_MAX];
     
     // Get values from historian config
     char historian_host[16];  // "xxx.xxx.xxx.xxx" format
@@ -940,7 +941,7 @@ static bool seatsurfing_make_request(void) {
     base64_encode(userpass, strlen(userpass), auth_b64, sizeof(auth_b64));
     
     // Construct HTTP/1.0 request
-    char header[1024];
+    char header[HTTP_REQUEST_MAX];
     snprintf(header, sizeof(header),
             "GET /location/%s/space/%s/availability HTTP/1.0\r\n"
             "Host: %s\r\n"
