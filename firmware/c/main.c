@@ -26,10 +26,6 @@
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
 #endif
 
-// HTTP client functionality moved to http_client.c
-
-// static char submitted_text[128] = "";
-
 #ifdef USE_CASE_HISTORIAN
 // Historian data storage
 static TimeSeries historian_data = {0};

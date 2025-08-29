@@ -37,11 +37,10 @@ __attribute__((section(".historian_config")))
 __attribute__((used))
 const historian_config_t default_historian_config = {
     .data = {
-        .host = "historian.local",
-        .port = 8080,
+        .ip = {192, 168, 178, 42},
+        .port = 81,
         .path = "/query/jsonrpc.gy", 
-        .timeout_ms = 10000,
-        .datapoint_id = 12345,
+        .datapoint_id = 75,
         .hours_back = 24,
         .display_name = "Temperature Sensor"
     },

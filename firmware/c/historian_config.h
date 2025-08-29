@@ -89,10 +89,9 @@ typedef struct {
  * Configuration is stored in flash and can be modified via web interface.
  */
 typedef struct {
-    char host[HISTORIAN_HOST_MAX_LEN];     ///< Hostname or IP address of CCU-Historian server
-    uint16_t port;                         ///< TCP port number (typically 8080 for CCU-Historian)
+    uint8_t ip[4];                         ///< IP address bytes (e.g. {192, 168, 178, 42})
+    uint16_t port;                         ///< TCP port number (typically 81 for CCU-Historian)
     char path[HISTORIAN_PATH_MAX_LEN];     ///< API endpoint path (typically "/query/jsonrpc.gy")
-    int timeout_ms;                        ///< HTTP request timeout in milliseconds
     int datapoint_id;                      ///< Default datapoint ID to query from historian database
     int hours_back;                        ///< Default time window in hours for data retrieval
     char display_name[HISTORIAN_NAME_MAX_LEN]; ///< Human-readable name for the data source

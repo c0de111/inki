@@ -670,22 +670,21 @@ void send_historian_config_page(struct tcp_pcb* tpcb, const char* message) {
 
              snprintf(page + strlen(page), sizeof(page) - strlen(page),
              "<form method=\"POST\" action=\"/historian\">"
-             "<label>Server Host:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
+             "<label>Server IP:<br><input type=\"text\" name=\"text1\" value=\"%d.%d.%d.%d\"></label>"
              "<label>Port:<br><input type=\"number\" name=\"text2\" value=\"%d\"></label>"
              "<label>API Path:<br><input type=\"text\" name=\"text3\" value=\"%s\"></label>"
-             "<label>Timeout (ms):<br><input type=\"number\" name=\"text4\" value=\"%d\"></label>"
-             "<label>Datapoint ID:<br><input type=\"number\" name=\"text5\" value=\"%d\"></label>"
-             "<label>Hours Back:<br><input type=\"number\" name=\"text6\" value=\"%d\"></label>"
-             "<label>Display Name:<br><input type=\"text\" name=\"text7\" value=\"%s\"></label>"
+             "<label>Datapoint ID:<br><input type=\"number\" name=\"text4\" value=\"%d\"></label>"
+             "<label>Hours Back:<br><input type=\"number\" name=\"text5\" value=\"%d\"></label>"
+             "<label>Display Name:<br><input type=\"text\" name=\"text6\" value=\"%s\"></label>"
              "<input type=\"submit\" value=\"store\">"
              "</form>"
              "<a href=\"/\">Back to Start</a>"
              "<p>%s</p>"
              "</body></html>",
-             historian_config_flash.data.host,
+             historian_config_flash.data.ip[0], historian_config_flash.data.ip[1],
+             historian_config_flash.data.ip[2], historian_config_flash.data.ip[3],
              historian_config_flash.data.port,
              historian_config_flash.data.path,
-             historian_config_flash.data.timeout_ms,
              historian_config_flash.data.datapoint_id,
              historian_config_flash.data.hours_back,
              historian_config_flash.data.display_name,
@@ -1085,13 +1084,25 @@ void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len) {
 
     historian_config_t new_cfg = { .crc32 = 0 };
 
-    strncpy(new_cfg.data.host,         result.text[0], sizeof(new_cfg.data.host)         - 1);
+    // Parse IP address from text1 (format: "192.168.178.42")
+    int ip1, ip2, ip3, ip4;
+    if (sscanf(result.text[0], "%d.%d.%d.%d", &ip1, &ip2, &ip3, &ip4) == 4) {
+        new_cfg.data.ip[0] = (uint8_t)ip1;
+        new_cfg.data.ip[1] = (uint8_t)ip2;
+        new_cfg.data.ip[2] = (uint8_t)ip3;
+        new_cfg.data.ip[3] = (uint8_t)ip4;
+    } else {
+        // Default IP on parse error
+        new_cfg.data.ip[0] = 192;
+        new_cfg.data.ip[1] = 168;
+        new_cfg.data.ip[2] = 178;
+        new_cfg.data.ip[3] = 42;
+    }
     new_cfg.data.port = (uint16_t)atoi(result.text[1]);
     strncpy(new_cfg.data.path,         result.text[2], sizeof(new_cfg.data.path)         - 1);
-    new_cfg.data.timeout_ms = atoi(result.text[3]);
-    new_cfg.data.datapoint_id = atoi(result.text[4]);
-    new_cfg.data.hours_back = atoi(result.text[5]);
-    strncpy(new_cfg.data.display_name, result.text[6], sizeof(new_cfg.data.display_name) - 1);
+    new_cfg.data.datapoint_id = atoi(result.text[3]);
+    new_cfg.data.hours_back = atoi(result.text[4]);
+    strncpy(new_cfg.data.display_name, result.text[5], sizeof(new_cfg.data.display_name) - 1);
 
     bool ok = save_historian_config(&new_cfg);
     if (ok) {

@@ -791,22 +791,18 @@ static bool historian_make_request(void) {
     // Helper manages its own buffer
     static char http_request[1024];
     
-    // TODO: Get from historian config
-    const char* historian_host = "192.168.178.42";  // Default for testing
-    int datapoint_id = 75;                          // Default temperature sensor
-    int hours_back = 24;                           // Last 24 hours
+    // Get values from historian config
+    char historian_host[16];  // "xxx.xxx.xxx.xxx" format
+    snprintf(historian_host, sizeof(historian_host), "%d.%d.%d.%d",
+             historian_config_flash.data.ip[0], historian_config_flash.data.ip[1],
+             historian_config_flash.data.ip[2], historian_config_flash.data.ip[3]);
+    int datapoint_id = historian_config_flash.data.datapoint_id;
+    int hours_back = historian_config_flash.data.hours_back;
 
     // Calculate time window using inki's RTC
     extern ds3231_t ds3231;  // Global RTC instance from main.c
     uint64_t end_time = historian_get_current_unix_ms(&ds3231); // from now to
     uint64_t start_time = historian_get_unix_ms_hours_ago(&ds3231, hours_back); // hours_back
-
-    // Debug time window (commented out for production)
-    // char time_str[64];
-    // historian_unix_ms_to_local_string(start_time, time_str, sizeof(time_str));
-    // debug_log("[HISTORIAN] Start time: %s (%llu ms)\n", time_str, start_time);
-    // historian_unix_ms_to_local_string(end_time, time_str, sizeof(time_str));
-    // debug_log("[HISTORIAN] End time: %s (%llu ms)\n", time_str, end_time);
 
     int request_len = historian_build_http_request(http_request, sizeof(http_request),
                                                   historian_host, datapoint_id, 
@@ -820,15 +816,16 @@ static bool historian_make_request(void) {
     debug_log("[HISTORIAN] Constructed HTTP request:\n%s\n", http_request);
     watchdog_update();
 
-    // Set up IP address (historian-specific)
+    // Set up IP address from config
     ip_addr_t ip;
-    IP4_ADDR(&ip, 192, 168, 178, 42);  // Default historian server IP
+    IP4_ADDR(&ip, historian_config_flash.data.ip[0], historian_config_flash.data.ip[1], 
+             historian_config_flash.data.ip[2], historian_config_flash.data.ip[3]);
 
     sync_operation_complete = false;
     sync_operation_success = false;
 
     // Make HTTP request (unified callback)
-    http_result_t result = http_request_async(&ip, 81, http_request, 
+    http_result_t result = http_request_async(&ip, historian_config_flash.data.port, http_request, 
                                              unified_completion_callback, NULL);
     
     if (result != HTTP_SUCCESS) {

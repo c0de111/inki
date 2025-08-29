@@ -22,7 +22,7 @@ typedef enum {
     HTTP_SESSION_ERROR
 } http_session_state_t;
 
-// HTTP session structure (based on historian architecture)
+// HTTP session structure
 typedef struct {
     bool active;
     http_session_state_t state;
@@ -72,10 +72,10 @@ typedef enum {
 // Initialize HTTP client system
 bool http_client_init(void);
 
-// SeatSurfing compatibility function
+// manages wifi communication and requests
 WifiResult wifi_server_communication(float voltage);
 
-// Main HTTP request function - handles both SeatSurfing and historian
+// Main HTTP request function
 http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port, 
                                 const char* request_data,
                                 void (*callback)(const char* body, size_t length, bool success, void* arg),
@@ -83,8 +83,6 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
 
 // Session management
 bool http_session_is_active(void);
-
-
 
 // Universal callback system for all use cases
 typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
