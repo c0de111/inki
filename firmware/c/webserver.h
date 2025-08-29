@@ -41,7 +41,11 @@ extern "C" {
         UPLOAD_LOGO,
         UPLOAD_FIRMWARE,
         UPLOAD_FORM_WIFI,
+#ifdef USE_CASE_SEATSURFING
         UPLOAD_FORM_SEATSURFING,
+#elif defined(USE_CASE_HISTORIAN)
+        UPLOAD_FORM_HISTORIAN,
+#endif
         UPLOAD_FORM_DEVICE,
         UPLOAD_FORM_CLOCK
     } upload_type_t;

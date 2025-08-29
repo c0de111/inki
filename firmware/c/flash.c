@@ -275,6 +275,7 @@ void init_wifi_config(wifi_config_t* out_config) {
 
 // ------------------------------
 // Seatsurfing config functions
+#ifdef USE_CASE_SEATSURFING
 // ------------------------------
 bool load_seatsurfing_config(seatsurfing_config_t* out_config) {
     const seatsurfing_config_t* flash_config = (const seatsurfing_config_t*)FLASH_PTR(SEATSURFING_CONFIG_FLASH_OFFSET);
@@ -304,6 +305,37 @@ void init_seatsurfing_config(seatsurfing_config_t* out_config) {
         *out_config = seatsurfing_config_flash;
     }
 }
+#elif defined(USE_CASE_HISTORIAN)
+// ------------------------------
+bool load_historian_config(historian_config_t* out_config) {
+    const historian_config_t* flash_config = (const historian_config_t*)FLASH_PTR(HISTORIAN_CONFIG_FLASH_OFFSET);
+    memcpy(out_config, flash_config, sizeof(historian_config_t));
+
+    uint32_t expected_crc = calc_crc32(&out_config->data, sizeof(historian_config_data_t));
+    return (expected_crc == out_config->crc32);
+}
+
+bool save_historian_config(const historian_config_t* in_config) {
+    historian_config_t temp = *in_config;
+    temp.crc32 = calc_crc32(&temp.data, sizeof(historian_config_data_t));
+
+    const uint32_t sector_offset = HISTORIAN_CONFIG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
+    flash_range_program(HISTORIAN_CONFIG_FLASH_OFFSET, (const uint8_t*)&temp, sizeof(historian_config_t));
+    restore_interrupts(ints);
+
+    return true;
+}
+
+void init_historian_config(historian_config_t* out_config) {
+    if (!load_historian_config(out_config)) {
+        save_historian_config(&historian_config_flash);
+        *out_config = historian_config_flash;
+    }
+}
+#endif
 
 // ------------------------------
 // Device config functions
@@ -339,4 +371,9 @@ void init_device_config(device_config_t* out_config) {
 
 const void* keep_device_config_flash = &device_config_flash;
 const void* keep_wifi_config_flash = &wifi_config_flash;
+
+#ifdef USE_CASE_SEATSURFING
 const void* keep_seatsurfing_config_flash = &seatsurfing_config_flash;
+#elif defined(USE_CASE_HISTORIAN)
+const void* keep_historian_config_flash = &historian_config_flash;
+#endif

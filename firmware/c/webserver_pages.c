@@ -63,7 +63,11 @@ void send_landing_page(struct tcp_pcb *tpcb) {
     strcat(page,
            "<h1>inki Setup</h1>"
            "<a href=\"/wifi\">Wi-Fi Settings</a><br>"
+#ifdef USE_CASE_SEATSURFING
            "<a href=\"/seatsurfing\">Seatsurfing Settings</a><br>"
+#elif defined(USE_CASE_HISTORIAN)
+           "<a href=\"/historian\">Historian Settings</a><br>"
+#endif
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
            "<a href=\"/device_status\">Device Status</a><br>"
@@ -562,6 +566,7 @@ void send_wifi_config_page(struct tcp_pcb *tpcb, const char *message) {
     send_response(tpcb, page);
 }
 
+#ifdef USE_CASE_SEATSURFING
 /**
  * @brief Generates and sends the SeatSurfing API configuration page
  * @param tpcb TCP connection pointer
@@ -628,6 +633,67 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
 
     send_response(tpcb, page);
 }
+#elif defined(USE_CASE_HISTORIAN)
+/**
+ * @brief Generates and sends the Historian API configuration page
+ * @param tpcb TCP connection pointer
+ * @param message Status message to display (save confirmation/error)
+ * 
+ * Creates an HTML form for Historian integration settings including
+ * server URL, port, API path, and datapoint configuration.
+ */
+void send_historian_config_page(struct tcp_pcb* tpcb, const char* message) {
+    char page[2048];
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head>"
+             "<meta charset=\"UTF-8\">"
+             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+             "<meta http-equiv=\"refresh\" content=\"30\">"
+             "<title>Historian Configuration</title>"
+             "<style>"
+             "body { font-family: sans-serif; text-align: center; }"
+             "form { max-width: 400px; margin: auto; padding: 1em; }"
+             "label { display: block; margin-bottom: 1em; font-size: 1em; }"
+             "input[type='text'], input[type='number'] { width: 100%%; padding: 0.5em; font-size: 1em; }"
+             "input[type='submit'] { padding: 0.6em 1em; font-size: 1em; margin: 0.5em; width: 45%%; max-width: 150px; }"
+             "a { display: inline-block; margin-top: 1.5em; font-size: 0.9em; text-decoration: none; color: #0066cc; }"
+             "</style></head><body>"
+             "<h1>Historian Configuration</h1>");
+
+            if (message && *message) {
+                snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                        "<div class='message'>%s</div>", message);
+            }
+
+             snprintf(page + strlen(page), sizeof(page) - strlen(page),
+             "<form method=\"POST\" action=\"/historian\">"
+             "<label>Server Host:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
+             "<label>Port:<br><input type=\"number\" name=\"text2\" value=\"%d\"></label>"
+             "<label>API Path:<br><input type=\"text\" name=\"text3\" value=\"%s\"></label>"
+             "<label>Timeout (ms):<br><input type=\"number\" name=\"text4\" value=\"%d\"></label>"
+             "<label>Datapoint ID:<br><input type=\"number\" name=\"text5\" value=\"%d\"></label>"
+             "<label>Hours Back:<br><input type=\"number\" name=\"text6\" value=\"%d\"></label>"
+             "<label>Display Name:<br><input type=\"text\" name=\"text7\" value=\"%s\"></label>"
+             "<input type=\"submit\" value=\"store\">"
+             "</form>"
+             "<a href=\"/\">Back to Start</a>"
+             "<p>%s</p>"
+             "</body></html>",
+             historian_config_flash.data.host,
+             historian_config_flash.data.port,
+             historian_config_flash.data.path,
+             historian_config_flash.data.timeout_ms,
+             historian_config_flash.data.datapoint_id,
+             historian_config_flash.data.hours_back,
+             historian_config_flash.data.display_name,
+             timeout_info);
+
+    send_response(tpcb, page);
+}
+#endif
 
 /**
  * @brief Generates and sends the RTC clock configuration page
@@ -949,6 +1015,7 @@ void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
     }
 }
 
+#ifdef USE_CASE_SEATSURFING
 /**
  * @brief Processes SeatSurfing API configuration form submissions
  * @param tpcb TCP connection pointer
@@ -997,6 +1064,44 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
     }
     send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
 }
+#elif defined(USE_CASE_HISTORIAN)
+/**
+ * @brief Processes Historian API configuration form submissions
+ * @param tpcb TCP connection pointer
+ * @param body Form data from HTTP POST request
+ * @param len Length of form data
+ * 
+ * Parses Historian integration settings and saves configuration to flash memory.
+ */
+void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
+
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    web_submission_t result = {0};
+
+    parse_form_fields(body, len, &result);
+
+    historian_config_t new_cfg = { .crc32 = 0 };
+
+    strncpy(new_cfg.data.host,         result.text[0], sizeof(new_cfg.data.host)         - 1);
+    new_cfg.data.port = (uint16_t)atoi(result.text[1]);
+    strncpy(new_cfg.data.path,         result.text[2], sizeof(new_cfg.data.path)         - 1);
+    new_cfg.data.timeout_ms = atoi(result.text[3]);
+    new_cfg.data.datapoint_id = atoi(result.text[4]);
+    new_cfg.data.hours_back = atoi(result.text[5]);
+    strncpy(new_cfg.data.display_name, result.text[6], sizeof(new_cfg.data.display_name) - 1);
+
+    bool ok = save_historian_config(&new_cfg);
+    if (ok) {
+        debug_log_with_color(COLOR_YELLOW, "Historian-Konfiguration gespeichert.\n");
+    } else {
+        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Historian-Konfiguration.\n");
+    }
+    send_historian_config_page(tpcb, "✔ historian settings stored");
+}
+#endif
 
 /**
  * @brief Processes device configuration form submissions

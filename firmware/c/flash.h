@@ -5,6 +5,10 @@
 #include "device_config.h"
 #include "wifi_config.h"
 
+#ifdef USE_CASE_HISTORIAN
+#include "historian_config.h"
+#endif
+
 // #include "pico/flash.h"
 #include <stddef.h>
 
@@ -45,8 +49,16 @@ _Static_assert(FIRMWARE_MAGIC_LEN == 13, "FIRMWARE_MAGIC_LEN mismatch");
 // Configuration blocks (each 4 KB = 1 flash sector)
 #define WIFI_CONFIG_FLASH_OFFSET          (CONFIG_FLASH_OFFSET + 0x0000)  // 0x1E7000 - Wi-Fi credentials
 #define wifi_config_flash (*(const wifi_config_t*)FLASH_PTR(WIFI_CONFIG_FLASH_OFFSET))
+
+// Use case specific configuration - same flash offset for both (build-time selection)
+#ifdef USE_CASE_SEATSURFING
 #define SEATSURFING_CONFIG_FLASH_OFFSET   (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Seatsurfing API settings
 #define seatsurfing_config_flash (*(const seatsurfing_config_t*)FLASH_PTR(SEATSURFING_CONFIG_FLASH_OFFSET))
+#elif defined(USE_CASE_HISTORIAN)
+#define HISTORIAN_CONFIG_FLASH_OFFSET     (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Historian API settings  
+#define historian_config_flash (*(const historian_config_t*)FLASH_PTR(HISTORIAN_CONFIG_FLASH_OFFSET))
+#endif
+
 #define DEVICE_CONFIG_FLASH_OFFSET        (CONFIG_FLASH_OFFSET + 0x2000)  // 0x1E9000 - Device and UI configuration
 #define device_config_flash (*(const device_config_t*)FLASH_PTR(DEVICE_CONFIG_FLASH_OFFSET))
 
@@ -101,10 +113,16 @@ bool load_wifi_config(wifi_config_t* out);
 bool save_wifi_config(const wifi_config_t* in);
 void init_wifi_config(wifi_config_t* out);
 
-/* Seatsurfing config */
+/* Use case specific config */
+#ifdef USE_CASE_SEATSURFING
 bool load_seatsurfing_config(seatsurfing_config_t* out);
 bool save_seatsurfing_config(const seatsurfing_config_t* in);
 void init_seatsurfing_config(seatsurfing_config_t* out);
+#elif defined(USE_CASE_HISTORIAN)
+bool load_historian_config(historian_config_t* out);
+bool save_historian_config(const historian_config_t* in);
+void init_historian_config(historian_config_t* out);
+#endif
 
 /* Device config */
 bool load_device_config(device_config_t* out);

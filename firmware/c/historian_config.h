@@ -74,20 +74,43 @@ typedef struct {
     float last_value;           ///< Most recent measurement value (for current display)
 } TimeSeries;
 
+// =============================================================================
+// HISTORIAN CONFIGURATION STRUCTURES
+// =============================================================================
+
+#define HISTORIAN_HOST_MAX_LEN     64
+#define HISTORIAN_PATH_MAX_LEN     64
+#define HISTORIAN_NAME_MAX_LEN     32
+
 /**
- * @brief Historian server connection and query configuration
+ * @brief Historian server connection and query configuration data
  * 
  * Defines connection parameters for CCU-Historian server and default query settings.
  * Configuration is stored in flash and can be modified via web interface.
  */
 typedef struct {
-    char host[64];              ///< Hostname or IP address of CCU-Historian server
-    uint16_t port;              ///< TCP port number (typically 8080 for CCU-Historian)
-    char path[64];              ///< API endpoint path (typically "/query/jsonrpc.gy")
-    int timeout_ms;             ///< HTTP request timeout in milliseconds
-    int datapoint_id;           ///< Default datapoint ID to query from historian database
-    int hours_back;             ///< Default time window in hours for data retrieval
-} HistorianConfig;
+    char host[HISTORIAN_HOST_MAX_LEN];     ///< Hostname or IP address of CCU-Historian server
+    uint16_t port;                         ///< TCP port number (typically 8080 for CCU-Historian)
+    char path[HISTORIAN_PATH_MAX_LEN];     ///< API endpoint path (typically "/query/jsonrpc.gy")
+    int timeout_ms;                        ///< HTTP request timeout in milliseconds
+    int datapoint_id;                      ///< Default datapoint ID to query from historian database
+    int hours_back;                        ///< Default time window in hours for data retrieval
+    char display_name[HISTORIAN_NAME_MAX_LEN]; ///< Human-readable name for the data source
+} historian_config_data_t;
+
+/**
+ * @brief Complete historian configuration structure with CRC protection
+ * 
+ * Wraps historian configuration data with CRC32 checksum for flash storage integrity.
+ * Follows the same pattern as seatsurfing_config_t and device_config_t.
+ */
+typedef struct {
+    historian_config_data_t data;
+    uint32_t crc32;
+} historian_config_t;
+
+// Legacy typedef for backward compatibility
+typedef historian_config_data_t HistorianConfig;
 
 /**
  * @brief Graph display options for ePaper rendering

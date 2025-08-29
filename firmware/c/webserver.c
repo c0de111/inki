@@ -146,9 +146,15 @@ static void send_wifi_config_page_wrapper(struct tcp_pcb *tpcb) {
     send_wifi_config_page(tpcb, "");
 }
 
+#ifdef USE_CASE_SEATSURFING
 static void send_seatsurfing_config_page_wrapper(struct tcp_pcb *tpcb) {
     send_seatsurfing_config_page(tpcb, "");
 }
+#elif defined(USE_CASE_HISTORIAN)
+static void send_historian_config_page_wrapper(struct tcp_pcb *tpcb) {
+    send_historian_config_page(tpcb, "");
+}
+#endif
 
 static void send_device_config_page_wrapper(struct tcp_pcb *tpcb) {
     send_device_config_page(tpcb, "");
@@ -215,9 +221,15 @@ static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp
             case UPLOAD_FORM_WIFI:
                 handle_form_wifi(tpcb, upload_session.form_buffer, upload_session.expected_length);
                 break;
+#ifdef USE_CASE_SEATSURFING
             case UPLOAD_FORM_SEATSURFING:
                 handle_form_seatsurfing(tpcb, upload_session.form_buffer, upload_session.expected_length);
                 break;
+#elif defined(USE_CASE_HISTORIAN)
+            case UPLOAD_FORM_HISTORIAN:
+                handle_form_historian(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+#endif
             case UPLOAD_FORM_DEVICE:
                 handle_form_device_config(tpcb, upload_session.form_buffer, upload_session.expected_length);
                 break;
@@ -438,6 +450,7 @@ static err_t send_next_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
 // 4. Form handlers: collect data, call handle_form_xxx() (create in webserver_pages.c)
 // 5. Binary handlers: setup upload_session, let chunked logic handle it
 
+#ifdef USE_CASE_SEATSURFING
 static void handle_post_seatsurfing(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
@@ -482,6 +495,52 @@ static void handle_post_seatsurfing(struct tcp_pcb* tpcb, struct pbuf* p, const 
         tcp_close(tpcb);
     }
 }
+#elif defined(USE_CASE_HISTORIAN)
+static void handle_post_historian(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+    const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
+    if (!cl) {
+        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: Content-Length missing\n");
+        send_historian_config_page(tpcb, "Missing Content-Length");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.expected_length = atoi(cl + 15);
+    if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
+        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: form body too large\n");
+        send_historian_config_page(tpcb, "Form data too large");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.active = true;
+    upload_session.total_received = 0;
+    upload_session.type = UPLOAD_FORM_HISTORIAN;
+
+    const char* body = strstr(upload_session.header_buffer, "\r\n\r\n");
+    if (body) {
+        body += 4;
+        size_t body_len = upload_session.header_length - (body - upload_session.header_buffer);
+        memcpy(upload_session.form_buffer, body, body_len);
+        upload_session.total_received = body_len;
+        tcp_recved(tpcb, copied);
+
+        debug_log("UPLOAD HISTORIAN CONFIG: First POST /historian body chunk (%d bytes)\n", (int)body_len);
+
+        if (upload_session.total_received >= upload_session.expected_length) {
+            upload_session.form_buffer[upload_session.expected_length] = '\0';
+            handle_form_historian(tpcb, upload_session.form_buffer, upload_session.expected_length);
+            upload_session.active = false;
+            upload_session.header_complete = false;
+            upload_session.header_length = 0;
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: Header body split error\n");
+        send_historian_config_page(tpcb, "Fehler beim Parsen des Formulars");
+        tcp_close(tpcb);
+    }
+}
+#endif
 
 static void handle_post_device_config(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
@@ -785,7 +844,11 @@ static const route_t routes[] = {
     // GET routes
     {"/", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_landing_page}},
     {"/wifi", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_wifi_config_page_wrapper}},
+#ifdef USE_CASE_SEATSURFING
     {"/seatsurfing", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_seatsurfing_config_page_wrapper}},
+#elif defined(USE_CASE_HISTORIAN)
+    {"/historian", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_historian_config_page_wrapper}},
+#endif
     {"/device_settings", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_config_page_wrapper}},
     {"/clock", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_clock_page_wrapper}},
     {"/device_status", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_status_page}},
@@ -802,7 +865,11 @@ static const route_t routes[] = {
     // POST routes
     {"/delete_logo", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_delete_logo_route}},
     {"/wifi", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_wifi}},
+#ifdef USE_CASE_SEATSURFING
     {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfing}},
+#elif defined(USE_CASE_HISTORIAN)
+    {"/historian", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_historian}},
+#endif
     {"/device_config", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_device_config}},
     {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clock}},
     {"/upload_logo", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_upload_logo}},
@@ -971,7 +1038,11 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         }
     } else if (upload_session.active && 
                (upload_session.type == UPLOAD_FORM_WIFI ||
+#ifdef USE_CASE_SEATSURFING
                 upload_session.type == UPLOAD_FORM_SEATSURFING ||
+#elif defined(USE_CASE_HISTORIAN)
+                upload_session.type == UPLOAD_FORM_HISTORIAN ||
+#endif
                 upload_session.type == UPLOAD_FORM_DEVICE ||
                 upload_session.type == UPLOAD_FORM_CLOCK)) {
         process_form_upload_chunk(buffer, copied, tpcb);
