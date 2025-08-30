@@ -207,6 +207,9 @@ void parse_form_fields(const char *body, int len, web_submission_t *result) {
         else if (key_len == 5 && strncmp(key, "month", 5) == 0) result->month = atoi(value_buf);
         else if (key_len == 4 && strncmp(key, "year", 4) == 0) result->year = atoi(value_buf);
 
+        // Generic unit for timing (e.g., Morse unit)
+        else if (key_len == 7 && strncmp(key, "unit_ms", 7) == 0) result->unit_ms = atoi(value_buf);
+
         // Gerätekonfiguration
         else if (key_len == 8 && strncmp(key, "roomname", 8) == 0) {
             strncpy(result->roomname, value_buf, sizeof(result->roomname) - 1);
