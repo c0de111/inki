@@ -171,6 +171,9 @@ static void send_upload_logo_page_wrapper(struct tcp_pcb *tpcb) {
 static void send_firmware_update_page_wrapper(struct tcp_pcb *tpcb) {
     send_firmware_update_page(tpcb, "");
 }
+static void send_morse_page_wrapper(struct tcp_pcb *tpcb) {
+    send_morse_page(tpcb, "");
+}
 
 // Helper function for consistent cleanup
 static void cleanup_and_return(struct tcp_pcb *tpcb, struct pbuf *p, int copied) {
@@ -542,6 +545,51 @@ static void handle_post_historian(struct tcp_pcb* tpcb, struct pbuf* p, const ch
 }
 #endif
 
+static void handle_post_morse(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+    const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
+    if (!cl) {
+        debug_log_with_color(COLOR_RED, "UPLOAD MORSE: Content-Length missing\n");
+        send_morse_page(tpcb, "Missing Content-Length");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.expected_length = atoi(cl + 15);
+    if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
+        debug_log_with_color(COLOR_RED, "UPLOAD MORSE: form body too large\n");
+        send_morse_page(tpcb, "Form data too large");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.active = true;
+    upload_session.total_received = 0;
+    upload_session.type = UPLOAD_FORM_MORSE;
+
+    const char* body = strstr(upload_session.header_buffer, "\r\n\r\n");
+    if (body) {
+        body += 4;
+        size_t body_len = upload_session.header_length - (body - upload_session.header_buffer);
+        memcpy(upload_session.form_buffer, body, body_len);
+        upload_session.total_received = body_len;
+        tcp_recved(tpcb, copied);
+
+        debug_log("UPLOAD MORSE: First POST /morse body chunk (%d bytes)\n", (int)body_len);
+
+        if (upload_session.total_received >= upload_session.expected_length) {
+            upload_session.form_buffer[upload_session.expected_length] = '\0';
+            handle_form_morse(tpcb, upload_session.form_buffer, upload_session.expected_length);
+            upload_session.active = false;
+            upload_session.header_complete = false;
+            upload_session.header_length = 0;
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "UPLOAD MORSE: Header body split error\n");
+        send_morse_page(tpcb, "Fehler beim Parsen des Formulars");
+        tcp_close(tpcb);
+    }
+}
+
 static void handle_post_device_config(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
     const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
@@ -861,6 +909,7 @@ static const route_t routes[] = {
     // 1. Create send_new_page() function in webserver_pages.c
     // 2. Add declaration to webserver_pages.h  
     // 3. Add route: {"/new_page", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_new_page}},
+    {"/morse", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_morse_page_wrapper}},
     
     // POST routes
     {"/delete_logo", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_delete_logo_route}},
@@ -883,6 +932,7 @@ static const route_t routes[] = {
     // {"/new_form", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_new_form}},
     // {"/new_upload", HTTP_POST, ROUTE_BINARY, {.binary_handler = handle_post_new_upload}},
     // {"/new_action", HTTP_POST, ROUTE_INLINE, {.inline_handler = handle_new_action_route}},
+    {"/morse", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_morse}},
 };
 
 static const size_t num_routes = sizeof(routes) / sizeof(routes[0]);
@@ -1044,7 +1094,8 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                 upload_session.type == UPLOAD_FORM_HISTORIAN ||
 #endif
                 upload_session.type == UPLOAD_FORM_DEVICE ||
-                upload_session.type == UPLOAD_FORM_CLOCK)) {
+                upload_session.type == UPLOAD_FORM_CLOCK ||
+                upload_session.type == UPLOAD_FORM_MORSE)) {
         process_form_upload_chunk(buffer, copied, tpcb);
     }
     if (upload_session.active && upload_session.total_received >= upload_session.expected_length) {
@@ -1217,4 +1268,3 @@ void flush_page_to_flash() {
     flash_writer.flash_offset += FLASH_PAGE_SIZE;
     flash_writer.buffer_filled = 0;
 }
-

@@ -30,6 +30,8 @@
 #include "pico/cyw43_arch.h"
 #include "ds3231.h"
 #include "webserver_utils.h"
+#include "config.h"
+#include "morse.h"
 
 // =============================================================================
 // HTML PAGE GENERATION FUNCTIONS
@@ -71,6 +73,7 @@ void send_landing_page(struct tcp_pcb *tpcb) {
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
            "<a href=\"/device_status\">Device Status</a><br>"
+           "<a href=\"/morse\">Morse Your Message</a><br>"
            "<a href=\"/firmware_update\">Firmware Update</a><br>"
            "<a href=\"/clock\">Set Clock</a><br>"
            "<a href=\"/shutdown\">Reboot</a>");
@@ -83,6 +86,77 @@ void send_landing_page(struct tcp_pcb *tpcb) {
     debug_log("Landing page length: %d\n", strlen(page));
 
     send_response(tpcb, page);
+}
+
+void send_morse_page(struct tcp_pcb* tpcb, const char* message) {
+    char page[4096];
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    const char* info = (message && *message) ? message : "";
+
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head>"
+             "<meta charset=\"UTF-8\">"
+             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+             "<title>Morse Your Message</title>"
+             "<style>body{font-family:sans-serif;max-width:640px;margin:auto;padding:1em;}"
+             "input,textarea,button{font-size:1em;width:100%%;padding:.6em;margin:.4em 0;}"
+             "label{font-weight:bold;display:block;margin-top:.6em;}"
+             "></style></head><body>\n"
+             "<h2>Morse Your Message</h2>\n");
+
+    if (*info) {
+        snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                 "<p style='color:green'>%s</p>", info);
+    }
+
+    snprintf(page + strlen(page), sizeof(page) - strlen(page),
+           "<form method=\"POST\" action=\"/morse\">"
+           "<label for=msg>Message</label>"
+           "<textarea id=msg name=\"text1\" rows=4 maxlength=120 placeholder=\"Type message (A-Z, 0-9, spaces)\"></textarea>"
+           "<label for=unit>Unit (ms)</label>"
+           "<input id=unit name=\"unit_ms\" type=\"number\" min=\"50\" max=\"2000\" step=\"10\" value=\"%d\">"
+           "<button type=submit>Start Morse</button>"
+           "</form>"
+           "<form method=\"POST\" action=\"/morse\" style=\"margin-top:1em\">"
+           "<input type=\"hidden\" name=\"abort\" value=\"1\">"
+           "<button type=submit>Stop</button>"
+           "</form>"
+           "<p><a href=\"/\">Back to Start</a></p>",
+           LED_MORSE_UNIT_MS);
+
+    snprintf(page + strlen(page), sizeof(page) - strlen(page),
+             "<p>%s</p></body></html>", timeout_info);
+
+    send_response(tpcb, page);
+}
+
+void handle_form_morse(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    web_submission_t result;
+    parse_form_fields(body, len, &result);
+
+    if (result.aborted) {
+        morse_set_enabled(false);
+        send_morse_page(tpcb, "Morse stopped");
+        return;
+    }
+
+    const char* msg = result.text[0][0] ? result.text[0] : "INKI";
+
+    // Clamp and set unit timing if provided
+    int unit = result.unit_ms;
+    if (unit >= 50 && unit <= 2000) {
+        morse_set_unit_ms(unit);
+    }
+
+    // Update Morse engine with new message
+    morse_set_message(msg);
+    morse_set_enabled(true);
+
+    char feedback[256];
+    snprintf(feedback, sizeof(feedback), "Morsing started: %s", msg);
+    send_morse_page(tpcb, feedback);
 }
 
 /**

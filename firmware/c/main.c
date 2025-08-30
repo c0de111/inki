@@ -22,6 +22,7 @@
 #include "base64.h"
 #include "historian_config.h"
 #include "led.h"
+#include "morse.h"
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
@@ -2159,19 +2160,10 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
 
     // LED behavior while web interface is active
 #if LED_MORSE_ENABLED
-    // Blink Morse code for "inki"
-    const int unit_ms = LED_MORSE_UNIT_MS;  // Morse time unit
-    const char *morse = ".. -. -.- .."; // i n k i
-    int morse_idx = 0;
-    int morse_phase = 0; // 0=start symbol/space, 1=ON symbol, 2=OFF intra, 3=OFF letter extra, 4=OFF word gap
-    absolute_time_t next_event = make_timeout_time_ms(0);
-    // Ensure LEDs start off, will be driven by state machine
-#if LED_USE_EXT
-    ext_led_off();
-#endif
-#if LED_USE_BOARD
-    board_led_off();
-#endif
+    // Start Morse engine with default message
+    morse_set_unit_ms(LED_MORSE_UNIT_MS);
+    morse_set_message("INKI");
+    morse_set_enabled(true);
 #else
     // Morse disabled: keep LEDs ON solid during setup
 #if LED_USE_EXT
@@ -2185,72 +2177,9 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
         cyw43_arch_poll();
         sleep_ms(50);
 
-        // Morse LED state machine (non-blocking)
+        // Drive Morse engine (non-blocking)
 #if LED_MORSE_ENABLED
-        if (absolute_time_diff_us(get_absolute_time(), next_event) < 0) {
-            int duration = 0;
-            switch (morse_phase) {
-                case 0: { // start next element
-                    char c = morse[morse_idx];
-                    if (c == '\0') {
-                        // End of word: 7 units off and repeat
-#if LED_USE_EXT
-                        ext_led_off();
-#endif
-#if LED_USE_BOARD
-                        board_led_off();
-#endif
-                        duration = 7 * unit_ms;
-                        morse_phase = 4;
-                    } else if (c == ' ') {
-                        // Letter gap extra (we already did 1 unit off after last symbol)
-#if LED_USE_EXT
-                        ext_led_off();
-#endif
-#if LED_USE_BOARD
-                        board_led_off();
-#endif
-                        duration = 2 * unit_ms;
-                        morse_phase = 3;
-                        morse_idx++; // consume space
-                    } else { // '.' or '-'
-#if LED_USE_EXT
-                        ext_led_on();
-#endif
-#if LED_USE_BOARD
-                        board_led_on();
-#endif
-                        duration = (c == '.') ? (1 * unit_ms) : (3 * unit_ms);
-                        morse_phase = 1;
-                    }
-                    break; }
-                case 1: // finish ON for symbol, go OFF for 1 unit
-#if LED_USE_EXT
-                    ext_led_off();
-#endif
-#if LED_USE_BOARD
-                    board_led_off();
-#endif
-                    duration = 1 * unit_ms;
-                    morse_phase = 2;
-                    break;
-                case 2: // end of intra-element gap, advance to next char
-                    morse_idx++;
-                    morse_phase = 0;
-                    duration = 0; // process next immediately
-                    break;
-                case 3: // finished letter gap extra
-                    morse_phase = 0;
-                    duration = 0;
-                    break;
-                case 4: // finished word gap
-                    morse_idx = 0;
-                    morse_phase = 0;
-                    duration = 0;
-                    break;
-            }
-            next_event = (duration > 0) ? make_timeout_time_ms(duration) : make_timeout_time_ms(0);
-        }
+        morse_tick();
 #endif
 
         if (absolute_time_diff_us(get_absolute_time(), last_watchdog_feed) < -2000000) {
