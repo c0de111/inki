@@ -2258,8 +2258,8 @@ int main(void)
 
     debug_log_with_color(COLOR_GREEN, "init real time clock DS3231\n");
     ds3231 = init_clock(); // Initialize clock
-    debug_log_with_color(COLOR_GREEN, "start setup_and_read_pushbuttons\n");
 
+    debug_log_with_color(COLOR_GREEN, "start setup_and_read_pushbuttons\n");
     setup_and_read_pushbuttons();     // Initialize pushbuttons and read their state
 
     // pushbutton = 7; // use for debugging
@@ -2269,6 +2269,12 @@ int main(void)
         debug_log_with_color(COLOR_BOLD_YELLOW, "WiFi setup mode activated (pushbutton 7)\n");
         enter_wifi_setup_mode(&ds3231);  // Launch the WiFi configuration access point and webserver
      //   return 0;  // The device will shut down inside setup mode (after timeout or user action)
+    }
+
+    // Emergency mode: if no ePaper configured, go directly to WiFi setup.
+    if (device_config_flash.data.epapertype == EPAPER_NONE) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "No ePaper configured — entering WiFi setup mode\n");
+        enter_wifi_setup_mode(&ds3231);
     }
 
     debug_log_with_color(COLOR_GREEN, "server_communication\n");
@@ -2288,8 +2294,10 @@ int main(void)
 
     UBYTE* BlackImage = init_epaper();
     if (BlackImage == NULL) {
-        debug_log_with_color(COLOR_RED, "BlackImage buffer memory allocation failed.\n");
-        return -1;
+        debug_log_with_color(COLOR_RED, "ePaper init or buffer allocation failed.\n");
+        // If no ePaper is configured or init failed, fall back to WiFi setup to allow configuration.
+        debug_log_with_color(COLOR_BOLD_YELLOW, "Falling back to WiFi setup mode\n");
+        enter_wifi_setup_mode(&ds3231);
     }
 
     debug_log_with_color(COLOR_GREEN, "render_page\n");

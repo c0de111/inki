@@ -43,7 +43,6 @@
 static http_session_t g_session = {0};
 static bool g_transfer_was_successful = false;
 
-
 // Synchronous operation tracking for both SeatSurfing and historian compatibility
 static bool sync_operation_complete = false;
 static bool sync_operation_success = false;
