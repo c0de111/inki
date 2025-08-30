@@ -29,6 +29,7 @@ add_compile_definitions(PICO_CYW43_ARCH_THREADSAFE_BACKGROUND)
 
 add_executable(inki_slot0
     main.c          # Main application logic
+    led.c           # LED control helpers (external + Pico W)
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture
@@ -47,6 +48,7 @@ add_executable(inki_slot0
 
 add_executable(inki_slot1
     main.c          # Main application logic
+    led.c           # LED control helpers (external + Pico W)
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture

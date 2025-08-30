@@ -93,6 +93,36 @@
 // #define BATTERY_STATUS
 #define HIGH_VERBOSE_DEBUG
 
+// -----------------------------------------------------------------------------
+// LED Configuration
+// -----------------------------------------------------------------------------
+
+// Use external front LED connected to a GPIO (1=enable, 0=disable)
+#ifndef LED_USE_EXT
+#define LED_USE_EXT 1
+#endif
+
+// GPIO number for external LED (default GP16)
+#ifndef LED_EXT_GPIO
+#define LED_EXT_GPIO 16
+#endif
+
+// Use Pico W onboard LED (1=enable, 0=disable)
+// Note: Only usable after cyw43 is initialized (e.g., in Wi‑Fi setup)
+#ifndef LED_USE_BOARD
+#define LED_USE_BOARD 1
+#endif
+
+// Blink Morse code during Wi‑Fi setup (1=enable, 0=disable)
+#ifndef LED_MORSE_ENABLED
+#define LED_MORSE_ENABLED 1
+#endif
+
+// Morse timing unit in milliseconds
+#ifndef LED_MORSE_UNIT_MS
+#define LED_MORSE_UNIT_MS 150
+#endif
+
 
 /**
  * @brief Maximum lengths for Wi-Fi credentials.
