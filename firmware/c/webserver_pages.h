@@ -30,7 +30,7 @@ void send_historian_config_page(struct tcp_pcb* tpcb, const char* message);
 #endif
 void send_clock_page(struct tcp_pcb *tpcb, const char *message);
 void send_device_config_page(struct tcp_pcb* tpcb, const char* message);
-void send_morse_page(struct tcp_pcb* tpcb, const char* message);
+void send_message_page(struct tcp_pcb* tpcb, const char* message);
 
 // Form handler functions
 void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len);
@@ -41,6 +41,6 @@ void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len);
 #endif
 void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len);
 void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len);
-void handle_form_morse(struct tcp_pcb *tpcb, const char *body, size_t len);
+void handle_form_message(struct tcp_pcb *tpcb, const char *body, size_t len);
 
 #endif // WEBSERVER_PAGES_H
