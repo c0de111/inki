@@ -209,6 +209,15 @@ void parse_form_fields(const char *body, int len, web_submission_t *result) {
 
         // Generic unit for timing (e.g., Morse unit)
         else if (key_len == 7 && strncmp(key, "unit_ms", 7) == 0) result->unit_ms = atoi(value_buf);
+        else if (key_len == 6 && strncmp(key, "action", 6) == 0) {
+            strncpy(result->action, value_buf, sizeof(result->action)-1);
+        }
+        else if (key_len == 5 && strncmp(key, "align", 5) == 0) {
+            strncpy(result->align, value_buf, sizeof(result->align)-1);
+        }
+        else if (key_len == 9 && strncmp(key, "font_size", 9) == 0) {
+            strncpy(result->font_size, value_buf, sizeof(result->font_size)-1);
+        }
 
         // Gerätekonfiguration
         else if (key_len == 8 && strncmp(key, "roomname", 8) == 0) {

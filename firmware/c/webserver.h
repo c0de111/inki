@@ -35,6 +35,9 @@ extern "C" {
         int hour, minute, second;
         int day, date, month, year;
         int unit_ms; // generic millisecond value for forms like Morse
+        char action[16];
+        char align[8];
+        char font_size[16];
     } web_submission_t;
 
     typedef enum {
@@ -49,7 +52,7 @@ extern "C" {
 #endif
         UPLOAD_FORM_DEVICE,
         UPLOAD_FORM_CLOCK,
-        UPLOAD_FORM_MORSE
+        UPLOAD_FORM_MESSAGE
     } upload_type_t;
 
     typedef struct {

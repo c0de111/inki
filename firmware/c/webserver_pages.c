@@ -31,6 +31,7 @@
 #include "ds3231.h"
 #include "webserver_utils.h"
 #include "config.h"
+#include "GUI_Paint.h"
 #include "morse.h"
 
 // =============================================================================
@@ -73,7 +74,7 @@ void send_landing_page(struct tcp_pcb *tpcb) {
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
            "<a href=\"/device_status\">Device Status</a><br>"
-           "<a href=\"/morse\">Morse Your Message</a><br>"
+           "<a href=\"/message\">Your Custom Message</a><br>"
            "<a href=\"/firmware_update\">Firmware Update</a><br>"
            "<a href=\"/clock\">Set Clock</a><br>"
            "<a href=\"/shutdown\">Reboot</a>");
@@ -88,7 +89,7 @@ void send_landing_page(struct tcp_pcb *tpcb) {
     send_response(tpcb, page);
 }
 
-void send_morse_page(struct tcp_pcb* tpcb, const char* message) {
+void send_message_page(struct tcp_pcb* tpcb, const char* message) {
     char page[4096];
     char timeout_info[64];
     add_timeout_info(timeout_info, sizeof(timeout_info));
@@ -99,32 +100,47 @@ void send_morse_page(struct tcp_pcb* tpcb, const char* message) {
              "<!DOCTYPE html><html><head>"
              "<meta charset=\"UTF-8\">"
              "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-             "<title>Morse Your Message</title>"
+             "<title>Your Custom Message</title>"
              "<style>body{font-family:sans-serif;max-width:640px;margin:auto;padding:1em;}"
              "input,textarea,button{font-size:1em;width:100%%;padding:.6em;margin:.4em 0;}"
              "label{font-weight:bold;display:block;margin-top:.6em;}"
              "></style></head><body>\n"
-             "<h2>Morse Your Message</h2>\n");
+             "<h2>Your Custom Message</h2>\n");
 
     if (*info) {
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
                  "<p style='color:green'>%s</p>", info);
     }
 
+    bool can_print = (device_config_flash.data.epapertype != EPAPER_NONE);
     snprintf(page + strlen(page), sizeof(page) - strlen(page),
-           "<form method=\"POST\" action=\"/morse\">"
+           "<form method=\"POST\" action=\"/message\">"
            "<label for=msg>Message</label>"
-           "<textarea id=msg name=\"text1\" rows=4 maxlength=120 placeholder=\"Type message (A-Z, 0-9, spaces)\"></textarea>"
+           "<textarea id=msg name=\"text1\" rows=4 maxlength=240 placeholder=\"Type your message\"></textarea>"
+           "<fieldset><legend>Action</legend>"
+           "<label><input type=\"radio\" name=\"action\" value=\"morse\" checked> Morse on LED</label><br>"
+           "<div style=\"padding-left:1em\">"
            "<label for=unit>Unit (ms)</label>"
            "<input id=unit name=\"unit_ms\" type=\"number\" min=\"50\" max=\"2000\" step=\"10\" value=\"%d\">"
-           "<button type=submit>Start Morse</button>"
+           "</div>"
+           "<label><input type=\"radio\" name=\"action\" value=\"print\" %s> Print on ePaper & Power Down</label>"
+           "<div style=\"padding-left:1em\">"
+           "<label for=font>Font size</label>"
+           "<select id=font name=\"font_size\"><option>small</option><option selected>medium</option><option>large</option></select>"
+           "<label for=align>Alignment</label>"
+           "<select id=align name=\"align\"><option>left</option><option selected>center</option></select>"
+           "</div>"
+           "</fieldset>"
+           "<button type=submit>Apply</button>"
            "</form>"
-           "<form method=\"POST\" action=\"/morse\" style=\"margin-top:1em\">"
+           "<form method=\"POST\" action=\"/message\" style=\"margin-top:1em\">"
            "<input type=\"hidden\" name=\"abort\" value=\"1\">"
-           "<button type=submit>Stop</button>"
+           "<input type=\"hidden\" name=\"action\" value=\"morse\">"
+           "<button type=\"submit\">Stop Morse</button>"
            "</form>"
            "<p><a href=\"/\">Back to Start</a></p>",
-           LED_MORSE_UNIT_MS);
+           LED_MORSE_UNIT_MS,
+           can_print ? "" : "disabled");
 
     snprintf(page + strlen(page), sizeof(page) - strlen(page),
              "<p>%s</p></body></html>", timeout_info);
@@ -132,31 +148,106 @@ void send_morse_page(struct tcp_pcb* tpcb, const char* message) {
     send_response(tpcb, page);
 }
 
-void handle_form_morse(struct tcp_pcb *tpcb, const char *body, size_t len) {
+static const sFONT* pick_font(const char* size) {
+    if (!size) return &font_ubuntu_mono_14pt;
+    if (strncmp(size, "large", 5) == 0) return &font_ubuntu_mono_18pt_bold;
+    if (strncmp(size, "small", 5) == 0) return &font_ubuntu_mono_10pt;
+    return &font_ubuntu_mono_14pt;
+}
+
+static void draw_wrapped_text(UBYTE* img, int width, int height, const char* msg, const sFONT* font, bool center) {
+    Paint_SelectImage(img);
+    int margin = 20;
+    int x0 = margin;
+    int y = margin;
+    int max_cols = (width - 2*margin) / font->Width;
+    int line_h = font->Height + 2;
+    if (max_cols < 1) return;
+
+    const char* p = msg;
+    char line[256];
+    while (*p && y + font->Height <= height - margin) {
+        int count = 0;
+        const char* line_start = p;
+        const char* last_space = NULL;
+        while (*p && count < max_cols) {
+            if (*p == ' ') last_space = p;
+            p++; count++;
+        }
+        if (*p && last_space && last_space > line_start) {
+            // wrap at last space
+            int take = last_space - line_start;
+            if (take > (int)sizeof(line)-1) take = sizeof(line)-1;
+            memcpy(line, line_start, take);
+            line[take] = '\0';
+            p = last_space + 1;
+        } else {
+            int take = p - line_start;
+            if (take > (int)sizeof(line)-1) take = sizeof(line)-1;
+            memcpy(line, line_start, take);
+            line[take] = '\0';
+        }
+        int x = x0;
+        if (center) {
+            int line_px = strlen(line) * font->Width;
+            x = (width - line_px) / 2;
+            if (x < margin) x = margin;
+        }
+        Paint_DrawString_EN(x, y, line, (sFONT*)font, WHITE, BLACK);
+        y += line_h;
+    }
+}
+
+void handle_form_message(struct tcp_pcb *tpcb, const char *body, size_t len) {
     web_submission_t result;
     parse_form_fields(body, len, &result);
 
-    if (result.aborted) {
-        morse_set_enabled(false);
-        send_morse_page(tpcb, "Morse stopped");
+    const char* action = (*result.action) ? result.action : "morse";
+    const char* msg = result.text[0][0] ? result.text[0] : "INKI";
+
+    if (strncmp(action, "morse", 5) == 0) {
+        if (result.aborted) {
+            morse_set_enabled(false);
+            send_message_page(tpcb, "Morse stopped");
+            return;
+        }
+        int unit = result.unit_ms;
+        if (unit >= 50 && unit <= 2000) morse_set_unit_ms(unit);
+        morse_set_message(msg);
+        morse_set_enabled(true);
+        char feedback[256];
+        snprintf(feedback, sizeof(feedback), "Morsing started: %s", msg);
+        send_message_page(tpcb, feedback);
         return;
     }
 
-    const char* msg = result.text[0][0] ? result.text[0] : "INKI";
-
-    // Clamp and set unit timing if provided
-    int unit = result.unit_ms;
-    if (unit >= 50 && unit <= 2000) {
-        morse_set_unit_ms(unit);
+    // Print path
+    if (device_config_flash.data.epapertype == EPAPER_NONE) {
+        send_message_page(tpcb, "No ePaper configured – cannot print.");
+        return;
     }
 
-    // Update Morse engine with new message
-    morse_set_message(msg);
-    morse_set_enabled(true);
+    UBYTE* BlackImage = init_epaper();
+    if (!BlackImage) {
+        send_message_page(tpcb, "Failed to init ePaper");
+        return;
+    }
 
-    char feedback[256];
-    snprintf(feedback, sizeof(feedback), "Morsing started: %s", msg);
-    send_morse_page(tpcb, feedback);
+    // Canvas is already selected by init_epaper(); ensure clear
+    Paint_Clear(WHITE);
+
+    int width = Paint.Width;
+    int height = Paint.Height;
+    const sFONT* font = pick_font(result.font_size);
+    bool center = (strncmp(result.align, "left", 4) != 0);
+    draw_wrapped_text(BlackImage, width, height, msg, font, center);
+
+    epaper_finalize_and_powerdown(BlackImage);
+    morse_set_enabled(false);
+
+    // Power down shortly so HTTP reply can reach browser
+    webserver_set_shutdown_time(make_timeout_time_ms(2000));
+    send_message_page(tpcb, "Printed to ePaper. Powering down...");
 }
 
 /**
