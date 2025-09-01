@@ -71,10 +71,10 @@ sleep 1.5
 # openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
 #   -c "adapter speed 5000" \
 #   -c "program build/inki_default_config.bin 0x101E7000 reset exit"
-
-# ----- Done -----
-end_time=$(date +%s)
-elapsed=$((end_time - start_time))
+#
+# # ----- Done -----
+# end_time=$(date +%s)
+# elapsed=$((end_time - start_time))
 
 echo
 echo -e "${GREEN}Flashing complete in ${elapsed} seconds.${RESET}"

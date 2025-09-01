@@ -2343,12 +2343,12 @@ int main(void)
     hold_power();  // Hold power state of the circuit
 
     stdio_init_all();     // Initialize standard I/O
-/*
+
     if (wait_for_usb_connection(2500)) { // only used for debugging
         printf("USB connected\n");
     } else {
         printf("USB timeout\n");
-    }*/
+    }
 
     debug_log_with_color(COLOR_BOLD_GREEN, "System initializing\n");
 
@@ -2371,6 +2371,15 @@ int main(void)
     setup_and_read_pushbuttons();     // Initialize pushbuttons and read their state
 
     // pushbutton = 7; // use for debugging
+
+#ifdef USE_CASE_HISTORIAN
+    // Historian: pressing button combo for page 4 should start web interface
+    if (pushbutton == 4) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "Historian: launching web interface (page 4)\n");
+        enter_wifi_setup_mode(&ds3231);  // Starts AP + webserver; handles shutdown internally
+    }
+#endif
+
 
     // Enter WiFi setup mode if all three buttons are held
     if (pushbutton == 7) {
