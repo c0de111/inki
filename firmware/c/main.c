@@ -1298,7 +1298,9 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         char info[128];
         snprintf(info, sizeof(info), "%d data points", historian_data.count);
         Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-        
+
+        draw_flash_logo(image_buffer, 700, 10);
+
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         // Smaller graph for 4.2" display
         render_temperature_graph(image_buffer, 10, 10, 380, 250);
