@@ -600,6 +600,40 @@ float read_coin_cell_voltage(float conversion_factor) {
 }
 
 /**
+ * Reads the RP2040 on-chip temperature sensor and returns temperature in °C.
+ *
+ * Uses ADC input 4 (internal sensor). Takes multiple samples and averages
+ * to reduce noise. Leaves the temperature sensor disabled after reading.
+ */
+float read_onchip_temperature_c(void) {
+    const int samples = 8;  // simple averaging for stability
+    uint32_t acc = 0;
+
+    // Initialize and select internal temperature sensor (ADC input 4)
+    adc_init();
+    adc_set_temp_sensor_enabled(true);
+    adc_select_input(4);
+
+    // Discard one initial sample (settling)
+    (void)adc_read();
+
+    for (int i = 0; i < samples; i++) {
+        acc += adc_read();
+    }
+
+    adc_set_temp_sensor_enabled(false);
+
+    float avg_raw = (float)acc / (float)samples;
+    // Convert raw 12-bit reading to voltage assuming 3.3V reference
+    float v_sense = avg_raw * 3.3f / 4096.0f;
+    // Datasheet-calibrated typical values: 27°C at 0.706V, slope 1.721mV/°C
+    float temp_c = 27.0f - (v_sense - 0.706f) / 0.001721f;
+
+    debug_log("On-chip temperature: %.1f °C\n", temp_c);
+    return temp_c;
+}
+
+/**
  * Ensures the circuit remains powered by driving n-transistor (MMBT3904) -> MOSFET (TSM260P02) gate -> power up for running through programme, until switched off by the programme at the end
  *
  * Configures the specified GPIO pin as an output and sets it high
