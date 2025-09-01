@@ -15,6 +15,7 @@ void read_mac_address();
 float read_battery_voltage(float conversion_factor);
 float read_coin_cell_voltage(float conversion_factor);
 float read_onchip_temperature_c(void);
+float read_ds3231_temperature_c(void);
 void format_rtc_time(const ds3231_data_t* t, char* buffer, size_t buffer_size);
 const char* get_day_of_week(int day);
 const char* get_month_name(int month);

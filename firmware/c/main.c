@@ -23,6 +23,7 @@
 #include "historian_config.h"
 #include "led.h"
 #include "morse.h"
+#include <math.h>
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
 #warning "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
@@ -631,6 +632,21 @@ float read_onchip_temperature_c(void) {
 
     debug_log("On-chip temperature: %.1f °C\n", temp_c);
     return temp_c;
+}
+
+/**
+ * Reads the external DS3231 temperature in °C via I2C.
+ * Returns NaN if the read fails.
+ */
+float read_ds3231_temperature_c(void) {
+    extern ds3231_t ds3231;
+    float t = 0.0f;
+    if (ds3231_read_temperature(&ds3231, &t) != 0) {
+        debug_log_with_color(COLOR_RED, "DS3231 temperature read failed\n");
+        return NAN;
+    }
+    debug_log("DS3231 temperature: %.2f °C\n", t);
+    return t;
 }
 
 /**
