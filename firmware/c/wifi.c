@@ -77,8 +77,12 @@ WifiResult wifi_connect(void) {
 void wifi_log_rssi(void) {
     int link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
     if (link == CYW43_LINK_UP) {
-        int rssi = cyw43_wifi_get_rssi(&cyw43_state);
-        debug_log("Wi-Fi RSSI: %d dBm\n", rssi);
+        int32_t rssi = 0;
+        if (cyw43_wifi_get_rssi(&cyw43_state, &rssi) == 0) {
+            debug_log("Wi-Fi RSSI: %ld dBm\n", (long)rssi);
+        } else {
+            debug_log("Wi-Fi RSSI: unknown (driver error)\n");
+        }
     } else {
         debug_log("Wi-Fi RSSI: N/A (not connected)\n");
     }
