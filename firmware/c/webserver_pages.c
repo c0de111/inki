@@ -284,6 +284,7 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     ds3231_read_current_time(&ds3231, &now);
     float vcc = read_battery_voltage(device_config_flash.data.conversion_factor);
     float vbat = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
+    float temp_c = read_onchip_temperature_c();
 
     // Voltage assessment (for simple color coding)
     const char* vcc_color = (vcc > 3.5) ? "green" : (vcc > 3.0 ? "orange" : "red");
@@ -366,6 +367,12 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              vcc_color, vcc,
              vbat_color, vbat,
              device_config_flash.data.conversion_factor);
+    strcat(page, buffer);
+
+    // On-chip temperature
+    snprintf(buffer, sizeof(buffer),
+             "<div class='section'>MCU Temperature: <span class='value'>%.1f &deg;C</span></div>",
+             temp_c);
     strcat(page, buffer);
 
     // Logo-Flash-Info :
