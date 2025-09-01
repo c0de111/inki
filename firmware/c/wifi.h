@@ -48,4 +48,7 @@ extern uint8_t mac_address[6];
 // Returns a `WifiResult`; on success, station mode is enabled and connected.
 WifiResult wifi_connect(void);
 
+// Simple helper to log current Wi‑Fi RSSI (dBm) if connected; otherwise logs N/A.
+void wifi_log_rssi(void);
+
 #endif // WIFI_H
