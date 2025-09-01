@@ -384,7 +384,7 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              rtc_temp_c);
     strcat(page, buffer);
 
-    // Memory info
+    // Memory info (numeric)
     snprintf(buffer, sizeof(buffer),
              "<div class='section'>Memory:<br>"
              "Heap used: <span class='value'>%u KB</span><br>"
@@ -393,6 +393,67 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              (unsigned)(mem.heap_used_bytes / 1024U),
              (unsigned)(mem.heap_headroom_bytes / 1024U),
              (unsigned)(mem.stack_margin_bytes / 1024U));
+    strcat(page, buffer);
+
+    // Memory ASCII bar (heap_base .. heap_limit)
+    {
+        const int BAR_W = 60;
+        char bar[BAR_W + 1];
+        for (int i = 0; i < BAR_W; i++) bar[i] = '.'; // default: free headroom
+        bar[BAR_W] = '\0';
+
+        uintptr_t total = (mem.heap_limit_addr > mem.heap_base_addr)
+                            ? (mem.heap_limit_addr - mem.heap_base_addr) : 1;
+        uintptr_t heap_used = (mem.heap_end_addr > mem.heap_base_addr)
+                              ? (mem.heap_end_addr - mem.heap_base_addr) : 0;
+        uintptr_t margin = (mem.sp_addr > mem.heap_end_addr)
+                           ? (mem.sp_addr - mem.heap_end_addr) : 0;
+        if (margin > (mem.heap_limit_addr - mem.heap_end_addr)) {
+            margin = (mem.heap_limit_addr - mem.heap_end_addr);
+        }
+
+        int used_len = (int)((heap_used * BAR_W) / total);
+        if (used_len < 0) used_len = 0; if (used_len > BAR_W) used_len = BAR_W;
+        int margin_len = (int)((margin * BAR_W) / total);
+        if (margin_len < 0) margin_len = 0;
+        if (used_len + margin_len > BAR_W) margin_len = BAR_W - used_len;
+
+        // Fill used region with '#'
+        for (int i = 0; i < used_len; i++) bar[i] = '#';
+        // Fill stack margin region with '+'
+        for (int i = 0; i < margin_len; i++) {
+            int idx = used_len + i;
+            if (idx >= 0 && idx < BAR_W) bar[idx] = '+';
+        }
+
+        snprintf(buffer, sizeof(buffer),
+                 "<div class='section'><pre>[%s]</pre>"
+                 "<div style='font-size:0.9em;'>"
+                 "#=heap used, +=stack margin (approx), .=free headroom"
+                 "</div></div>", bar);
+        strcat(page, buffer);
+    }
+
+    // Addresses (hex)
+    snprintf(buffer, sizeof(buffer),
+             "<div class='section' style='font-size:0.95em;'>"
+             "Addresses:<br>"
+             "Heap base: <span class='value'>0x%08X</span><br>"
+             "Heap end : <span class='value'>0x%08X</span><br>"
+             "Stack lim: <span class='value'>0x%08X</span><br>"
+             "SP (c0)  : <span class='value'>0x%08X</span>"
+             "</div>",
+             (unsigned)mem.heap_base_addr,
+             (unsigned)mem.heap_end_addr,
+             (unsigned)mem.heap_limit_addr,
+             (unsigned)mem.sp_addr);
+    strcat(page, buffer);
+
+    // RP2040 reference ranges
+    snprintf(buffer, sizeof(buffer),
+             "<div class='section' style='font-size:0.9em;color:#555;'>"
+             "RP2040 reference: SRAM 0x20000000–0x20042000 (264 KB), XIP 0x10000000 (flash base)"
+             "</div>");
     strcat(page, buffer);
 
     // Logo-Flash-Info :
