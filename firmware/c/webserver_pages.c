@@ -286,6 +286,8 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     float vbat = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
     float temp_c = read_onchip_temperature_c();
     float rtc_temp_c = read_ds3231_temperature_c();
+    memory_info_t mem = {0};
+    get_memory_info(&mem);
 
     // Voltage assessment (for simple color coding)
     const char* vcc_color = (vcc > 3.5) ? "green" : (vcc > 3.0 ? "orange" : "red");
@@ -380,6 +382,17 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     snprintf(buffer, sizeof(buffer),
              "<div class='section'>RTC Temperature: <span class='value'>%.1f &deg;C</span></div>",
              rtc_temp_c);
+    strcat(page, buffer);
+
+    // Memory info
+    snprintf(buffer, sizeof(buffer),
+             "<div class='section'>Memory:<br>"
+             "Heap used: <span class='value'>%u KB</span><br>"
+             "Heap headroom: <span class='value'>%u KB</span><br>"
+             "Stack margin: <span class='value'>%u KB (approx)</span></div>",
+             (unsigned)(mem.heap_used_bytes / 1024U),
+             (unsigned)(mem.heap_headroom_bytes / 1024U),
+             (unsigned)(mem.stack_margin_bytes / 1024U));
     strcat(page, buffer);
 
     // Logo-Flash-Info :

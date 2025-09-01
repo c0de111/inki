@@ -18,11 +18,15 @@
 #include "debug.h"
 #include "flash.h"
 #include "webserver.h"
+#include "main.h"
 #include "http_client.h"
 #include "base64.h"
 #include "historian_config.h"
 #include "led.h"
 #include "morse.h"
+#include <math.h>
+#include <unistd.h>
+#include <stdint.h>
 #include <math.h>
 
 #if PICO_SDK_VERSION_MAJOR != 2 || PICO_SDK_VERSION_MINOR != 1 || PICO_SDK_VERSION_REVISION != 0
@@ -647,6 +651,32 @@ float read_ds3231_temperature_c(void) {
     }
     debug_log("DS3231 temperature: %.2f °C\n", t);
     return t;
+}
+
+// Linker-provided symbols (see linker script):
+extern char __bss_end__;
+extern char __StackLimit; // maximum heap ptr (stack region below)
+
+void get_memory_info(memory_info_t* out) {
+    if (!out) return;
+    // Current heap end
+    uintptr_t heap_end = (uintptr_t)sbrk(0);
+    uintptr_t heap_base = (uintptr_t)&__bss_end__;
+    uintptr_t heap_limit = (uintptr_t)&__StackLimit;
+
+    size_t heap_used = 0;
+    size_t heap_headroom = 0;
+    if (heap_end >= heap_base) heap_used = (size_t)(heap_end - heap_base);
+    if (heap_limit >= heap_end) heap_headroom = (size_t)(heap_limit - heap_end);
+
+    // Approximate stack margin on core 0: distance from current SP to heap end
+    register uintptr_t sp_reg __asm__("sp");
+    size_t stack_margin = 0;
+    if (sp_reg >= heap_end) stack_margin = (size_t)(sp_reg - heap_end);
+
+    out->heap_used_bytes = heap_used;
+    out->heap_headroom_bytes = heap_headroom;
+    out->stack_margin_bytes = stack_margin;
 }
 
 /**
