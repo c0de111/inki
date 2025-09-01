@@ -4,6 +4,7 @@
 
 #include "ds3231.h"  // oder der Pfad zu deiner RTC-Struktur
 #include "DEV_Config.h"    // For device configuration
+#include <stdint.h>
 
 extern ds3231_t rtc;
 // extern const RoomConfig* current_room;
@@ -20,6 +21,10 @@ typedef struct memory_info_t {
     size_t heap_used_bytes;      // exact at call time
     size_t heap_headroom_bytes;  // exact at call time
     size_t stack_margin_bytes;   // approx (core0 snapshot)
+    uintptr_t heap_base_addr;    // &__bss_end__
+    uintptr_t heap_end_addr;     // sbrk(0)
+    uintptr_t heap_limit_addr;   // &__StackLimit
+    uintptr_t sp_addr;           // current core0 SP snapshot
 } memory_info_t;
 
 void get_memory_info(memory_info_t* out);

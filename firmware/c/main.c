@@ -677,6 +677,10 @@ void get_memory_info(memory_info_t* out) {
     out->heap_used_bytes = heap_used;
     out->heap_headroom_bytes = heap_headroom;
     out->stack_margin_bytes = stack_margin;
+    out->heap_base_addr = heap_base;
+    out->heap_end_addr = heap_end;
+    out->heap_limit_addr = heap_limit;
+    out->sp_addr = sp_reg;
 }
 
 /**
