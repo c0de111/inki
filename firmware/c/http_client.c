@@ -868,6 +868,8 @@ WifiResult wifi_server_communication(float voltage) {
 #elif defined(USE_CASE_SEATSURFING)
     if (!seatsurfing_make_request()) {
 #endif
+        // Log final RSSI before shutting down Wi‑Fi
+        wifi_log_rssi();
         cyw43_arch_deinit();
         return WIFI_ERROR_SERVER;
     }
@@ -885,16 +887,20 @@ WifiResult wifi_server_communication(float voltage) {
     
     if (!sync_operation_complete) {
         debug_log_with_color(COLOR_RED, "HTTP request timeout\n");
+        wifi_log_rssi();
         cyw43_arch_deinit();
         return WIFI_ERROR_SERVER;
     }
     
     if (!sync_operation_success) {
         debug_log_with_color(COLOR_RED, "HTTP request failed or server returned error\n");
+        wifi_log_rssi();
         cyw43_arch_deinit();
         return WIFI_ERROR_SERVER;
     }
 
+    // Final RSSI snapshot before turning Wi‑Fi off
+    wifi_log_rssi();
     debug_log_with_color(COLOR_BOLD_GREEN, "✅ JSON response complete - Wi-Fi off.\n");
     cyw43_arch_deinit();
     

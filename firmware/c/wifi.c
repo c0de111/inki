@@ -75,15 +75,22 @@ WifiResult wifi_connect(void) {
 }
 
 void wifi_log_rssi(void) {
+    // With thread-safe background arch, guard driver calls
+    cyw43_arch_lwip_begin();
     int link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
-    if (link == CYW43_LINK_UP) {
+    // Treat JOIN and NOIP as connected-enough to fetch RSSI; negatives are error states
+    if (link >= CYW43_LINK_JOIN) {
         int32_t rssi = 0;
         if (cyw43_wifi_get_rssi(&cyw43_state, &rssi) == 0) {
+            cyw43_arch_lwip_end();
             debug_log("Wi-Fi RSSI: %ld dBm\n", (long)rssi);
+            return;
         } else {
+            cyw43_arch_lwip_end();
             debug_log("Wi-Fi RSSI: unknown (driver error)\n");
+            return;
         }
-    } else {
-        debug_log("Wi-Fi RSSI: N/A (not connected)\n");
     }
+    cyw43_arch_lwip_end();
+    debug_log("Wi-Fi RSSI: N/A (link=%d)\n", link);
 }

@@ -21,6 +21,7 @@
 #include "lwip/tcp.h"
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "pico/time.h"
 #include "debug.h"
 #include "main.h"
@@ -378,11 +379,29 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              temp_c);
     strcat(page, buffer);
 
-    // DS3231 temperature
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>RTC Temperature: <span class='value'>%.1f &deg;C</span></div>",
-             rtc_temp_c);
-    strcat(page, buffer);
+    // DS3231 temperature (format in exact 0.25°C steps: .0, .25, .5, .75)
+    {
+        char rtc_temp_str[16];
+        if (isnan(rtc_temp_c)) {
+            snprintf(rtc_temp_str, sizeof(rtc_temp_str), "n/a");
+        } else {
+            float qf = rtc_temp_c * 4.0f;
+            int q = (int)((qf >= 0.0f) ? (qf + 0.5f) : (qf - 0.5f)); // round to nearest quarter
+            int whole = q / 4;
+            int rem = q % 4;
+            if (rem < 0) { rem += 4; whole -= 1; }
+            switch (rem) {
+                case 0: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.0", whole); break;
+                case 1: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.25", whole); break;
+                case 2: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.5", whole); break;
+                case 3: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.75", whole); break;
+            }
+        }
+        snprintf(buffer, sizeof(buffer),
+                 "<div class='section'>RTC Temperature: <span class='value'>%s &deg;C</span></div>",
+                 rtc_temp_str);
+        strcat(page, buffer);
+    }
 
     // Memory info (numeric)
     snprintf(buffer, sizeof(buffer),
