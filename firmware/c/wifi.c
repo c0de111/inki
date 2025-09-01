@@ -69,5 +69,17 @@ WifiResult wifi_connect(void) {
     }
 
     debug_log("Connected to Wi-Fi successfully.\n");
+    // Log RSSI after successful connection (useful for diagnostics)
+    wifi_log_rssi();
     return WIFI_SUCCESS;
+}
+
+void wifi_log_rssi(void) {
+    int link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+    if (link == CYW43_LINK_UP) {
+        int rssi = cyw43_wifi_get_rssi(&cyw43_state);
+        debug_log("Wi-Fi RSSI: %d dBm\n", rssi);
+    } else {
+        debug_log("Wi-Fi RSSI: N/A (not connected)\n");
+    }
 }
