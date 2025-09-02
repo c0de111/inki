@@ -25,7 +25,7 @@ fi
 # Note: Firmware is built with valid_flag = 0 by default for OTA safety.
 # During OTA updates, the valid_flag is only set to 1 after successful CRC32 verification.
 # This prevents corrupt/invalid firmware from breaking the system.
-# For direct flashing (OpenOCD/UF2), we manually set valid_flag = 1.
+# # For direct flashing (OpenOCD/UF2), we manually set valid_flag = 1.
 set_valid_flag() {
   local file="$1"
   local offset=13  # Offset of valid_flag in firmware_header_t
@@ -34,11 +34,11 @@ set_valid_flag() {
 }
 
 # ----- Flash bootloader -----
-# echo -e "${YELLOW}Flashing bootloader to 0x10000000...${RESET}"
-# openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
-#   -c "adapter speed 5000" \
-#   -c "program build/inki_bootloader.bin 0x10000000 reset exit"
-# sleep 1.5
+echo -e "${YELLOW}Flashing bootloader to 0x10000000...${RESET}"
+openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+  -c "adapter speed 5000" \
+  -c "program build/inki_bootloader.bin 0x10000000 reset exit"
+sleep 1.5
 
 # ----- Flash firmware slot 0 -----
 echo -e "${YELLOW}Flashing firmware (slot 0) to 0x10010000...${RESET}"
@@ -65,13 +65,13 @@ sleep 1.5
 # rm -f "$TMP_SLOT1"
 # echo -e "${GREEN}✓ Temporary file deleted after flashing.${RESET}"
 # # sleep 1.5
-
-# # ----- Flash default config / factory reset (at 0x101E7000) -----
+#
+# # # ----- Flash default config / factory reset (at 0x101E7000) -----
 # echo -e "${YELLOW}Flashing default config to 0x101E7000...${RESET}"
 # openocd --debug=0 -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
 #   -c "adapter speed 5000" \
 #   -c "program build/inki_default_config.bin 0x101E7000 reset exit"
-#
+
 # # ----- Done -----
 # end_time=$(date +%s)
 # elapsed=$((end_time - start_time))
