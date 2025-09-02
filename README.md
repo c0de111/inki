@@ -1,4 +1,6 @@
-# inki (esign) 
+# inki
+
+Quick start without building: download prebuilt UF2 files from Releases and copy them to a Pico W in BOOTSEL mode: https://github.com/c0de111/inki/releases
 
 **inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. See also https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device
 <!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
@@ -36,6 +38,20 @@
 </i>
 <!-- <i>Click the image to view video.</i> -->
 </p>
+
+---
+
+## Try it: How to Use inki
+If you have a Pico W at hand, you can quickly test:
+
+- Download a prebuilt UF2 from the latest Release:
+  - Historian: `inki_historian.uf2`
+  - SeatSurfing: `inki_seatsurfing.uf2`
+- Hold BOOTSEL while plugging in the Pico W → the RPI-RP2 drive appears
+- Copy the UF2 to the drive → the board reboots automatically
+- The Pico W onboard LED blinks “inki” in Morse
+- Connect to the Wi‑Fi AP `inki-setup`, then open `http://192.168.4.1` in your browser
+- Works on a bare Pico W (EPAPER_NONE by default)
 
 ---
 
@@ -279,5 +295,4 @@ Want to follow or contribute? Star the repo, and stay tuned for updates!
 For questions, feedback, or contributions, feel free to reach out via email:
 
 ✉️ [c0de@posteo.de](mailto:c0de@posteo.de)
-
 
