@@ -28,8 +28,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#ifndef HISTORIAN_CONFIG_NO_RTC
 #include "ds3231.h"
+#endif
+#ifndef HISTORIAN_CONFIG_NO_LWIP
 #include "lwip/ip_addr.h"
+#endif
 
 // =============================================================================
 // HISTORIAN DATA STRUCTURES
@@ -140,7 +144,13 @@ typedef struct {
  * @param rtc_time Pointer to RTC data structure containing local time
  * @return Unix timestamp in milliseconds since epoch (UTC)
  */
-uint64_t historian_rtc_to_unix_ms(const ds3231_data_t* rtc_time);
+uint64_t historian_rtc_to_unix_ms(
+#ifndef HISTORIAN_CONFIG_NO_RTC
+    const ds3231_data_t* rtc_time
+#else
+    const void* rtc_time /* placeholder when RTC types are unavailable */
+#endif
+);
 
 /**
  * @brief Get current time as Unix timestamp in milliseconds
@@ -151,7 +161,13 @@ uint64_t historian_rtc_to_unix_ms(const ds3231_data_t* rtc_time);
  * @param clock Pointer to initialized RTC instance
  * @return Current Unix timestamp in milliseconds (UTC)
  */
-uint64_t historian_get_current_unix_ms(ds3231_t* clock);
+uint64_t historian_get_current_unix_ms(
+#ifndef HISTORIAN_CONFIG_NO_RTC
+    ds3231_t* clock
+#else
+    void* clock /* placeholder when RTC types are unavailable */
+#endif
+);
 
 /**
  * @brief Calculate Unix timestamp for a specified time in the past
@@ -163,7 +179,13 @@ uint64_t historian_get_current_unix_ms(ds3231_t* clock);
  * @param hours Number of hours to subtract from current time
  * @return Unix timestamp in milliseconds for the past time (UTC)
  */
-uint64_t historian_get_unix_ms_hours_ago(ds3231_t* clock, int hours);
+uint64_t historian_get_unix_ms_hours_ago(
+#ifndef HISTORIAN_CONFIG_NO_RTC
+    ds3231_t* clock
+#else
+    void* clock /* placeholder when RTC types are unavailable */
+#endif
+    , int hours);
 
 /**
  * @brief Convert Unix timestamp to human-readable local time string

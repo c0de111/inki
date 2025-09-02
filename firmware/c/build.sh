@@ -46,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       USE_CASE="NEW_USECASE"
       shift
       ;;
+    --bootloader-usb)
+      USB_BOOTLOADER_ENABLE=1
+      shift
+      ;;
     --help|-h)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"

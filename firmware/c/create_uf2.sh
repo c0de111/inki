@@ -19,7 +19,16 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 UF2_TOOL="$SCRIPT_DIR/uf2conv.py"
-OUTPUT_FILE="$BUILD_DIR/inki_complete.uf2"
+
+# Derive use-case suffix from CMake cache if available
+USE_CASE_LINE=$(sed -n 's/^USE_CASE_DEFINE[^=]*=\(USE_CASE_.*\)$/\1/p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | head -n1)
+CASE_SUFFIX="complete"
+case "$USE_CASE_LINE" in
+  USE_CASE_HISTORIAN)   CASE_SUFFIX="historian" ;;
+  USE_CASE_SEATSURFING) CASE_SUFFIX="seatsurfing" ;;
+  USE_CASE_NEW_USECASE) CASE_SUFFIX="new_usecase" ;;
+esac
+OUTPUT_FILE="$BUILD_DIR/inki_${CASE_SUFFIX}.uf2"
 
 # Memory addresses from linker scripts
 BOOTLOADER_ADDR=0x10000000
@@ -72,20 +81,7 @@ for file in "${REQUIRED_FILES[@]}"; do
 done
 
 echo ""
-echo "Creating sparse UF2 with separate memory regions..."
-
-# Create individual UF2 files for each memory region (no padding!)
-BOOTLOADER_UF2="$BUILD_DIR/temp_bootloader.uf2" 
-SLOT0_UF2="$BUILD_DIR/temp_slot0.uf2"
-CONFIG_UF2="$BUILD_DIR/temp_config.uf2"
-
-# Create separate UF2 files for each binary at their target addresses
-echo "Creating bootloader UF2 at 0x10000000..."
-python3 "$UF2_TOOL" --base $BOOTLOADER_ADDR --family 0xe48bff56 --output "$BOOTLOADER_UF2" "$BUILD_DIR/inki_bootloader.bin"
-if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to create bootloader UF2"
-    exit 1
-fi
+echo "Creating monolithic BIN image with all regions..."
 
 # Patch slot0 binary to set valid_flag = 1 (same as flash.sh does)
 # Note: Firmware is built with valid_flag = 0 by default for OTA safety.
@@ -97,39 +93,37 @@ SLOT0_PATCHED="$BUILD_DIR/temp_slot0_patched.bin"
 cp "$BUILD_DIR/inki_slot0.bin" "$SLOT0_PATCHED"
 printf "\x01" | dd of="$SLOT0_PATCHED" bs=1 seek=13 count=1 conv=notrunc status=none
 
-echo "Creating slot0 UF2 at 0x10010000..."
-python3 "$UF2_TOOL" --base $SLOT0_ADDR --family 0xe48bff56 --output "$SLOT0_UF2" "$SLOT0_PATCHED"  
-if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to create slot0 UF2"
-    exit 1
-fi
+MONO_BIN="$BUILD_DIR/inki_complete.bin"
 
-echo "Creating config UF2 at 0x101E7000..."
-python3 "$UF2_TOOL" --base $CONFIG_ADDR --family 0xe48bff56 --output "$CONFIG_UF2" "$BUILD_DIR/inki_default_config.bin"
-if [ $? -ne 0 ]; then
-    echo "❌ Error: Failed to create config UF2"
-    exit 1
-fi
+# Determine overall size: cover up to end of config blob
+CONFIG_SIZE=$(stat -c %s "$BUILD_DIR/inki_default_config.bin")
+MONO_SIZE=$((0x1E7000 + CONFIG_SIZE))
 
-# Concatenate UF2 files (UF2 spec supports this for sparse layouts)
-echo "Combining UF2 files into sparse layout..."
-cat "$BOOTLOADER_UF2" "$SLOT0_UF2" "$CONFIG_UF2" > "$OUTPUT_FILE"
-UF2_EXIT_CODE=$?
+echo "Allocating monolithic BIN of $MONO_SIZE bytes filled with 0xFF..."
+dd if=/dev/zero bs=1 count=0 seek=$MONO_SIZE of="$MONO_BIN" status=none
+printf "\xFF" | dd of="$MONO_BIN" bs=1 count=$MONO_SIZE conv=notrunc status=none 2>/dev/null
 
-# Clean up temporary files
-rm -f "$BOOTLOADER_UF2" "$SLOT0_UF2" "$CONFIG_UF2" "$SLOT0_PATCHED"
+echo "Placing bootloader at 0x000000..."
+dd if="$BUILD_DIR/inki_bootloader.bin" of="$MONO_BIN" bs=1 seek=$((0x000000)) conv=notrunc status=none
 
-if [ $UF2_EXIT_CODE -eq 0 ]; then
-    UF2_SIZE=$(stat -c %s "$OUTPUT_FILE")
-    echo ""
-    echo "✅ Successfully created: $OUTPUT_FILE ($UF2_SIZE bytes)"
-    echo ""
-    echo "Usage Instructions:"
-    echo "1. Hold BOOTSEL button while connecting Pico W to USB"
-    echo "2. Pico W will appear as a USB mass storage device"
-    echo "3. Copy $OUTPUT_FILE to the USB drive"
-    echo "4. Pico W will automatically reboot with new firmware"
-else
-    echo "❌ Error: Failed to create UF2 file"
-    exit 1
-fi
+echo "Placing slot0 (patched) at 0x010000..."
+dd if="$SLOT0_PATCHED" of="$MONO_BIN" bs=1 seek=$((0x010000)) conv=notrunc status=none
+
+echo "Placing default config at 0x1E7000..."
+dd if="$BUILD_DIR/inki_default_config.bin" of="$MONO_BIN" bs=1 seek=$((0x1E7000)) conv=notrunc status=none
+
+echo "Converting monolithic BIN to UF2 (Microsoft tool) with base 0x10000000..."
+python3 "$UF2_TOOL" --base $BOOTLOADER_ADDR --family 0xe48bff56 --output "$OUTPUT_FILE" "$MONO_BIN" || { echo "❌ uf2conv.py failed"; exit 1; }
+
+# Clean up temporary file
+rm -f "$SLOT0_PATCHED" "$MONO_BIN"
+
+UF2_SIZE=$(stat -c %s "$OUTPUT_FILE")
+echo ""
+echo "✅ Successfully created: $OUTPUT_FILE ($UF2_SIZE bytes)"
+echo ""
+echo "Usage Instructions:"
+echo "1. Hold BOOTSEL button while connecting Pico W to USB"
+echo "2. Pico W will appear as a USB mass storage device"
+echo "3. Copy $OUTPUT_FILE to the USB drive"
+echo "4. Pico W will write all regions and reboot"
