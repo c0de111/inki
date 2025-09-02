@@ -84,6 +84,20 @@ target_link_options(inki_default_config PRIVATE
     -nostdlib
     -Wl,-T${CMAKE_CURRENT_SOURCE_DIR}/inki_default_config.ld  # Dein .ld-Skript
 )
+
+# Ensure default_config is built with the same use-case define
+if(USE_CASE_DEFINE)
+    target_compile_definitions(inki_default_config PRIVATE ${USE_CASE_DEFINE})
+endif()
+
+# Minimal includes needed to compile default_config with historian headers
+target_include_directories(inki_default_config PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Avoid pulling RTC/Pico SDK for config-only build
+target_compile_definitions(inki_default_config PRIVATE HISTORIAN_CONFIG_NO_RTC=1)
+target_compile_definitions(inki_default_config PRIVATE HISTORIAN_CONFIG_NO_LWIP=1)
 target_compile_definitions(pico_cyw43_arch_lwip_threadsafe_background INTERFACE
     PICO_CYW43_ARCH_THREADSAFE_BACKGROUND=1
 )

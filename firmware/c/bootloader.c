@@ -177,8 +177,11 @@ int main(void) {
     sleep_ms(10);               // Give USB time to initialize
     stdio_init_all();           // Initialize UART and USB-CDC
 
-    while (!stdio_usb_connected()) {
-        sleep_ms(10);           // Wait for USB serial to be ready
+    // Wait up to ~2s for a USB-CDC host to connect, then continue
+    int waited_ms = 0;
+    while (!stdio_usb_connected() && waited_ms < 2000) {
+        sleep_ms(10);
+        waited_ms += 10;
     }
 
     printf("\n=== Bootloader started ===\n");
