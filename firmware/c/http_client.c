@@ -840,6 +840,14 @@ static bool seatsurfing_make_request(void) {
 }
 #endif // USE_CASE_SEATSURFING
 
+#ifdef USE_CASE_HOMEMATIC
+// Temporary stub for Homematic request. Will be replaced by XML-RPC builder.
+static bool homematic_make_request(void) {
+    // Build and send request in a later step
+    return true;
+}
+#endif
+
 /**
  * @brief server communication
  * @param voltage Battery voltage (for transmission to server)
@@ -867,6 +875,8 @@ WifiResult wifi_server_communication(float voltage) {
     if (!historian_make_request()) {
 #elif defined(USE_CASE_SEATSURFING)
     if (!seatsurfing_make_request()) {
+#elif defined(USE_CASE_HOMEMATIC)
+    if (!homematic_make_request()) {
 #endif
         // Log final RSSI before shutting down Wi‑Fi
         wifi_log_rssi();

@@ -154,6 +154,10 @@ static void send_seatsurfing_config_page_wrapper(struct tcp_pcb *tpcb) {
 static void send_historian_config_page_wrapper(struct tcp_pcb *tpcb) {
     send_historian_config_page(tpcb, "");
 }
+#elif defined(USE_CASE_HOMEMATIC)
+static void send_homematic_config_page_wrapper(struct tcp_pcb *tpcb) {
+    send_homematic_config_page(tpcb, "");
+}
 #endif
 
 static void send_device_config_page_wrapper(struct tcp_pcb *tpcb) {
@@ -231,6 +235,10 @@ static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp
 #elif defined(USE_CASE_HISTORIAN)
             case UPLOAD_FORM_HISTORIAN:
                 handle_form_historian(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
+#elif defined(USE_CASE_HOMEMATIC)
+            case UPLOAD_FORM_HOMEMATIC:
+                handle_form_homematic(tpcb, upload_session.form_buffer, upload_session.expected_length);
                 break;
 #endif
             case UPLOAD_FORM_DEVICE:
@@ -540,6 +548,53 @@ static void handle_post_historian(struct tcp_pcb* tpcb, struct pbuf* p, const ch
     } else {
         debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: Header body split error\n");
         send_historian_config_page(tpcb, "Fehler beim Parsen des Formulars");
+        tcp_close(tpcb);
+    }
+}
+#endif
+
+#ifdef USE_CASE_HOMEMATIC
+static void handle_post_homematic(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+    const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
+    if (!cl) {
+        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: Content-Length missing\n");
+        send_homematic_config_page(tpcb, "Missing Content-Length");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.expected_length = atoi(cl + 15);
+    if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
+        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: form body too large\n");
+        send_homematic_config_page(tpcb, "Form data too large");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.active = true;
+    upload_session.total_received = 0;
+    upload_session.type = UPLOAD_FORM_HOMEMATIC;
+
+    const char* body = strstr(upload_session.header_buffer, "\r\n\r\n");
+    if (body) {
+        body += 4;
+        size_t body_len = upload_session.header_length - (body - upload_session.header_buffer);
+        memcpy(upload_session.form_buffer, body, body_len);
+        upload_session.total_received = body_len;
+        tcp_recved(tpcb, copied);
+
+        debug_log("UPLOAD HOMEMATIC CONFIG: First POST /homematic body chunk (%d bytes)\n", (int)body_len);
+
+        if (upload_session.total_received >= upload_session.expected_length) {
+            upload_session.form_buffer[upload_session.expected_length] = '\0';
+            handle_form_homematic(tpcb, upload_session.form_buffer, upload_session.expected_length);
+            upload_session.active = false;
+            upload_session.header_complete = false;
+            upload_session.header_length = 0;
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: Header body split error\n");
+        send_homematic_config_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
 }
@@ -896,6 +951,8 @@ static const route_t routes[] = {
     {"/seatsurfing", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_seatsurfing_config_page_wrapper}},
 #elif defined(USE_CASE_HISTORIAN)
     {"/historian", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_historian_config_page_wrapper}},
+#elif defined(USE_CASE_HOMEMATIC)
+    {"/homematic", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_homematic_config_page_wrapper}},
 #endif
     {"/device_settings", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_device_config_page_wrapper}},
     {"/clock", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_clock_page_wrapper}},
@@ -918,6 +975,8 @@ static const route_t routes[] = {
     {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfing}},
 #elif defined(USE_CASE_HISTORIAN)
     {"/historian", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_historian}},
+#elif defined(USE_CASE_HOMEMATIC)
+    {"/homematic", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_homematic}},
 #endif
     {"/device_config", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_device_config}},
     {"/clock", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_clock}},

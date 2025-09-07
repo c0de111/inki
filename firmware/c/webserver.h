@@ -49,6 +49,8 @@ extern "C" {
         UPLOAD_FORM_SEATSURFING,
 #elif defined(USE_CASE_HISTORIAN)
         UPLOAD_FORM_HISTORIAN,
+#elif defined(USE_CASE_HOMEMATIC)
+        UPLOAD_FORM_HOMEMATIC,
 #endif
         UPLOAD_FORM_DEVICE,
         UPLOAD_FORM_CLOCK,

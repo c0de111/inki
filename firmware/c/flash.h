@@ -7,6 +7,8 @@
 
 #ifdef USE_CASE_HISTORIAN
 #include "historian_config.h"
+#elif defined(USE_CASE_HOMEMATIC)
+#include "homematic_config.h"
 #endif
 
 // #include "pico/flash.h"
@@ -57,6 +59,9 @@ _Static_assert(FIRMWARE_MAGIC_LEN == 13, "FIRMWARE_MAGIC_LEN mismatch");
 #elif defined(USE_CASE_HISTORIAN)
 #define HISTORIAN_CONFIG_FLASH_OFFSET     (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Historian API settings  
 #define historian_config_flash (*(const historian_config_t*)FLASH_PTR(HISTORIAN_CONFIG_FLASH_OFFSET))
+#elif defined(USE_CASE_HOMEMATIC)
+#define HOMEMATIC_CONFIG_FLASH_OFFSET     (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Homematic settings
+#define homematic_config_flash (*(const homematic_config_t*)FLASH_PTR(HOMEMATIC_CONFIG_FLASH_OFFSET))
 #endif
 
 #define DEVICE_CONFIG_FLASH_OFFSET        (CONFIG_FLASH_OFFSET + 0x2000)  // 0x1E9000 - Device and UI configuration
@@ -122,6 +127,10 @@ void init_seatsurfing_config(seatsurfing_config_t* out);
 bool load_historian_config(historian_config_t* out);
 bool save_historian_config(const historian_config_t* in);
 void init_historian_config(historian_config_t* out);
+#elif defined(USE_CASE_HOMEMATIC)
+bool load_homematic_config(homematic_config_t* out);
+bool save_homematic_config(const homematic_config_t* in);
+void init_homematic_config(homematic_config_t* out);
 #endif
 
 /* Device config */

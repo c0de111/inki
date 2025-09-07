@@ -5,6 +5,8 @@
 
 #ifdef USE_CASE_HISTORIAN
 #include "historian_config.h"
+#elif defined(USE_CASE_HOMEMATIC)
+#include "homematic_config.h"
 #endif
 
 __attribute__((section(".wifi_config")))
@@ -43,6 +45,25 @@ const historian_config_t default_historian_config = {
         .datapoint_id = 75,
         .hours_back = 24,
         .display_name = "Temperature Sensor"
+    },
+    .crc32 = 0
+};
+#elif defined(USE_CASE_HOMEMATIC)
+// Homematic Konfiguration
+__attribute__((section(".homematic_config")))
+__attribute__((used))
+const homematic_config_t default_homematic_config = {
+    .data = {
+        .ip = {192, 168, 178, 20},
+        .port = 2010,
+        .add_interface_prefix = false,
+        .auto_label = false,
+        .count = 3,
+        .items = {
+            { .address = "002820C98F3853:1", .key = "ACTUAL_TEMPERATURE", .fallback_label = "Ch1" },
+            { .address = "002820C98F3853:2", .key = "ACTUAL_TEMPERATURE", .fallback_label = "Ch2" },
+            { .address = "002820C98F3853:3", .key = "ACTUAL_TEMPERATURE", .fallback_label = "Ch3" },
+        }
     },
     .crc32 = 0
 };
