@@ -71,6 +71,8 @@ void send_landing_page(struct tcp_pcb *tpcb) {
            "<a href=\"/seatsurfing\">Seatsurfing Settings</a><br>"
 #elif defined(USE_CASE_HISTORIAN)
            "<a href=\"/historian\">Historian Settings</a><br>"
+#elif defined(USE_CASE_HOMEMATIC)
+           "<a href=\"/homematic\">Homematic Settings</a><br>"
 #endif
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
@@ -964,6 +966,92 @@ void send_historian_config_page(struct tcp_pcb* tpcb, const char* message) {
 
     send_response(tpcb, page);
 }
+#elif defined(USE_CASE_HOMEMATIC)
+/**
+ * @brief Generates and sends the Homematic (HmIP) configuration page
+ */
+void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
+    char page[4096];
+    char timeout_info[64];
+    add_timeout_info(timeout_info, sizeof(timeout_info));
+
+    // Compose IP string
+    char ip_string[16];
+    snprintf(ip_string, sizeof(ip_string), "%d.%d.%d.%d",
+             homematic_config_flash.data.ip[0],
+             homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2],
+             homematic_config_flash.data.ip[3]);
+
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head>"
+             "<meta charset=\"UTF-8\">"
+             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+             "<meta http-equiv=\"refresh\" content=\"30\">"
+             "<title>Homematic Configuration</title>"
+             "<style>"
+             "body { font-family: sans-serif; text-align: center; }"
+             "form { max-width: 520px; margin: auto; padding: 1em; }"
+             "label { display: block; margin-bottom: 1em; font-size: 1em; text-align:left;}"
+             "input[type='text'], input[type='number'], select { width: 100%%; padding: 0.5em; font-size: 1em; }"
+             "input[type='submit'] { padding: 0.6em 1em; font-size: 1em; margin: 0.5em; width: 45%%; max-width: 150px; }"
+             "table { width:100%%; border-collapse: collapse; margin-top: 1em; }"
+             "th, td { border: 1px solid #ccc; padding: .4em; font-size:.95em; }"
+             "th { background:#f5f5f5; }"
+             "a { display: inline-block; margin-top: 1.5em; font-size: 0.9em; text-decoration: none; color: #0066cc; }"
+             "</style></head><body>"
+             "<h1>Homematic Configuration</h1>");
+
+    if (message && *message) {
+        snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                 "<div class='message'>%s</div>", message);
+    }
+
+    snprintf(page + strlen(page), sizeof(page) - strlen(page),
+             "<form method=\"POST\" action=\"/homematic\">"
+             "<label>Server IP:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
+             "<label>Port:<br><input type=\"number\" name=\"text2\" value=\"%d\"></label>"
+             "<label>Add interface prefix (HmIP-RF.):<br>"
+             "<select name=\"text3\"><option value=\"off\" %s>off</option><option value=\"on\" %s>on</option></select></label>"
+             "<label>Auto-label from CCU:<br>"
+             "<select name=\"text4\"><option value=\"off\" %s>off</option><option value=\"on\" %s>on</option></select></label>",
+             ip_string,
+             homematic_config_flash.data.port,
+             homematic_config_flash.data.add_interface_prefix ? "" : "selected",
+             homematic_config_flash.data.add_interface_prefix ? "selected" : "",
+             homematic_config_flash.data.auto_label ? "" : "selected",
+             homematic_config_flash.data.auto_label ? "selected" : "");
+
+    // Items table
+    strcat(page, "<table><tr><th>#</th><th>Address</th><th>Key</th><th>Fallback Label</th></tr>");
+    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        const char* addr = (i < homematic_config_flash.data.count) ? homematic_config_flash.data.items[i].address : "";
+        const char* key  = (i < homematic_config_flash.data.count) ? homematic_config_flash.data.items[i].key     : "";
+        const char* lab  = (i < homematic_config_flash.data.count) ? homematic_config_flash.data.items[i].fallback_label : "";
+        char row[512];
+        snprintf(row, sizeof(row),
+                 "<tr><td>%d</td>"
+                 "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td>"
+                 "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td>"
+                 "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td></tr>",
+                 i+1,
+                 5 + 3*i, addr,
+                 6 + 3*i, key,
+                 7 + 3*i, lab);
+        strcat(page, row);
+    }
+    strcat(page, "</table>");
+
+    snprintf(page + strlen(page), sizeof(page) - strlen(page),
+             "<input type=\"submit\" value=\"store\">"
+             "</form>"
+             "<a href=\"/\">Back to Start</a>"
+             "<p>%s</p>"
+             "</body></html>",
+             timeout_info);
+
+    send_response(tpcb, page);
+}
 #endif
 
 /**
@@ -1383,6 +1471,56 @@ void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len) {
         debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Historian-Konfiguration.\n");
     }
     send_historian_config_page(tpcb, "✔ historian settings stored");
+}
+#elif defined(USE_CASE_HOMEMATIC)
+void handle_form_homematic(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
+
+    web_submission_t result = {0};
+    parse_form_fields(body, len, &result);
+
+    homematic_config_t new_cfg = { .crc32 = 0 };
+
+    // text1: IP
+    int ip1, ip2, ip3, ip4;
+    if (sscanf(result.text[0], "%d.%d.%d.%d", &ip1, &ip2, &ip3, &ip4) == 4) {
+        new_cfg.data.ip[0] = (uint8_t)ip1;
+        new_cfg.data.ip[1] = (uint8_t)ip2;
+        new_cfg.data.ip[2] = (uint8_t)ip3;
+        new_cfg.data.ip[3] = (uint8_t)ip4;
+    } else {
+        // keep previous or set default
+        memcpy(new_cfg.data.ip, homematic_config_flash.data.ip, 4);
+    }
+
+    // text2: port
+    int port = atoi(result.text[1]);
+    new_cfg.data.port = (port > 0 && port < 65536) ? (uint16_t)port : homematic_config_flash.data.port;
+
+    // text3: add_interface_prefix ("on"/"off")
+    new_cfg.data.add_interface_prefix = (strncmp(result.text[2], "on", 2) == 0 || strncmp(result.text[2], "true", 4) == 0);
+    // text4: auto_label ("on"/"off")
+    new_cfg.data.auto_label = (strncmp(result.text[3], "on", 2) == 0 || strncmp(result.text[3], "true", 4) == 0);
+
+    // Items: for i in 0..HOMEMATIC_MAX_ITEMS-1, fields are text(5+3*i), text(6+3*i), text(7+3*i)
+    uint8_t count = 0;
+    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        const char* addr = result.text[4 + 1 + 3*i];   // index 5 + 3*i
+        const char* key  = result.text[4 + 2 + 3*i];   // index 6 + 3*i
+        const char* lab  = result.text[4 + 3 + 3*i];   // index 7 + 3*i
+
+        if (addr[0] == '\0' && key[0] == '\0' && lab[0] == '\0') {
+            continue;
+        }
+        strncpy(new_cfg.data.items[count].address, addr, sizeof(new_cfg.data.items[count].address)-1);
+        strncpy(new_cfg.data.items[count].key, key, sizeof(new_cfg.data.items[count].key)-1);
+        strncpy(new_cfg.data.items[count].fallback_label, lab, sizeof(new_cfg.data.items[count].fallback_label)-1);
+        count++;
+    }
+    new_cfg.data.count = count;
+
+    bool ok = save_homematic_config(&new_cfg);
+    send_homematic_config_page(tpcb, ok ? "✔ homematic settings stored" : "⚠ error saving settings");
 }
 #endif
 

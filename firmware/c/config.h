@@ -33,28 +33,35 @@
  * - Which configuration structures are included
  */
 
-// Use case selection - can be overridden by build script (./build.sh --historian)
+// Use case selection - can be overridden by build script (./build.sh --use-case ...)
 // Default fallback if no build-time define is provided
-#ifndef USE_CASE_SEATSURFING
-    #ifndef USE_CASE_HISTORIAN
-        #ifndef USE_CASE_NEW_USECASE
-            #define USE_CASE_SEATSURFING    // Default fallback
-        #endif
-    #endif
+#if !defined(USE_CASE_SEATSURFING) && \
+    !defined(USE_CASE_HISTORIAN)  && \
+    !defined(USE_CASE_HOMEMATIC)  && \
+    !defined(USE_CASE_NEW_USECASE)
+    #define USE_CASE_SEATSURFING    // Default fallback
 #endif
 
-// Validate use case selection
-#ifdef USE_CASE_SEATSURFING
-    #ifdef USE_CASE_HISTORIAN
-        #error "Cannot define both USE_CASE_SEATSURFING and USE_CASE_HISTORIAN! Please choose exactly one."
+// Validate use case selection: exactly one must be defined
+#if defined(USE_CASE_SEATSURFING)
+    #if defined(USE_CASE_HISTORIAN) || defined(USE_CASE_HOMEMATIC) || defined(USE_CASE_NEW_USECASE)
+        #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
     #endif
     #define USE_CASE_NAME "SeatSurfing"
-    #define USE_CASE_DESCRIPTION "Room Booking & Availability Display"
 #elif defined(USE_CASE_HISTORIAN)
+    #if defined(USE_CASE_HOMEMATIC) || defined(USE_CASE_NEW_USECASE)
+        #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
+    #endif
     #define USE_CASE_NAME "Historian"
-    #define USE_CASE_DESCRIPTION "Time-Series Data Visualization"
+#elif defined(USE_CASE_HOMEMATIC)
+    #if defined(USE_CASE_NEW_USECASE)
+        #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
+    #endif
+    #define USE_CASE_NAME "Homematic"
+#elif defined(USE_CASE_NEW_USECASE)
+    #define USE_CASE_NAME "NewUseCase"
 #else
-    #error "No use case defined! Please define either USE_CASE_SEATSURFING or USE_CASE_HISTORIAN in config.h"
+    #error "No use case defined! Define USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
 #endif
 
 #define WIFI_SETUP_TIMEOUT_MS (15 * 60 * 1000)

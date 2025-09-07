@@ -335,6 +335,36 @@ void init_historian_config(historian_config_t* out_config) {
         *out_config = historian_config_flash;
     }
 }
+#elif defined(USE_CASE_HOMEMATIC)
+// ------------------------------
+bool load_homematic_config(homematic_config_t* out_config) {
+    const homematic_config_t* flash_config = (const homematic_config_t*)FLASH_PTR(HOMEMATIC_CONFIG_FLASH_OFFSET);
+    memcpy(out_config, flash_config, sizeof(homematic_config_t));
+
+    uint32_t expected_crc = calc_crc32(&out_config->data, sizeof(homematic_config_data_t));
+    return (expected_crc == out_config->crc32);
+}
+
+bool save_homematic_config(const homematic_config_t* in_config) {
+    homematic_config_t temp = *in_config;
+    temp.crc32 = calc_crc32(&temp.data, sizeof(homematic_config_data_t));
+
+    const uint32_t sector_offset = HOMEMATIC_CONFIG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
+    flash_range_program(HOMEMATIC_CONFIG_FLASH_OFFSET, (const uint8_t*)&temp, sizeof(homematic_config_t));
+    restore_interrupts(ints);
+
+    return true;
+}
+
+void init_homematic_config(homematic_config_t* out_config) {
+    if (!load_homematic_config(out_config)) {
+        save_homematic_config(&homematic_config_flash);
+        *out_config = homematic_config_flash;
+    }
+}
 #endif
 
 // ------------------------------
@@ -376,4 +406,6 @@ const void* keep_wifi_config_flash = &wifi_config_flash;
 const void* keep_seatsurfing_config_flash = &seatsurfing_config_flash;
 #elif defined(USE_CASE_HISTORIAN)
 const void* keep_historian_config_flash = &historian_config_flash;
+#elif defined(USE_CASE_HOMEMATIC)
+const void* keep_homematic_config_flash = &homematic_config_flash;
 #endif

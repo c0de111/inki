@@ -38,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       USE_CASE="HISTORIAN"
       shift
       ;;
+    --homematic)
+      USE_CASE="HOMEMATIC"
+      shift
+      ;;
     --seatsurfing)
       USE_CASE="SEATSURFING" 
       shift
@@ -53,8 +57,9 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
-      echo "  --use-case|-u <CASE>   Set use case: SEATSURFING (default), HISTORIAN, NEW_USECASE"
+      echo "  --use-case|-u <CASE>   Set use case: SEATSURFING (default), HISTORIAN, HOMEMATIC, NEW_USECASE"
       echo "  --historian            Build for Historian use case"
+      echo "  --homematic            Build for Homematic use case"
       echo "  --seatsurfing          Build for SeatSurfing use case (default)"
       echo "  --new-usecase          Build for new use case template"
       echo "  --help|-h              Show this help"
@@ -70,7 +75,7 @@ done
 
 # Validate use case
 case $USE_CASE in
-  SEATSURFING|HISTORIAN|NEW_USECASE)
+  SEATSURFING|HISTORIAN|HOMEMATIC|NEW_USECASE)
     # Valid use case
     ;;
   *)
