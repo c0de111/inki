@@ -36,6 +36,7 @@ add_executable(inki_slot0
     http_client.c   # Robust HTTP client with historian architecture
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
+    homematic_client.c   # Homematic XML-RPC request builders
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -56,6 +57,7 @@ add_executable(inki_slot1
     http_client.c   # Robust HTTP client with historian architecture
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
+    homematic_client.c   # Homematic XML-RPC request builders
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling

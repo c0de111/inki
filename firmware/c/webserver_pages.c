@@ -1505,9 +1505,10 @@ void handle_form_homematic(struct tcp_pcb *tpcb, const char *body, size_t len) {
     // Items: for i in 0..HOMEMATIC_MAX_ITEMS-1, fields are text(5+3*i), text(6+3*i), text(7+3*i)
     uint8_t count = 0;
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
-        const char* addr = result.text[4 + 1 + 3*i];   // index 5 + 3*i
-        const char* key  = result.text[4 + 2 + 3*i];   // index 6 + 3*i
-        const char* lab  = result.text[4 + 3 + 3*i];   // index 7 + 3*i
+        // text5/text6/text7 correspond to zero-based indices 4/5/6
+        const char* addr = result.text[4 + 3*i];       // text(5 + 3*i) → index 4 + 3*i
+        const char* key  = result.text[5 + 3*i];       // text(6 + 3*i) → index 5 + 3*i
+        const char* lab  = result.text[6 + 3*i];       // text(7 + 3*i) → index 6 + 3*i
 
         if (addr[0] == '\0' && key[0] == '\0' && lab[0] == '\0') {
             continue;

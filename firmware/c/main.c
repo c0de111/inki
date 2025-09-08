@@ -71,6 +71,76 @@ void historian_data_received(const char* json_data, size_t length, void* arg) {
 }
 #endif
 
+#ifdef USE_CASE_HOMEMATIC
+#include "homematic_config.h"
+
+typedef enum { HM_TYPE_NONE, HM_TYPE_DOUBLE, HM_TYPE_I4, HM_TYPE_BOOL, HM_TYPE_STRING } hm_type_t;
+typedef struct {
+    bool valid;
+    bool fault;
+    hm_type_t type;
+    double dval;
+    int ival;
+    bool bval;
+    char sval[32];
+} hm_item_value_t;
+
+static hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
+
+static void homematic_data_received(const char* body, size_t length, void* arg) {
+    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        homematic_values[i].valid = false;
+        homematic_values[i].fault = false;
+        homematic_values[i].type = HM_TYPE_NONE;
+    }
+    if (!body || length == 0) return;
+
+    const char* p = body;
+    int idx = 0;
+    while (idx < HOMEMATIC_MAX_ITEMS && (p = strstr(p, "<value>"))) {
+        const char* end = strstr(p, "</value>");
+        if (!end) break;
+        const char* fault = strstr(p, "<fault>");
+        if (fault && fault < end) {
+            homematic_values[idx].fault = true;
+            homematic_values[idx].valid = true;
+            idx++;
+            p = end + 8;
+            continue;
+        }
+        const char* q;
+        if ((q = strstr(p, "<double>")) && q < end) {
+            double v = atof(q + 8);
+            homematic_values[idx].type = HM_TYPE_DOUBLE;
+            homematic_values[idx].dval = v;
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<i4>")) && q < end) {
+            int v = atoi(q + 4);
+            homematic_values[idx].type = HM_TYPE_I4;
+            homematic_values[idx].ival = v;
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<boolean>")) && q < end) {
+            int v = atoi(q + 9);
+            homematic_values[idx].type = HM_TYPE_BOOL;
+            homematic_values[idx].bval = (v != 0);
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<string>")) && q < end) {
+            const char* r = strstr(q, "</string>");
+            size_t len = (r && r < end) ? (size_t)(r - (q + 8)) : 0;
+            if (len > sizeof(homematic_values[idx].sval) - 1) len = sizeof(homematic_values[idx].sval) - 1;
+            memcpy(homematic_values[idx].sval, q + 8, len);
+            homematic_values[idx].sval[len] = 0;
+            homematic_values[idx].type = HM_TYPE_STRING;
+            homematic_values[idx].valid = true;
+        } else {
+            homematic_values[idx].valid = false;
+        }
+        idx++;
+        p = end + 8;
+    }
+}
+#endif
+
 
 ds3231_t ds3231; // RTC definition
 // extern const wifi_config_t wifi_config_flash;
@@ -1311,6 +1381,35 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
     }
     
+#elif defined(USE_CASE_HOMEMATIC)
+    // Simple list of Homematic values (page 0)
+    Paint_DrawString_EN(20, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
+    int y = 50;
+    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        if (i >= ((int)homematic_config_flash.data.count)) break;
+        char label[48];
+        const char* flab = homematic_config_flash.data.items[i].fallback_label;
+        if (flab && *flab) snprintf(label, sizeof(label), "%s:", flab);
+        else snprintf(label, sizeof(label), "%s:", homematic_config_flash.data.items[i].address);
+
+        char val[64] = "—";
+        if (homematic_values[i].valid && !homematic_values[i].fault) {
+            switch (homematic_values[i].type) {
+                case HM_TYPE_DOUBLE: snprintf(val, sizeof(val), "%.1f", homematic_values[i].dval); break;
+                case HM_TYPE_I4:     snprintf(val, sizeof(val), "%d", homematic_values[i].ival); break;
+                case HM_TYPE_BOOL:   snprintf(val, sizeof(val), homematic_values[i].bval ? "true" : "false"); break;
+                case HM_TYPE_STRING: snprintf(val, sizeof(val), "%s", homematic_values[i].sval); break;
+                default: break;
+            }
+        } else if (homematic_values[i].fault) {
+            snprintf(val, sizeof(val), "fault");
+        }
+        char line[96];
+        snprintf(line, sizeof(line), "%s %s", label, val);
+        Paint_DrawString_EN(20, y, line, &font_ubuntu_mono_12pt, WHITE, BLACK);
+        y += 24;
+    }
+
 #else
     // No use case defined - show error
     Paint_DrawString_EN(50, 100, "No use case configured", &font_ubuntu_mono_14pt, WHITE, BLACK);
@@ -2405,6 +2504,8 @@ int main(void)
         set_data_callback(historian_data_received, NULL);
 #elif defined(USE_CASE_SEATSURFING)
         set_data_callback(seatsurfing_data_received, NULL);
+#elif defined(USE_CASE_HOMEMATIC)
+        set_data_callback(homematic_data_received, NULL);
 #endif
         
         // Unified communication function handles use case selection internally
