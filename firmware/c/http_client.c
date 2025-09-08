@@ -21,6 +21,7 @@
 #include "historian_config.h"
 #include "historian_client.h"
 #include "seatsurfing_client.h"
+#include "homematic_client.h"
 #include "cJSON.h"
 
 // Pico SDK headers
@@ -843,7 +844,60 @@ static bool seatsurfing_make_request(void) {
 #ifdef USE_CASE_HOMEMATIC
 // Temporary stub for Homematic request. Will be replaced by XML-RPC builder.
 static bool homematic_make_request(void) {
-    // Build and send request in a later step
+    // Prepare HTTP request buffer
+    static char http_request[HTTP_REQUEST_MAX];
+    static char xml_body[HTTP_REQUEST_MAX];
+
+    // Build XML body (prefer multicall)
+    int xml_len = homematic_build_multicall(xml_body, sizeof(xml_body), &homematic_config_flash);
+    if (xml_len < 0) {
+        // Fallback: if no items, fail
+        if (homematic_config_flash.data.count == 0) {
+            debug_log_with_color(COLOR_RED, "[HOMEMATIC] No items configured\n");
+            return false;
+        }
+        // Single getValue fallback for first item
+        char addr[64];
+        const char* raw = homematic_config_flash.data.items[0].address;
+        if (homematic_config_flash.data.add_interface_prefix && strncmp(raw, "HmIP-RF.", 8) != 0) {
+            snprintf(addr, sizeof(addr), "HmIP-RF.%s", raw);
+        } else {
+            snprintf(addr, sizeof(addr), "%s", raw);
+        }
+        xml_len = homematic_build_getvalue(xml_body, sizeof(xml_body), addr, homematic_config_flash.data.items[0].key);
+        if (xml_len < 0) {
+            debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build XML body\n");
+            return false;
+        }
+    }
+
+    char host[16];
+    snprintf(host, sizeof(host), "%d.%d.%d.%d",
+             homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+
+    int req_len = homematic_build_http_post(http_request, sizeof(http_request), host, xml_body, xml_len);
+    if (req_len < 0) {
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build HTTP request\n");
+        return false;
+    }
+
+    debug_log("[HOMEMATIC] Constructed HTTP request (len=%d)\n", req_len);
+    debug_log("%s\n", http_request);
+
+    ip_addr_t ip;
+    IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+
+    sync_operation_complete = false;
+    sync_operation_success = false;
+
+    http_result_t result = http_request_async(&ip, homematic_config_flash.data.port,
+                                              http_request, unified_completion_callback, NULL);
+    if (result != HTTP_SUCCESS) {
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] HTTP request failed to start: %d\n", result);
+        return false;
+    }
     return true;
 }
 #endif
