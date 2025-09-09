@@ -88,6 +88,69 @@ typedef struct {
 static hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
 
 static void homematic_data_received(const char* body, size_t length, void* arg) {
+    // Special reset signal from HTTP layer
+    if ((uintptr_t)arg == 0xFFFF) {
+        for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+            homematic_values[i].valid = false;
+            homematic_values[i].fault = false;
+            homematic_values[i].type = HM_TYPE_NONE;
+        }
+        return;
+    }
+
+    // If arg is a valid index (sequential single-call mode), only update that index
+    if ((uintptr_t)arg < HOMEMATIC_MAX_ITEMS) {
+        int idx = (int)(uintptr_t)arg;
+        // On failure/null body, mark fault
+        if (!body || length == 0) {
+            homematic_values[idx].fault = true;
+            homematic_values[idx].valid = true;
+            homematic_values[idx].type = HM_TYPE_NONE;
+            return;
+        }
+
+        const char* p = body;
+        const char* end = NULL;
+        const char* q = NULL;
+        // Find first </value> boundary to limit search
+        end = strstr(p, "</value>");
+        if (!end) end = body + length;
+
+        if ((q = strstr(p, "<double>")) && q < end) {
+            double v = atof(q + 8);
+            homematic_values[idx].type = HM_TYPE_DOUBLE;
+            homematic_values[idx].dval = v;
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<i4>")) && q < end) {
+            int v = atoi(q + 4);
+            homematic_values[idx].type = HM_TYPE_I4;
+            homematic_values[idx].ival = v;
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<boolean>")) && q < end) {
+            int v = atoi(q + 9);
+            homematic_values[idx].type = HM_TYPE_BOOL;
+            homematic_values[idx].bval = (v != 0);
+            homematic_values[idx].valid = true;
+        } else if ((q = strstr(p, "<string>")) && q < end) {
+            const char* r = strstr(q, "</string>");
+            size_t len = (r && r < end) ? (size_t)(r - (q + 8)) : 0;
+            if (len > sizeof(homematic_values[idx].sval) - 1) len = sizeof(homematic_values[idx].sval) - 1;
+            memcpy(homematic_values[idx].sval, q + 8, len);
+            homematic_values[idx].sval[len] = 0;
+            homematic_values[idx].type = HM_TYPE_STRING;
+            homematic_values[idx].valid = true;
+        } else if (strstr(p, "<fault>") && strstr(p, "</fault>")) {
+            homematic_values[idx].fault = true;
+            homematic_values[idx].valid = true;
+        } else {
+            // Unknown format, mark as fault
+            homematic_values[idx].fault = true;
+            homematic_values[idx].valid = true;
+        }
+        return;
+    }
+
+    // Batch mode (e.g., multicall): reset and fill sequentially
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
         homematic_values[i].valid = false;
         homematic_values[i].fault = false;
