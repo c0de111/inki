@@ -1470,7 +1470,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         char line[96];
         snprintf(line, sizeof(line), "%s %s", label, val);
         Paint_DrawString_EN(20, y, line, &font_ubuntu_mono_12pt, WHITE, BLACK);
-        y += 24;
+        y += 30; // +2 px more spacing for readability
     }
 
 #else

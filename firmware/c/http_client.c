@@ -48,6 +48,15 @@ static bool g_transfer_was_successful = false;
 static bool sync_operation_complete = false;
 static bool sync_operation_success = false;
 
+// Optional hook to notify after a TCP connection is fully closed
+static void (*g_after_close_cb)(void*) = NULL;
+static void* g_after_close_arg = NULL;
+
+void http_set_after_close(void (*cb)(void*), void* arg) {
+    g_after_close_cb = cb;
+    g_after_close_arg = arg;
+}
+
 // === Helper Functions ===
 
 /**
@@ -139,6 +148,17 @@ static int parse_http_status_code(const char* header) {
  */
 static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p, err_t err) {
     http_session_t* session = (http_session_t*)arg;
+    // Ignore stray callbacks from stale PCBs (previous session) to avoid corrupting current transfer
+    if (pcb != session->pcb) {
+        if (p) {
+            altcp_recved(pcb, p->tot_len);
+            pbuf_free(p);
+        }
+        // Ensure the stale pcb is closed
+        altcp_close(pcb);
+        debug_log("[HTTP] Ignoring recv from stale PCB\n");
+        return ERR_OK;
+    }
     
     if (!p) {
         // Connection closed
@@ -165,6 +185,15 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
             session->completion_callback(NULL, 0, false, session->callback_arg);
         }
         reset_session(session);
+        // Notify close hook for sequencing (e.g., Homematic next request)
+        if (g_after_close_cb) {
+            void (*cb)(void*) = g_after_close_cb;
+            void* cb_arg = g_after_close_arg;
+            // Clear before calling to avoid reentry
+            g_after_close_cb = NULL;
+            g_after_close_arg = NULL;
+            cb(cb_arg);
+        }
         return ERR_OK;
     }
 
@@ -454,6 +483,14 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     session->pcb = NULL;
     // Ensure session is fully reset before any potential next request is started
     reset_session(session);
+    // Notify close hook for sequencing (e.g., start next Homematic request)
+    if (g_after_close_cb) {
+        void (*cb)(void*) = g_after_close_cb;
+        void* cb_arg = g_after_close_arg;
+        g_after_close_cb = NULL;
+        g_after_close_arg = NULL;
+        cb(cb_arg);
+    }
 
     return ERR_OK;
 }
@@ -470,6 +507,10 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
  */
 static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err) {
     http_session_t* session = (http_session_t*)arg;
+    if (pcb != session->pcb) {
+        debug_log("[HTTP] Connected callback for stale PCB — ignored\n");
+        return ERR_OK;
+    }
     
     if (err != ERR_OK) {
         debug_log_with_color(COLOR_RED,
@@ -483,7 +524,11 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
     session->state = HTTP_SESSION_CONNECTED;
 
     // Send HTTP request
+    // Wrap write in cyw43 lock for safety
+    cyw43_arch_lwip_begin();
     err_t write_err = altcp_write(pcb, session->request_data, session->request_length, TCP_WRITE_FLAG_COPY);
+    if (write_err == ERR_OK) altcp_output(pcb);
+    cyw43_arch_lwip_end();
     if (write_err != ERR_OK) {
         debug_log_with_color(COLOR_RED,
                              "[HTTP] Failed to send request: %d\n", write_err);
@@ -499,7 +544,6 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
         return write_err;
     }
 
-    altcp_output(pcb);
     session->state = HTTP_SESSION_SENDING;
     debug_log("[HTTP] Request sent (%d bytes)\n", (int)session->request_length);
 
@@ -516,8 +560,24 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
  */
 static void http_error_callback(void* arg, err_t err) {
     http_session_t* session = (http_session_t*)arg;
-    
-    // Check if transfer was successful before error
+    // If session is already inactive (e.g., after success/reset), ignore spurious errors
+    if (!session || !session->active) {
+        debug_log("[HTTP] Ignoring TCP error on inactive session (%d)\n", err);
+        return;
+    }
+
+    // Ignore errors after a successful transfer (late/duplicate callbacks)
+    if (g_transfer_was_successful) {
+        debug_log("[HTTP] TCP connection closed normally after successful transfer\n");
+        return;
+    }
+
+    // Silently ignore pure close notifications
+    if (err == ERR_CLSD) {
+        return;
+    }
+
+    // Genuine error before success
     if (!g_transfer_was_successful) {
         debug_log_with_color(COLOR_RED,
                              "[HTTP] TCP error: %d (transfer incomplete)\n", err);
@@ -530,13 +590,9 @@ static void http_error_callback(void* arg, err_t err) {
         }
         // Ensure all buffers and state are cleaned up on error
         reset_session(session);
-    } else {
-        // Transfer was successful, connection close is normal
-        debug_log("[HTTP] TCP connection closed normally after successful transfer\n");
     }
 
     session->pcb = NULL;
-    g_transfer_was_successful = false;  // Reset for next transfer
 }
 
 // === Public API Implementation ===
@@ -569,9 +625,13 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
 
     debug_log("[HTTP] Creating TCP connection...\n");
 
+    // Perform lwIP operations under cyw43 lock
+    cyw43_arch_lwip_begin();
+
     // Create TCP PCB
     g_session.pcb = altcp_new(NULL);
     if (!g_session.pcb) {
+        cyw43_arch_lwip_end();
         debug_log_with_color(COLOR_RED, "[HTTP] Failed to create PCB\n");
         free(g_session.request_data);
         g_session.request_data = NULL;
@@ -589,10 +649,16 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
 
     // Connect to server
     err_t err = altcp_connect(g_session.pcb, server_ip, port, http_connected_callback);
+
+    cyw43_arch_lwip_end();
+
     if (err != ERR_OK) {
         debug_log_with_color(COLOR_RED,
                              "[HTTP] Failed to connect: %d\n", err);
+        // Close PCB under lock
+        cyw43_arch_lwip_begin();
         altcp_close(g_session.pcb);
+        cyw43_arch_lwip_end();
         g_session.pcb = NULL;
         reset_session(&g_session);
         return HTTP_ERROR_CONNECTION;
@@ -850,42 +916,65 @@ typedef struct {
     uint8_t next_idx;
     uint8_t total;
     bool had_failure;
+    bool ready_for_next;
+    uint8_t attempts[HOMEMATIC_MAX_ITEMS];
+    bool had_success;
 } homematic_seq_t;
 
 static homematic_seq_t g_hm_seq;
 
 static bool homematic_issue_single(uint8_t idx);
 
+static void homematic_on_closed(void* arg);
+
 static void homematic_single_completion(const char* body, size_t length, bool success, void* arg) {
     uint8_t idx = (uint8_t)(uintptr_t)arg;
     debug_log("[HOMEMATIC] Single completion idx=%u success=%d len=%u\n", idx, success, (unsigned)length);
-
-    if (!success) {
-        g_hm_seq.had_failure = true;
-    }
+    bool retry = false;
 
     // Forward to registered data callback with index as arg (so parser updates only this entry)
     if (data_callback) {
         if (success && body && length > 0) {
             data_callback(body, length, (void*)(uintptr_t)idx);
+            g_hm_seq.had_success = true;
         } else {
             data_callback(NULL, 0, (void*)(uintptr_t)idx);
         }
     }
 
-    // Next or finish
-    g_hm_seq.next_idx++;
+    // Decide whether to retry this index (on transport error or XML fault)
+    if (!success || !body || length == 0 || (body && strstr(body, "<fault>"))) {
+        if (g_hm_seq.attempts[idx] < 1) {
+            g_hm_seq.attempts[idx]++;
+            retry = true;
+            debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] Scheduling retry for idx=%u (attempt %u)\n", idx, g_hm_seq.attempts[idx]);
+        } else {
+            g_hm_seq.had_failure = true;
+        }
+    }
+
+    // Mark that we are ready to move on (retry same or next) after TCP fully closed
+    g_hm_seq.next_idx = retry ? idx : (uint8_t)(idx + 1);
+    g_hm_seq.ready_for_next = true;
+}
+
+static void homematic_on_closed(void* arg) {
+    if (!g_hm_seq.ready_for_next) return; // nothing to do
     if (g_hm_seq.next_idx < g_hm_seq.total) {
-        // fire next request
+        g_hm_seq.ready_for_next = false;
+        // Reinstall close hook for the next request
+        http_set_after_close(homematic_on_closed, NULL);
         if (!homematic_issue_single(g_hm_seq.next_idx)) {
             g_hm_seq.had_failure = true;
-            // End sequence
-            sync_operation_success = !g_hm_seq.had_failure;
+            // Finish with failure
+            g_hm_seq.ready_for_next = false;
+            sync_operation_success = g_hm_seq.had_success;
             sync_operation_complete = true;
         }
     } else {
-        // All done
-        sync_operation_success = !g_hm_seq.had_failure;
+        // Sequence finished
+        g_hm_seq.ready_for_next = false;
+        sync_operation_success = g_hm_seq.had_success;
         sync_operation_complete = true;
     }
 }
@@ -915,6 +1004,10 @@ static bool homematic_issue_single(uint8_t idx) {
         debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build HTTP request for idx %u\n", idx);
         return false;
     }
+
+    // Debug-dump the outgoing request for diagnostics
+    debug_log("[HOMEMATIC] >>> Request idx=%u (len=%d)\n", idx, req_len);
+    debug_log("%s\n", http_request);
 
     ip_addr_t ip;
     IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
@@ -952,6 +1045,9 @@ static bool homematic_make_request(void) {
     sync_operation_complete = false;
     sync_operation_success = false;
     g_hm_seq.had_failure = false;
+    g_hm_seq.ready_for_next = false;
+    g_hm_seq.had_success = false;
+    memset(g_hm_seq.attempts, 0, sizeof(g_hm_seq.attempts));
     g_hm_seq.next_idx = 0;
 
     if (g_hm_seq.total == 0) {
@@ -961,6 +1057,8 @@ static bool homematic_make_request(void) {
         return true;
     }
 
+    // Install close hook and start the first request
+    http_set_after_close(homematic_on_closed, NULL);
     return homematic_issue_single(0);
 }
 #endif
