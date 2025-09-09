@@ -452,6 +452,8 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     // Clean up connection
     altcp_close(pcb);
     session->pcb = NULL;
+    // Ensure session is fully reset before any potential next request is started
+    reset_session(session);
 
     return ERR_OK;
 }
@@ -842,63 +844,124 @@ static bool seatsurfing_make_request(void) {
 #endif // USE_CASE_SEATSURFING
 
 #ifdef USE_CASE_HOMEMATIC
-// Temporary stub for Homematic request. Will be replaced by XML-RPC builder.
-static bool homematic_make_request(void) {
-    // Prepare HTTP request buffer
+// Sequential single-call engine for Homematic
+typedef struct {
+    homematic_config_t eff;
+    uint8_t next_idx;
+    uint8_t total;
+    bool had_failure;
+} homematic_seq_t;
+
+static homematic_seq_t g_hm_seq;
+
+static bool homematic_issue_single(uint8_t idx);
+
+static void homematic_single_completion(const char* body, size_t length, bool success, void* arg) {
+    uint8_t idx = (uint8_t)(uintptr_t)arg;
+    debug_log("[HOMEMATIC] Single completion idx=%u success=%d len=%u\n", idx, success, (unsigned)length);
+
+    if (!success) {
+        g_hm_seq.had_failure = true;
+    }
+
+    // Forward to registered data callback with index as arg (so parser updates only this entry)
+    if (data_callback) {
+        if (success && body && length > 0) {
+            data_callback(body, length, (void*)(uintptr_t)idx);
+        } else {
+            data_callback(NULL, 0, (void*)(uintptr_t)idx);
+        }
+    }
+
+    // Next or finish
+    g_hm_seq.next_idx++;
+    if (g_hm_seq.next_idx < g_hm_seq.total) {
+        // fire next request
+        if (!homematic_issue_single(g_hm_seq.next_idx)) {
+            g_hm_seq.had_failure = true;
+            // End sequence
+            sync_operation_success = !g_hm_seq.had_failure;
+            sync_operation_complete = true;
+        }
+    } else {
+        // All done
+        sync_operation_success = !g_hm_seq.had_failure;
+        sync_operation_complete = true;
+    }
+}
+
+static bool homematic_issue_single(uint8_t idx) {
     static char http_request[HTTP_REQUEST_MAX];
     static char xml_body[HTTP_REQUEST_MAX];
 
-    // Build XML body (prefer multicall)
-    int xml_len = homematic_build_multicall(xml_body, sizeof(xml_body), &homematic_config_flash);
+    // Build single getValue for this index
+    char addr[64];
+    const char* raw = g_hm_seq.eff.data.items[idx].address;
+    if (g_hm_seq.eff.data.add_interface_prefix && strncmp(raw, "HmIP-RF.", 8) != 0) snprintf(addr, sizeof(addr), "HmIP-RF.%s", raw);
+    else snprintf(addr, sizeof(addr), "%s", raw);
+
+    int xml_len = homematic_build_getvalue(xml_body, sizeof(xml_body), addr, g_hm_seq.eff.data.items[idx].key);
     if (xml_len < 0) {
-        // Fallback: if no items, fail
-        if (homematic_config_flash.data.count == 0) {
-            debug_log_with_color(COLOR_RED, "[HOMEMATIC] No items configured\n");
-            return false;
-        }
-        // Single getValue fallback for first item
-        char addr[64];
-        const char* raw = homematic_config_flash.data.items[0].address;
-        if (homematic_config_flash.data.add_interface_prefix && strncmp(raw, "HmIP-RF.", 8) != 0) {
-            snprintf(addr, sizeof(addr), "HmIP-RF.%s", raw);
-        } else {
-            snprintf(addr, sizeof(addr), "%s", raw);
-        }
-        xml_len = homematic_build_getvalue(xml_body, sizeof(xml_body), addr, homematic_config_flash.data.items[0].key);
-        if (xml_len < 0) {
-            debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build XML body\n");
-            return false;
-        }
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build XML body for idx %u\n", idx);
+        return false;
     }
 
     char host[16];
     snprintf(host, sizeof(host), "%d.%d.%d.%d",
              homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
              homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
-
     int req_len = homematic_build_http_post(http_request, sizeof(http_request), host, xml_body, xml_len);
     if (req_len < 0) {
-        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build HTTP request\n");
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build HTTP request for idx %u\n", idx);
         return false;
     }
-
-    debug_log("[HOMEMATIC] Constructed HTTP request (len=%d)\n", req_len);
-    debug_log("%s\n", http_request);
 
     ip_addr_t ip;
     IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
              homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
 
-    sync_operation_complete = false;
-    sync_operation_success = false;
-
     http_result_t result = http_request_async(&ip, homematic_config_flash.data.port,
-                                              http_request, unified_completion_callback, NULL);
+                                              http_request, homematic_single_completion, (void*)(uintptr_t)idx);
     if (result != HTTP_SUCCESS) {
-        debug_log_with_color(COLOR_RED, "[HOMEMATIC] HTTP request failed to start: %d\n", result);
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] HTTP request failed to start for idx %u: %d\n", idx, result);
         return false;
     }
     return true;
+}
+
+static bool homematic_make_request(void) {
+    // Build effective list of non-empty items (preserve order)
+    memset(&g_hm_seq, 0, sizeof(g_hm_seq));
+    for (uint8_t i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        if (i >= homematic_config_flash.data.count) break;
+        const char* a = homematic_config_flash.data.items[i].address;
+        const char* k = homematic_config_flash.data.items[i].key;
+        if (a && *a && k && *k) {
+            g_hm_seq.eff.data.items[g_hm_seq.eff.data.count] = homematic_config_flash.data.items[i];
+            g_hm_seq.eff.data.count++;
+        }
+    }
+    g_hm_seq.eff.data.add_interface_prefix = homematic_config_flash.data.add_interface_prefix;
+    g_hm_seq.total = g_hm_seq.eff.data.count;
+
+    debug_log("[HOMEMATIC] Sequential mode with %u items\n", g_hm_seq.total);
+
+    // Reset values in consumer via special reset call
+    if (data_callback) data_callback(NULL, 0, (void*)(uintptr_t)0xFFFF);
+
+    sync_operation_complete = false;
+    sync_operation_success = false;
+    g_hm_seq.had_failure = false;
+    g_hm_seq.next_idx = 0;
+
+    if (g_hm_seq.total == 0) {
+        // Nothing to do
+        sync_operation_complete = true;
+        sync_operation_success = true;
+        return true;
+    }
+
+    return homematic_issue_single(0);
 }
 #endif
 

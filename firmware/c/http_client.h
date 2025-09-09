@@ -24,7 +24,7 @@
 #endif
 
 #ifndef HTTP_REQUEST_MAX
-#define HTTP_REQUEST_MAX 1024  // max HTTP request length we build
+#define HTTP_REQUEST_MAX 2048  // max HTTP request length we build (room for multicall)
 #endif
 
 // HTTP session states
