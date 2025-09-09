@@ -65,6 +65,9 @@ int homematic_build_http_post(char* out, size_t n, const char* host, const char*
                     "POST / HTTP/1.0\r\n"
                     "Host: %s\r\n"
                     "Content-Type: text/xml\r\n"
+                    "Accept: text/xml\r\n"
+                    "User-Agent: inki/0.11\r\n"
+                    "Connection: close\r\n"
                     "Content-Length: %d\r\n"
                     "\r\n"
                     "%.*s",
