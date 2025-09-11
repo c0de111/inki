@@ -1178,7 +1178,11 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
 
     // Start of the form with general configuration grouped in a fieldset
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
-             "<form method=\"POST\" action=\"/device_config\">"
+             "<form method=\"POST\" action=\"/device_config\">");
+
+#ifdef USE_CASE_SEATSURFING
+    // Full room settings for SeatSurfing
+    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<fieldset><legend>Room Settings</legend>"
 
              // Room name input
@@ -1204,7 +1208,18 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              (device_config_flash.data.type == 1 ? "checked" : ""),
              (device_config_flash.data.type == 2 ? "checked" : ""),
              device_config_flash.data.number_of_seats);
+#else
+    // Simplified for Historian/Homematic: only Name & Title (stored in roomname)
+    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
+             "<fieldset><legend>Name & Title</legend>"
+             "<label>Display title:<br>"
+             "<input type=\"text\" name=\"roomname\" value=\"%s\" maxlength=\"15\"></label>"
+             "</fieldset>",
+             device_config_flash.data.roomname);
+#endif
 
+    // ePaper type: only SeatSurfing needs seat-limit onchange hook
+#ifdef USE_CASE_SEATSURFING
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<fieldset><legend>ePaper-Typ</legend>"
              "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"0\" %s onchange=\"updateSeatLimit()\"> None</label>"
@@ -1214,6 +1229,17 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              (device_config_flash.data.epapertype == 0 ? "checked" : ""),
              (device_config_flash.data.epapertype == 1 ? "checked" : ""),
              (device_config_flash.data.epapertype == 2 ? "checked" : ""));
+#else
+    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
+             "<fieldset><legend>ePaper-Typ</legend>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"0\" %s> None</label>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"1\" %s> 7.5 Zoll</label>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"2\" %s> 4.2 Zoll</label>"
+             "</fieldset>",
+             (device_config_flash.data.epapertype == 0 ? "checked" : ""),
+             (device_config_flash.data.epapertype == 1 ? "checked" : ""),
+             (device_config_flash.data.epapertype == 2 ? "checked" : ""));
+#endif
 
     // Refresh-Intervalle
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
@@ -1315,6 +1341,8 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              "</body></html>",
              timeout_info);
 
+    // Only include seat-limit helper when SeatSurfing fields are present
+#ifdef USE_CASE_SEATSURFING
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<script>"
              "function updateSeatLimit() {"
@@ -1332,6 +1360,7 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              "}"
              "window.onload = updateSeatLimit;"
              "</script>");
+#endif
 
     debug_log("device settings page length: %d\n", strlen(page));
     send_response(tpcb, page);
@@ -1548,14 +1577,18 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
 
     // Neue Werte eintragen
     strncpy(new_cfg.data.roomname, result.roomname, sizeof(new_cfg.data.roomname) - 1);
+#ifdef USE_CASE_SEATSURFING
     new_cfg.data.type = (RoomType)result.type;
+#endif
     new_cfg.data.epapertype = (EpaperType)result.epapertype;
 
     for (int i = 0; i < 8; i++) {
         new_cfg.data.refresh_minutes_by_pushbutton[i] = result.refresh_minutes_by_pushbutton[i];
     }
 
+    #ifdef USE_CASE_SEATSURFING
     new_cfg.data.number_of_seats = result.number_of_seats;
+    #endif
     new_cfg.data.show_query_date = result.show_query_date;
     new_cfg.data.query_only_at_officehours = result.query_only_at_officehours;
     new_cfg.data.wifi_reconnect_minutes = result.wifi_reconnect_minutes;
