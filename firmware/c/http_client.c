@@ -968,36 +968,74 @@ static void homematic_single_completion(const char* body, size_t length, bool su
         // Parse UNIT for the key in question and notify consumer with sentinel
         char unit[8] = {0};
         if (success && body && length > 0) {
-            // Minimal parser: find <name>KEY</name> ... then UNIT string
+            // Find parameter block: <member><name>KEY</name><value><struct> ... </struct></value></member>
             const char* key = g_hm_seq.eff.data.items[idx].key;
-            const char* p = strstr(body, "<name>");
-            while (p) {
+            const char* p = body;
+            const char* hit = NULL;
+            while ((p = strstr(p, "<name>"))) {
                 const char* name_end = strstr(p, "</name>");
                 if (!name_end) break;
-                const size_t nlen = (size_t)(name_end - (p + 6));
-                if (nlen == strlen(key) && strncmp(p + 6, key, nlen) == 0) {
-                    // Within this param block, search for UNIT
-                    const char* block_end = strstr(name_end, "</struct>");
-                    if (!block_end) block_end = body + length;
-                    const char* u = strstr(name_end, "<name>UNIT</name>");
-                    if (u && u < block_end) {
-                        const char* s = strstr(u, "<string>");
-                        const char* e = s ? strstr(s, "</string>") : NULL;
-                        if (s && e && e > s + 8) {
-                            size_t ul = (size_t)(e - (s + 8));
-                            if (ul >= sizeof(unit)) ul = sizeof(unit) - 1;
-                            memcpy(unit, s + 8, ul);
-                            unit[ul] = 0;
-                        }
-                    }
-                    break;
+                size_t nlen = (size_t)(name_end - (p + 6));
+                if (nlen == strlen(key) && strncmp(p + 6, key, nlen) == 0) { hit = p; break; }
+                p = name_end + 7;
+            }
+            // Fallback alias for common CCU naming differences
+            if (!hit && strcmp(key, "ACTUAL_TEMPERATURE") == 0) {
+                const char* alias = "TEMPERATURE";
+                const char* q = body;
+                while ((q = strstr(q, "<name>"))) {
+                    const char* name_end = strstr(q, "</name>");
+                    if (!name_end) break;
+                    size_t nlen = (size_t)(name_end - (q + 6));
+                    if (nlen == strlen(alias) && strncmp(q + 6, alias, nlen) == 0) { hit = q; break; }
+                    q = name_end + 7;
                 }
-                p = strstr(name_end + 7, "<name>");
+                if (hit) {
+                    debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] Using alias TEMPERATURE for ACTUAL_TEMPERATURE (idx=%u)\n", idx);
+                }
+            }
+            if (hit) {
+                // Determine end of this <member> block to bound our searches
+                const char* member_end = strstr(hit, "</member>");
+                if (!member_end) member_end = body + length;
+                // Find the <value> and then the <struct> within this member (allow whitespace/newlines)
+                const char* val_tag = strstr(hit, "<value>");
+                if (val_tag && val_tag < member_end) {
+                    const char* struct_tag = strstr(val_tag, "<struct>");
+                    if (struct_tag && struct_tag < member_end) {
+                        const char* u = strstr(struct_tag, "<name>UNIT</name>");
+                        if (u && u < member_end) {
+                            const char* s = strstr(u, "<string>");
+                            const char* e = s ? strstr(s, "</string>") : NULL;
+                            if (s && e && e > s + 8) {
+                                size_t ul = (size_t)(e - (s + 8));
+                                if (ul >= sizeof(unit)) ul = sizeof(unit) - 1;
+                                memcpy(unit, s + 8, ul);
+                                unit[ul] = 0;
+                            }
+                        } else {
+                            debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] UNIT not present in member for key %s (idx=%u)\n", key, idx);
+                        }
+                    } else {
+                        debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] struct not present in member for key %s (idx=%u)\n", key, idx);
+                    }
+                } else {
+                    debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] value tag not present for key %s (idx=%u)\n", key, idx);
+                }
+            } else {
+                debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] Key '%s' not found in ParamsetDescription (idx=%u)\n", key, idx);
             }
         }
         // Cache and notify
         strncpy(g_hm_seq.unit[idx], unit, sizeof(g_hm_seq.unit[idx]) - 1);
         g_hm_seq.unit_known[idx] = true;
+        if (unit[0]) {
+            debug_log_with_color(COLOR_GREEN, "[HOMEMATIC] UNIT idx=%u key=%s = '%s'\n",
+                                  idx, g_hm_seq.eff.data.items[idx].key, unit);
+        } else {
+            debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] UNIT idx=%u key=%s missing\n",
+                                  idx, g_hm_seq.eff.data.items[idx].key);
+        }
         if (data_callback) {
             // High-bit sentinel marks unit update; body carries unit string
             data_callback(unit, strlen(unit), (void*)(uintptr_t)(0x8000 | idx));
