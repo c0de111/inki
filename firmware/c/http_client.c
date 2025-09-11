@@ -945,11 +945,15 @@ typedef struct {
     bool ready_for_next;
     uint8_t attempts[HOMEMATIC_MAX_ITEMS];
     bool had_success;
+    bool unit_known[HOMEMATIC_MAX_ITEMS];
+    char unit[HOMEMATIC_MAX_ITEMS][8];
+    enum { HM_PHASE_UNIT, HM_PHASE_VALUE } phase;
 } homematic_seq_t;
 
 static homematic_seq_t g_hm_seq;
 
 static bool homematic_issue_single(uint8_t idx);
+static bool homematic_issue_unit(uint8_t idx);
 
 static void homematic_on_closed(void* arg);
 
@@ -960,17 +964,58 @@ static void homematic_single_completion(const char* body, size_t length, bool su
     #endif
     bool retry = false;
 
-    // Forward to registered data callback with index as arg (so parser updates only this entry)
-    if (data_callback) {
+    if (g_hm_seq.phase == HM_PHASE_UNIT) {
+        // Parse UNIT for the key in question and notify consumer with sentinel
+        char unit[8] = {0};
         if (success && body && length > 0) {
-            data_callback(body, length, (void*)(uintptr_t)idx);
-            g_hm_seq.had_success = true;
-        } else {
-            data_callback(NULL, 0, (void*)(uintptr_t)idx);
+            // Minimal parser: find <name>KEY</name> ... then UNIT string
+            const char* key = g_hm_seq.eff.data.items[idx].key;
+            const char* p = strstr(body, "<name>");
+            while (p) {
+                const char* name_end = strstr(p, "</name>");
+                if (!name_end) break;
+                const size_t nlen = (size_t)(name_end - (p + 6));
+                if (nlen == strlen(key) && strncmp(p + 6, key, nlen) == 0) {
+                    // Within this param block, search for UNIT
+                    const char* block_end = strstr(name_end, "</struct>");
+                    if (!block_end) block_end = body + length;
+                    const char* u = strstr(name_end, "<name>UNIT</name>");
+                    if (u && u < block_end) {
+                        const char* s = strstr(u, "<string>");
+                        const char* e = s ? strstr(s, "</string>") : NULL;
+                        if (s && e && e > s + 8) {
+                            size_t ul = (size_t)(e - (s + 8));
+                            if (ul >= sizeof(unit)) ul = sizeof(unit) - 1;
+                            memcpy(unit, s + 8, ul);
+                            unit[ul] = 0;
+                        }
+                    }
+                    break;
+                }
+                p = strstr(name_end + 7, "<name>");
+            }
+        }
+        // Cache and notify
+        strncpy(g_hm_seq.unit[idx], unit, sizeof(g_hm_seq.unit[idx]) - 1);
+        g_hm_seq.unit_known[idx] = true;
+        if (data_callback) {
+            // High-bit sentinel marks unit update; body carries unit string
+            data_callback(unit, strlen(unit), (void*)(uintptr_t)(0x8000 | idx));
+        }
+        // Do not change phase here; we decide next phase below
+    } else {
+        // VALUE phase: forward to consumer for parsing
+        if (data_callback) {
+            if (success && body && length > 0) {
+                data_callback(body, length, (void*)(uintptr_t)idx);
+                g_hm_seq.had_success = true;
+            } else {
+                data_callback(NULL, 0, (void*)(uintptr_t)idx);
+            }
         }
     }
 
-    // Decide whether to retry this index (on transport error or XML fault)
+    // Decide whether to retry this step (on transport error or XML fault)
     if (!success || !body || length == 0 || (body && strstr(body, "<fault>"))) {
         if (g_hm_seq.attempts[idx] < 1) {
             g_hm_seq.attempts[idx]++;
@@ -981,8 +1026,20 @@ static void homematic_single_completion(const char* body, size_t length, bool su
         }
     }
 
-    // Mark that we are ready to move on (retry same or next) after TCP fully closed
-    g_hm_seq.next_idx = retry ? idx : (uint8_t)(idx + 1);
+    // Mark that we are ready to move on (retry same, next phase, or next idx) after TCP fully closed
+    // Decide next index and phase
+    uint8_t next_idx = idx;
+    int next_phase = g_hm_seq.phase;
+    if (retry) {
+        // keep same idx and phase
+    } else if (g_hm_seq.phase == HM_PHASE_UNIT) {
+        next_phase = HM_PHASE_VALUE; // same idx, now fetch value
+    } else { // VALUE phase completed
+        next_idx = (uint8_t)(idx + 1);
+        next_phase = HM_PHASE_UNIT; // move to next idx, start with unit
+    }
+    g_hm_seq.next_idx = next_idx;
+    g_hm_seq.phase = next_phase;
     g_hm_seq.ready_for_next = true;
 }
 
@@ -992,7 +1049,9 @@ static void homematic_on_closed(void* arg) {
         g_hm_seq.ready_for_next = false;
         // Reinstall close hook for the next request
         http_set_after_close(homematic_on_closed, NULL);
-        if (!homematic_issue_single(g_hm_seq.next_idx)) {
+        bool ok = (g_hm_seq.phase == HM_PHASE_UNIT) ? homematic_issue_unit(g_hm_seq.next_idx)
+                                                    : homematic_issue_single(g_hm_seq.next_idx);
+        if (!ok) {
             g_hm_seq.had_failure = true;
             // Finish with failure
             g_hm_seq.ready_for_next = false;
@@ -1052,6 +1111,46 @@ static bool homematic_issue_single(uint8_t idx) {
     return true;
 }
 
+static bool homematic_issue_unit(uint8_t idx) {
+    static char http_request[HTTP_REQUEST_MAX];
+    static char xml_body[HTTP_REQUEST_MAX];
+
+    // Build getParamsetDescription(VALUES) for this address
+    char addr[64];
+    const char* raw = g_hm_seq.eff.data.items[idx].address;
+    if (g_hm_seq.eff.data.add_interface_prefix && strncmp(raw, "HmIP-RF.", 8) != 0) snprintf(addr, sizeof(addr), "HmIP-RF.%s", raw);
+    else snprintf(addr, sizeof(addr), "%s", raw);
+
+    int xml_len = homematic_build_getparamsetdesc(xml_body, sizeof(xml_body), addr);
+    if (xml_len < 0) {
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Failed to build unit XML for idx %u\n", idx);
+        return false;
+    }
+    char host[16];
+    snprintf(host, sizeof(host), "%d.%d.%d.%d",
+             homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+    int req_len = homematic_build_http_post(http_request, sizeof(http_request), host, xml_body, xml_len);
+    if (req_len < 0) return false;
+
+    debug_log("[HOMEMATIC] >>> Unit query idx=%u (len=%d)\n", idx, req_len);
+    #ifdef HIGH_VERBOSE_DEBUG
+    debug_log("%s\n", http_request);
+    #endif
+
+    ip_addr_t ip;
+    IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+
+    http_result_t result = http_request_async(&ip, homematic_config_flash.data.port,
+                                              http_request, homematic_single_completion, (void*)(uintptr_t)idx);
+    if (result != HTTP_SUCCESS) {
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Unit HTTP start failed for idx %u: %d\n", idx, result);
+        return false;
+    }
+    return true;
+}
+
 static bool homematic_make_request(void) {
     // Build effective list of non-empty items (preserve order)
     memset(&g_hm_seq, 0, sizeof(g_hm_seq));
@@ -1079,6 +1178,9 @@ static bool homematic_make_request(void) {
     g_hm_seq.had_success = false;
     memset(g_hm_seq.attempts, 0, sizeof(g_hm_seq.attempts));
     g_hm_seq.next_idx = 0;
+    memset(g_hm_seq.unit_known, 0, sizeof(g_hm_seq.unit_known));
+    for (uint8_t i = 0; i < HOMEMATIC_MAX_ITEMS; i++) g_hm_seq.unit[i][0] = '\0';
+    g_hm_seq.phase = HM_PHASE_UNIT;
 
     if (g_hm_seq.total == 0) {
         // Nothing to do
@@ -1089,7 +1191,7 @@ static bool homematic_make_request(void) {
 
     // Install close hook and start the first request
     http_set_after_close(homematic_on_closed, NULL);
-    return homematic_issue_single(0);
+    return homematic_issue_unit(0);
 }
 #endif
 
