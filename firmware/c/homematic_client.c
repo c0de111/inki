@@ -73,3 +73,17 @@ int homematic_build_http_post(char* out, size_t n, const char* host, const char*
                     "%.*s",
                     host, xml_len, xml_len, xml);
 }
+
+int homematic_build_getparamsetdesc(char* buf, size_t n, const char* address) {
+    if (!buf || !address) return -1;
+    return snprintf(buf, n,
+        "<?xml version=\"1.0\"?>\n"
+        "<methodCall>\n"
+        "  <methodName>getParamsetDescription</methodName>\n"
+        "  <params>\n"
+        "    <param><value><string>%s</string></value></param>\n"
+        "    <param><value><string>VALUES</string></value></param>\n"
+        "  </params>\n"
+        "</methodCall>",
+        address);
+}

@@ -83,6 +83,7 @@ typedef struct {
     int ival;
     bool bval;
     char sval[32];
+    char unit[8];
 } hm_item_value_t;
 
 static hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
@@ -94,6 +95,7 @@ static void homematic_data_received(const char* body, size_t length, void* arg) 
             homematic_values[i].valid = false;
             homematic_values[i].fault = false;
             homematic_values[i].type = HM_TYPE_NONE;
+            homematic_values[i].unit[0] = 0;
         }
         return;
     }
@@ -146,6 +148,19 @@ static void homematic_data_received(const char* body, size_t length, void* arg) 
             // Unknown format, mark as fault
             homematic_values[idx].fault = true;
             homematic_values[idx].valid = true;
+        }
+        return;
+    }
+
+    // Unit updates: sentinel 0x8000 | idx, body carries unit string
+    if (((uintptr_t)arg & 0x8000) && ((uintptr_t)arg & 0x7FFF) < HOMEMATIC_MAX_ITEMS) {
+        int idx = (int)((uintptr_t)arg & 0x7FFF);
+        size_t ul = (length < sizeof(homematic_values[idx].unit)-1) ? length : sizeof(homematic_values[idx].unit)-1;
+        if (body && ul > 0) {
+            memcpy(homematic_values[idx].unit, body, ul);
+            homematic_values[idx].unit[ul] = 0;
+        } else {
+            homematic_values[idx].unit[0] = 0;
         }
         return;
     }
@@ -1464,6 +1479,10 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
                 case HM_TYPE_BOOL:   snprintf(val, sizeof(val), homematic_values[i].bval ? "true" : "false"); break;
                 case HM_TYPE_STRING: snprintf(val, sizeof(val), "%s", homematic_values[i].sval); break;
                 default: break;
+            }
+            if (homematic_values[i].unit[0]) {
+                size_t l = strlen(val);
+                snprintf(val + l, sizeof(val) - l, " %s", homematic_values[i].unit);
             }
         } else if (homematic_values[i].fault) {
             snprintf(val, sizeof(val), "fault");
