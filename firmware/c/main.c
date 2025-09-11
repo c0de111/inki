@@ -88,6 +88,68 @@ typedef struct {
 
 static hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
 
+static void draw_toggle_control(int x, int y, const sFONT* f, bool is_on) {
+    // Dimensions relative to font size
+    int h = f->Height;              // baseline character height
+    int th = h - 6;                 // toggle height
+    if (th < 12) th = h - 4;        // keep minimum shape
+    int top = y + (h - th) / 2;     // vertical centering relative to text baseline
+    int bottom = top + th;
+    int left = x;
+
+    // Pill outline (unfilled), composed of two circles and two horizontal lines
+    int r_track = th / 2;
+    int cy = top + r_track;
+    int lx = left + r_track;
+    // Determine text and dynamic width before computing right side
+    const char* txt = is_on ? "an" : "aus";
+    int text_px = (int)strlen(txt) * f->Width;
+    int r = r_track - 3; if (r < 4) r = 4;           // knob radius
+    int straight_len = text_px + 2 * (r + 4);        // text + margins around knob
+    int tw = 2 * r_track + straight_len;             // total width (arcs + straight)
+    if (tw < th * 2) tw = th * 2;                    // ensure minimum 2:1 pill
+    int right = left + tw;
+    int rx = right - r_track;
+    // Top and bottom straight segments
+    Paint_DrawLine(lx, top, rx, top, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    Paint_DrawLine(lx, bottom, rx, bottom, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    // Rounded ends
+    Paint_DrawCircle(lx, cy, r_track, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+    Paint_DrawCircle(rx, cy, r_track, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+
+    // Slider knob as filled circle
+    int cx = is_on ? lx : rx; // left for "an", right for "aus"
+    Paint_DrawCircle(cx, cy, r, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+
+    // Text inside track, away from knob, outline only look
+    int tx;
+    if (is_on) {
+        // knob left, text to the right of knob
+        tx = lx + r + 4;
+        if (tx + text_px > right - 2) tx = right - 2 - text_px;
+    } else {
+        // knob right, text to the left of knob
+        tx = rx - r - 4 - text_px;
+        if (tx < left + 2) tx = left + 2;
+    }
+    int ty = y; // align with surrounding baseline
+    // Match global convention: WHITE as foreground draws dark text on light bg
+    Paint_DrawString_EN(tx, ty, txt, (sFONT*)f, WHITE, BLACK);
+}
+
+static const char* derive_unit_for_key(const char* key) {
+    if (!key) return "";
+    // Temperature family
+    if (strstr(key, "TEMP") || strcmp(key, "ACTUAL_TEMPERATURE") == 0 || strcmp(key, "TEMPERATURE") == 0) return "degC";
+    // Relative humidity
+    if (strstr(key, "HUMID")) return "%";
+    // Voltage/Power common keys
+    if (strstr(key, "VOLT")) return "V";
+    if (strstr(key, "POWER")) return "W";
+    if (strstr(key, "ILLUM") || strstr(key, "BRIGHT")) return "lux";
+    return "";
+}
+
 static void homematic_data_received(const char* body, size_t length, void* arg) {
     // Special reset signal from HTTP layer
     if ((uintptr_t)arg == 0xFFFF) {
@@ -159,8 +221,10 @@ static void homematic_data_received(const char* body, size_t length, void* arg) 
         if (body && ul > 0) {
             memcpy(homematic_values[idx].unit, body, ul);
             homematic_values[idx].unit[ul] = 0;
+            debug_log_with_color(COLOR_GREEN, "[HOMEMATIC] Unit stored idx=%d '%s'\n", idx, homematic_values[idx].unit);
         } else {
             homematic_values[idx].unit[0] = 0;
+            debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] Unit empty for idx=%d\n", idx);
         }
         return;
     }
@@ -1476,20 +1540,47 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
             switch (homematic_values[i].type) {
                 case HM_TYPE_DOUBLE: snprintf(val, sizeof(val), "%.1f", homematic_values[i].dval); break;
                 case HM_TYPE_I4:     snprintf(val, sizeof(val), "%d", homematic_values[i].ival); break;
-                case HM_TYPE_BOOL:   snprintf(val, sizeof(val), homematic_values[i].bval ? "true" : "false"); break;
+                case HM_TYPE_BOOL:   val[0] = '\0'; break; // handled as toggle below
                 case HM_TYPE_STRING: snprintf(val, sizeof(val), "%s", homematic_values[i].sval); break;
                 default: break;
-            }
-            if (homematic_values[i].unit[0]) {
-                size_t l = strlen(val);
-                snprintf(val + l, sizeof(val) - l, " %s", homematic_values[i].unit);
             }
         } else if (homematic_values[i].fault) {
             snprintf(val, sizeof(val), "fault");
         }
-        char line[96];
-        snprintf(line, sizeof(line), "%s %s", label, val);
-        Paint_DrawString_EN(20, y, line, &font_ubuntu_mono_10pt, WHITE, BLACK);
+
+        // Render label, value and unit, drawing degree symbol manually if needed
+        const sFONT* f = &font_ubuntu_mono_10pt;
+        int x = 20;
+        Paint_DrawString_EN(x, y, label, (sFONT*)f, WHITE, BLACK);
+        x += (int)strlen(label) * f->Width + f->Width; // 1 space
+
+        if (homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL) {
+            // Draw high-contrast toggle for booleans
+            draw_toggle_control(x, y, f, homematic_values[i].bval);
+            x += (f->Height - 6) * 2 + f->Width; // advance by toggle width + space
+        } else {
+            Paint_DrawString_EN(x, y, val, (sFONT*)f, WHITE, BLACK);
+            x += (int)strlen(val) * f->Width;
+        }
+
+        const char* unit = homematic_values[i].unit[0] ? homematic_values[i].unit
+                              : derive_unit_for_key(homematic_config_flash.data.items[i].key);
+        if (unit && unit[0] && !(homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL)) {
+            if (strcmp(unit, "degC") == 0 || strcmp(unit, "°C") == 0) {
+                // Draw small degree circle and then 'C'
+                int r = (f->Width >= 12) ? 3 : 2;
+                int cx = x + r + 1;                 // slight spacing after value
+                int cy = y + r + 1;                 // lifted above baseline
+                Paint_DrawCircle(cx, cy, r, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+                // Draw 'C' next to it with a small gap
+                char cstr[2] = {'C', '\0'};
+                Paint_DrawString_EN(cx + r + 1, y, cstr, (sFONT*)f, WHITE, BLACK);
+            } else {
+                char space_unit[16];
+                snprintf(space_unit, sizeof(space_unit), " %s", unit);
+                Paint_DrawString_EN(x, y, space_unit, (sFONT*)f, WHITE, BLACK);
+            }
+        }
         y += 30; // +2 px more spacing for readability
     }
 
