@@ -1447,7 +1447,8 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 #elif defined(USE_CASE_HOMEMATIC)
     // Simple list of Homematic values (page 0)
     Paint_DrawString_EN(20, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
-    int y = 50;
+    // Start a bit lower to add more distance from title
+    int y = 60;
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
         if (i >= ((int)homematic_config_flash.data.count)) break;
         char label[48];
@@ -1469,7 +1470,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         }
         char line[96];
         snprintf(line, sizeof(line), "%s %s", label, val);
-        Paint_DrawString_EN(20, y, line, &font_ubuntu_mono_12pt, WHITE, BLACK);
+        Paint_DrawString_EN(20, y, line, &font_ubuntu_mono_10pt, WHITE, BLACK);
         y += 30; // +2 px more spacing for readability
     }
 

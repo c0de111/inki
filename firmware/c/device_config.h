@@ -85,4 +85,3 @@ typedef struct {
     device_config_data_t data;
     uint32_t crc32;
 } device_config_t;
-
