@@ -156,7 +156,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         }
         // Ensure the stale pcb is closed
         altcp_close(pcb);
+#ifdef HIGH_VERBOSE_DEBUG
         debug_log("[HTTP] Ignoring recv from stale PCB\n");
+#endif
         return ERR_OK;
     }
     
@@ -217,8 +219,10 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 session->header_buffer[session->header_length] = '\0';
             }
 
+            #ifdef HIGH_VERBOSE_DEBUG
             debug_log("[HTTP] Header chunk: %d bytes (total: %d)\n",
                       step, (int)session->header_length);
+            #endif
 
             // If header buffer exhausted without CRLFCRLF, fail
             if (to_copy < (size_t)step && !strstr(session->header_buffer, "\r\n\r\n")) {
@@ -306,7 +310,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         session->total_received = body_in_header;
                         session->body_buffer[session->total_received] = '\0';
                         session->body_buffer_size = body_in_header + 1;
+                        #ifdef HIGH_VERBOSE_DEBUG
                         debug_log("[HTTP] Fallback: captured %d body bytes in header packet\n", (int)body_in_header);
+                        #endif
                     }
                 } else if (content_length == 0) {
                     // Explicit zero-length body; complete immediately
@@ -342,7 +348,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         return ERR_OK;
                     }
                     session->expected_length = clen;
+                    #ifdef HIGH_VERBOSE_DEBUG
                     debug_log("[HTTP] Content-Length: %u bytes\n", (unsigned)clen);
+                    #endif
 
                     // Allocate body buffer
                     session->body_buffer = (char*)malloc(clen + 1);
@@ -372,8 +380,10 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                         }
                         memcpy(session->body_buffer, header_end, body_in_header);
                         session->total_received = body_in_header;
+                        #ifdef HIGH_VERBOSE_DEBUG
                         debug_log("[HTTP] Found %d body bytes in header packet\n",
                                   (int)body_in_header);
+                        #endif
                     }
                 }
             }
@@ -439,9 +449,11 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 static int last_percent = -10;
                 int percent = (session->total_received * 100) / session->expected_length;
                 if (percent >= last_percent + 10) {
+                    #ifdef HIGH_VERBOSE_DEBUG
                     debug_log("[HTTP] Progress: %d%% (%d/%d bytes)\n",
                               percent, (int)session->total_received,
                               (int)session->expected_length);
+                    #endif
                     last_percent = percent;
                 }
             }
@@ -508,7 +520,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
 static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err) {
     http_session_t* session = (http_session_t*)arg;
     if (pcb != session->pcb) {
+#ifdef HIGH_VERBOSE_DEBUG
         debug_log("[HTTP] Connected callback for stale PCB — ignored\n");
+#endif
         return ERR_OK;
     }
     
@@ -520,7 +534,9 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
         return err;
     }
 
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[HTTP] Connected to server\n");
+    #endif
     session->state = HTTP_SESSION_CONNECTED;
 
     // Send HTTP request
@@ -545,7 +561,9 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
     }
 
     session->state = HTTP_SESSION_SENDING;
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[HTTP] Request sent (%d bytes)\n", (int)session->request_length);
+    #endif
 
     return ERR_OK;
 }
@@ -562,13 +580,17 @@ static void http_error_callback(void* arg, err_t err) {
     http_session_t* session = (http_session_t*)arg;
     // If session is already inactive (e.g., after success/reset), ignore spurious errors
     if (!session || !session->active) {
+        #ifdef HIGH_VERBOSE_DEBUG
         debug_log("[HTTP] Ignoring TCP error on inactive session (%d)\n", err);
+        #endif
         return;
     }
 
     // Ignore errors after a successful transfer (late/duplicate callbacks)
     if (g_transfer_was_successful) {
+        #ifdef HIGH_VERBOSE_DEBUG
         debug_log("[HTTP] TCP connection closed normally after successful transfer\n");
+        #endif
         return;
     }
 
@@ -623,7 +645,9 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
     g_session.completion_callback = callback;
     g_session.callback_arg = callback_arg;
 
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[HTTP] Creating TCP connection...\n");
+    #endif
 
     // Perform lwIP operations under cyw43 lock
     cyw43_arch_lwip_begin();
@@ -763,7 +787,9 @@ static void* data_callback_arg = NULL;
 void set_data_callback(data_callback_fn callback, void* arg) {
     data_callback = callback;
     data_callback_arg = arg;
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[DATA] Callback set: %p (arg: %p)\n", callback, arg);
+    #endif
 }
 
 /**
@@ -929,7 +955,9 @@ static void homematic_on_closed(void* arg);
 
 static void homematic_single_completion(const char* body, size_t length, bool success, void* arg) {
     uint8_t idx = (uint8_t)(uintptr_t)arg;
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[HOMEMATIC] Single completion idx=%u success=%d len=%u\n", idx, success, (unsigned)length);
+    #endif
     bool retry = false;
 
     // Forward to registered data callback with index as arg (so parser updates only this entry)
@@ -1007,7 +1035,9 @@ static bool homematic_issue_single(uint8_t idx) {
 
     // Debug-dump the outgoing request for diagnostics
     debug_log("[HOMEMATIC] >>> Request idx=%u (len=%d)\n", idx, req_len);
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("%s\n", http_request);
+    #endif
 
     ip_addr_t ip;
     IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
