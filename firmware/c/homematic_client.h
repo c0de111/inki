@@ -14,3 +14,6 @@ int homematic_build_http_post(char* out, size_t n, const char* host, const char*
 
 // Build getParamsetDescription (VALUES) XML-RPC body to query metadata incl. UNIT
 int homematic_build_getparamsetdesc(char* buf, size_t n, const char* address);
+
+// Build getServiceMessages (optional boolean includeInternal=1)
+int homematic_build_get_service_messages(char* buf, size_t n);

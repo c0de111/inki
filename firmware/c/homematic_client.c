@@ -87,3 +87,16 @@ int homematic_build_getparamsetdesc(char* buf, size_t n, const char* address) {
         "</methodCall>",
         address);
 }
+
+int homematic_build_get_service_messages(char* buf, size_t n) {
+    if (!buf) return -1;
+    // Some CCU APIs accept an optional boolean parameter includeInternal; pass true
+    return snprintf(buf, n,
+        "<?xml version=\"1.0\"?>\n"
+        "<methodCall>\n"
+        "  <methodName>getServiceMessages</methodName>\n"
+        "  <params>\n"
+        "    <param><value><boolean>1</boolean></value></param>\n"
+        "  </params>\n"
+        "</methodCall>\n");
+}

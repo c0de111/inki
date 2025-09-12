@@ -947,13 +947,14 @@ typedef struct {
     bool had_success;
     bool unit_known[HOMEMATIC_MAX_ITEMS];
     char unit[HOMEMATIC_MAX_ITEMS][8];
-    enum { HM_PHASE_UNIT, HM_PHASE_VALUE } phase;
+    enum { HM_PHASE_UNIT, HM_PHASE_VALUE, HM_PHASE_SERVICE } phase;
 } homematic_seq_t;
 
 static homematic_seq_t g_hm_seq;
 
 static bool homematic_issue_single(uint8_t idx);
 static bool homematic_issue_unit(uint8_t idx);
+static bool homematic_issue_service(void);
 
 static void homematic_on_closed(void* arg);
 
@@ -1041,7 +1042,7 @@ static void homematic_single_completion(const char* body, size_t length, bool su
             data_callback(unit, strlen(unit), (void*)(uintptr_t)(0x8000 | idx));
         }
         // Do not change phase here; we decide next phase below
-    } else {
+    } else if (g_hm_seq.phase == HM_PHASE_VALUE) {
         // VALUE phase: forward to consumer for parsing
         if (data_callback) {
             if (success && body && length > 0) {
@@ -1051,6 +1052,26 @@ static void homematic_single_completion(const char* body, size_t length, bool su
                 data_callback(NULL, 0, (void*)(uintptr_t)idx);
             }
         }
+    } else if (g_hm_seq.phase == HM_PHASE_SERVICE) {
+        // Forward entire service message response with sentinel 0x9000
+        if (data_callback) {
+            if (success && body && length > 0) {
+                #ifdef HIGH_VERBOSE_DEBUG
+                // Print a short preview of the service response
+                int preview = (length > 256) ? 256 : (int)length;
+                debug_log("[HOMEMATIC] Service response (%d bytes): %.*s\n", (int)length, preview, body);
+                #endif
+                data_callback(body, length, (void*)(uintptr_t)0x9000);
+                g_hm_seq.had_success = true;
+            } else {
+                data_callback(NULL, 0, (void*)(uintptr_t)0x9000);
+            }
+        }
+        // Final step: mark sequence finished (no further requests)
+        g_hm_seq.ready_for_next = false;
+        sync_operation_success = g_hm_seq.had_success;
+        sync_operation_complete = true;
+        return; // Do not schedule any further step
     }
 
     // Decide whether to retry this step (on transport error or XML fault)
@@ -1072,9 +1093,11 @@ static void homematic_single_completion(const char* body, size_t length, bool su
         // keep same idx and phase
     } else if (g_hm_seq.phase == HM_PHASE_UNIT) {
         next_phase = HM_PHASE_VALUE; // same idx, now fetch value
-    } else { // VALUE phase completed
+    } else if (g_hm_seq.phase == HM_PHASE_VALUE) { // VALUE phase completed
         next_idx = (uint8_t)(idx + 1);
-        next_phase = HM_PHASE_UNIT; // move to next idx, start with unit
+        next_phase = (next_idx < g_hm_seq.total) ? HM_PHASE_UNIT : HM_PHASE_SERVICE; // after last, fetch service
+    } else { // HM_PHASE_SERVICE completion handled above
+        next_idx = g_hm_seq.total;
     }
     g_hm_seq.next_idx = next_idx;
     g_hm_seq.phase = next_phase;
@@ -1083,12 +1106,15 @@ static void homematic_single_completion(const char* body, size_t length, bool su
 
 static void homematic_on_closed(void* arg) {
     if (!g_hm_seq.ready_for_next) return; // nothing to do
-    if (g_hm_seq.next_idx < g_hm_seq.total) {
+    // Schedule next step if there are remaining items, or if we need to run the single terminal service query
+    if (g_hm_seq.next_idx < g_hm_seq.total || g_hm_seq.phase == HM_PHASE_SERVICE) {
         g_hm_seq.ready_for_next = false;
         // Reinstall close hook for the next request
         http_set_after_close(homematic_on_closed, NULL);
-        bool ok = (g_hm_seq.phase == HM_PHASE_UNIT) ? homematic_issue_unit(g_hm_seq.next_idx)
-                                                    : homematic_issue_single(g_hm_seq.next_idx);
+        bool ok;
+        if (g_hm_seq.phase == HM_PHASE_UNIT) ok = homematic_issue_unit(g_hm_seq.next_idx);
+        else if (g_hm_seq.phase == HM_PHASE_VALUE) ok = homematic_issue_single(g_hm_seq.next_idx);
+        else ok = homematic_issue_service();
         if (!ok) {
             g_hm_seq.had_failure = true;
             // Finish with failure
@@ -1184,6 +1210,35 @@ static bool homematic_issue_unit(uint8_t idx) {
                                               http_request, homematic_single_completion, (void*)(uintptr_t)idx);
     if (result != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "[HOMEMATIC] Unit HTTP start failed for idx %u: %d\n", idx, result);
+        return false;
+    }
+    return true;
+}
+
+static bool homematic_issue_service(void) {
+    static char http_request[HTTP_REQUEST_MAX];
+    static char xml_body[HTTP_REQUEST_MAX];
+
+    int xml_len = homematic_build_get_service_messages(xml_body, sizeof(xml_body));
+    if (xml_len < 0) return false;
+
+    char host[16];
+    snprintf(host, sizeof(host), "%d.%d.%d.%d",
+             homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+    int req_len = homematic_build_http_post(http_request, sizeof(http_request), host, xml_body, xml_len);
+    if (req_len < 0) return false;
+
+    debug_log("[HOMEMATIC] >>> Service messages query (len=%d)\n", req_len);
+
+    ip_addr_t ip;
+    IP4_ADDR(&ip, homematic_config_flash.data.ip[0], homematic_config_flash.data.ip[1],
+             homematic_config_flash.data.ip[2], homematic_config_flash.data.ip[3]);
+
+    http_result_t result = http_request_async(&ip, homematic_config_flash.data.port,
+                                              http_request, homematic_single_completion, (void*)(uintptr_t)0);
+    if (result != HTTP_SUCCESS) {
+        debug_log_with_color(COLOR_RED, "[HOMEMATIC] Service messages HTTP start failed: %d\n", result);
         return false;
     }
     return true;
