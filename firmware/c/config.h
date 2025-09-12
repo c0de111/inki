@@ -98,7 +98,7 @@
 
 #define QR_ENABLED
 // #define BATTERY_STATUS
-// #define HIGH_VERBOSE_DEBUG
+#define HIGH_VERBOSE_DEBUG
 
 // -----------------------------------------------------------------------------
 // LED Configuration

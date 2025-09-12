@@ -88,6 +88,12 @@ typedef struct {
 
 static hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
 
+// Simple storage for service messages
+#define HM_MAX_SERVICE_MSGS 5
+static char homematic_service_msgs[HM_MAX_SERVICE_MSGS][80];
+static char homematic_service_addr[HM_MAX_SERVICE_MSGS][24];
+static int homematic_service_count = 0;
+
 static void draw_toggle_control(int x, int y, const sFONT* f, bool is_on) {
     // Dimensions relative to font size
     int h = f->Height;              // baseline character height
@@ -96,24 +102,22 @@ static void draw_toggle_control(int x, int y, const sFONT* f, bool is_on) {
     int top = y + (h - th) / 2;     // vertical centering relative to text baseline
     int bottom = top + th;
     int left = x;
-
-    // Pill outline (unfilled), composed of two circles and two horizontal lines
+    // Compute geometry and draw outer pill outline (keep outer lines with rounded ends)
     int r_track = th / 2;
     int cy = top + r_track;
     int lx = left + r_track;
-    // Determine text and dynamic width before computing right side
     const char* txt = is_on ? "an" : "aus";
     int text_px = (int)strlen(txt) * f->Width;
     int r = r_track - 3; if (r < 4) r = 4;           // knob radius
     int straight_len = text_px + 2 * (r + 4);        // text + margins around knob
-    int tw = 2 * r_track + straight_len;             // total width (arcs + straight)
-    if (tw < th * 2) tw = th * 2;                    // ensure minimum 2:1 pill
+    int tw = 2 * r_track + straight_len;             // virtual width (for layout only)
+    if (tw < th * 2) tw = th * 2;                    // ensure minimum 2:1 space
     int right = left + tw;
     int rx = right - r_track;
-    // Top and bottom straight segments
+
+    // Outer pill outline (no inner hollow circles besides the filled knob)
     Paint_DrawLine(lx, top, rx, top, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
     Paint_DrawLine(lx, bottom, rx, bottom, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    // Rounded ends
     Paint_DrawCircle(lx, cy, r_track, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
     Paint_DrawCircle(rx, cy, r_track, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
 
@@ -121,7 +125,7 @@ static void draw_toggle_control(int x, int y, const sFONT* f, bool is_on) {
     int cx = is_on ? lx : rx; // left for "an", right for "aus"
     Paint_DrawCircle(cx, cy, r, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
 
-    // Text inside track, away from knob, outline only look
+    // Text placed away from the knob
     int tx;
     if (is_on) {
         // knob left, text to the right of knob
@@ -150,6 +154,22 @@ static const char* derive_unit_for_key(const char* key) {
     return "";
 }
 
+// Summarize a CCU address like "000E5F29B4AE18:0" to "AE18:0"
+static void summarize_addr(const char* full, char* out, size_t n) {
+    if (!full || !out || n == 0) { return; }
+    out[0] = 0;
+    // Find the channel index after ':'
+    const char* colon = strrchr(full, ':');
+    const char* idx = colon ? colon + 1 : NULL;
+    // Walk back 4 hex chars before ':'
+    const char* p = colon ? colon : full + strlen(full);
+    int count = 0;
+    while (p > full && count < 4) { p--; count++; }
+    // Build output: last4 + ":" + index (if present)
+    if (colon && idx) snprintf(out, n, "%.*s:%s", count, p, idx);
+    else snprintf(out, n, "%.*s", count, p);
+}
+
 static void homematic_data_received(const char* body, size_t length, void* arg) {
     // Special reset signal from HTTP layer
     if ((uintptr_t)arg == 0xFFFF) {
@@ -158,6 +178,11 @@ static void homematic_data_received(const char* body, size_t length, void* arg) 
             homematic_values[i].fault = false;
             homematic_values[i].type = HM_TYPE_NONE;
             homematic_values[i].unit[0] = 0;
+        }
+        homematic_service_count = 0;
+        for (int i = 0; i < HM_MAX_SERVICE_MSGS; i++) {
+            homematic_service_msgs[i][0] = 0;
+            homematic_service_addr[i][0] = 0;
         }
         return;
     }
@@ -226,6 +251,80 @@ static void homematic_data_received(const char* body, size_t length, void* arg) 
             homematic_values[idx].unit[0] = 0;
             debug_log_with_color(COLOR_YELLOW, "[HOMEMATIC] Unit empty for idx=%d\n", idx);
         }
+        return;
+    }
+
+    // Service messages: sentinel 0x9000
+    if ((uintptr_t)arg == 0x9000) {
+        homematic_service_count = 0;
+        if (body && length > 0) {
+            const char* p = body;
+            // Expected shape per CCU: array of [address, type, <boolean>1</boolean>]
+            while (homematic_service_count < HM_MAX_SERVICE_MSGS && (p = strstr(p, "<array><data><value>"))) {
+                const char* addr_start = p + strlen("<array><data><value>");
+                // Robustly skip any nested tags (<array><data><value>, <string>, or whitespace) until plain text starts
+                for (;;) {
+                    while (*addr_start == ' ' || *addr_start == '\n' || *addr_start == '\r' || *addr_start == '\t') addr_start++;
+                    if (*addr_start != '<') break;
+                    const char* gt = strchr(addr_start, '>');
+                    if (!gt) break; // malformed; fall through
+                    addr_start = gt + 1;
+                }
+                // Address ends at next tag open or at </string>/</value>
+                const char* addr_end = strchr(addr_start, '<');
+                if (!addr_end) break;
+                // Store address/channel as Name surrogate
+                size_t alen = (size_t)(addr_end - addr_start);
+                if (alen >= sizeof(homematic_service_addr[0])) alen = sizeof(homematic_service_addr[0]) - 1;
+                memcpy(homematic_service_addr[homematic_service_count], addr_start, alen);
+                homematic_service_addr[homematic_service_count][alen] = 0;
+
+                // Type in next <value>
+                const char* type_tag = strstr(addr_end, "<value>");
+                if (!type_tag) break;
+                const char* type_end = strstr(type_tag + 7, "</value>");
+                if (!type_end) break;
+                size_t tlen = (size_t)(type_end - (type_tag + 7));
+                char typebuf[24];
+                if (tlen >= sizeof(typebuf)) tlen = sizeof(typebuf) - 1;
+                memcpy(typebuf, type_tag + 7, tlen);
+                typebuf[tlen] = 0;
+
+                // State in next <value>
+                const char* state_tag = strstr(type_end, "<value>");
+                if (!state_tag) break;
+                bool active = false;
+                const char* b = strstr(state_tag, "<boolean>");
+                if (b) active = (atoi(b + 9) != 0);
+                else {
+                    const char* i4 = strstr(state_tag, "<i4>");
+                    if (i4) active = (atoi(i4 + 4) != 0);
+                }
+
+                if (active) {
+                    const char* msg = NULL;
+                    // ASCII-safe labels (fonts lack umlauts)
+                    if (!strcmp(typebuf, "UNREACH") || !strcmp(typebuf, "STICKY_UNREACH")) msg = "Geraetekommunikation gestoert";
+                    else if (!strcmp(typebuf, "LOW_BAT") || !strcmp(typebuf, "LOW_BAT_ALARM")) msg = "Batterieladezustand gering";
+                    else if (!strcmp(typebuf, "SABOTAGE")) msg = "Sabotage";
+                    else if (!strcmp(typebuf, "ERROR")) msg = "Fehler";
+                    else if (!strcmp(typebuf, "DUTYCYCLE")) msg = "Duty Cycle";
+                    else if (!strcmp(typebuf, "RSSI_DEVICE")) msg = "Funkverbindung schwach";
+                    else msg = typebuf; // fallback
+
+                    snprintf(homematic_service_msgs[homematic_service_count], sizeof(homematic_service_msgs[0]), "%s", msg);
+                    debug_log("[HOMEMATIC] Service[%d] addr=%s type=%s -> '%s'\n",
+                              homematic_service_count,
+                              homematic_service_addr[homematic_service_count],
+                              typebuf,
+                              homematic_service_msgs[homematic_service_count]);
+                    homematic_service_count++;
+                }
+
+                p = state_tag + 7;
+            }
+        }
+        debug_log("[HOMEMATIC] Parsed %d service messages\n", homematic_service_count);
         return;
     }
 
@@ -1527,7 +1626,9 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     // Simple list of Homematic values (page 0)
     Paint_DrawString_EN(20, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
     // Start a bit lower to add more distance from title
-    int y = 60;
+    // Shift query section down by 5 px (not the title)
+    int y = 65;
+    const sFONT* f_top = &font_ubuntu_mono_10pt;
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
         if (i >= ((int)homematic_config_flash.data.count)) break;
         char label[48];
@@ -1549,7 +1650,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         }
 
         // Render label, value and unit, drawing degree symbol manually if needed
-        const sFONT* f = &font_ubuntu_mono_10pt;
+        const sFONT* f = f_top;
         int x = 20;
         Paint_DrawString_EN(x, y, label, (sFONT*)f, WHITE, BLACK);
         x += (int)strlen(label) * f->Width + f->Width; // 1 space
@@ -1582,6 +1683,42 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
             }
         }
         y += 30; // +2 px more spacing for readability
+    }
+
+    // Draw service messages at the bottom area
+    if (homematic_service_count > 0) {
+        // Use smaller font to fit more content per line
+        const sFONT* small = &font_ubuntu_mono_6pt;
+        int display_count = homematic_service_count;
+        int by = Paint.Height - 10 - (display_count * (small->Height + 2));
+        // Shift the service block up by 10 px
+        by -= 10;
+        if (by < y + 10) by = y + 10;
+        Paint_DrawString_EN(20, by - (small->Height + 4), "Servicemeldungen:", (sFONT*)small, WHITE, BLACK);
+        for (int i = 0; i < display_count; i++) {
+            char short_addr[16];
+            summarize_addr(homematic_service_addr[i], short_addr, sizeof(short_addr));
+
+            // Compose line with ASCII dash (avoid UTF-8 em dash not in font)
+            char line[160];
+            snprintf(line, sizeof(line), "%s - %s", short_addr[0] ? short_addr : homematic_service_addr[i], homematic_service_msgs[i]);
+
+            // Truncate to fit display width
+            int max_cols = (Paint.Width - 40) / small->Width; // 20px margins left/right
+            int len = (int)strlen(line);
+            if (len > max_cols && max_cols > 3) {
+                char tmp[160];
+                int cut = max_cols - 3;
+                if (cut > (int)sizeof(tmp) - 1) cut = (int)sizeof(tmp) - 1;
+                memcpy(tmp, line, cut);
+                memcpy(tmp + cut, "...", 3);
+                tmp[cut + 3] = 0;
+                strcpy(line, tmp);
+            }
+
+            debug_log("[HOMEMATIC] Render service: %s\n", line);
+            Paint_DrawString_EN(20, by + i * (small->Height + 2), line, (sFONT*)small, WHITE, BLACK);
+        }
     }
 
 #else
