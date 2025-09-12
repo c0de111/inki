@@ -158,16 +158,14 @@ static const char* derive_unit_for_key(const char* key) {
 static void summarize_addr(const char* full, char* out, size_t n) {
     if (!full || !out || n == 0) { return; }
     out[0] = 0;
-    // Find the channel index after ':'
+    // Consider the device part before ':'
     const char* colon = strrchr(full, ':');
-    const char* idx = colon ? colon + 1 : NULL;
-    // Walk back 4 hex chars before ':'
-    const char* p = colon ? colon : full + strlen(full);
+    const char* dev_end = colon ? colon : full + strlen(full);
+    // Walk back 4 hex chars within device part
+    const char* p = dev_end;
     int count = 0;
     while (p > full && count < 4) { p--; count++; }
-    // Build output: last4 + ":" + index (if present)
-    if (colon && idx) snprintf(out, n, "%.*s:%s", count, p, idx);
-    else snprintf(out, n, "%.*s", count, p);
+    snprintf(out, n, "%.*s", count, p);
 }
 
 static void homematic_data_received(const char* body, size_t length, void* arg) {
