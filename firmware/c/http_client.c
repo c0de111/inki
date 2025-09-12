@@ -951,6 +951,7 @@ typedef struct {
 } homematic_seq_t;
 
 static homematic_seq_t g_hm_seq;
+// Service messages always enabled in reverted state
 
 static bool homematic_issue_single(uint8_t idx);
 static bool homematic_issue_unit(uint8_t idx);
@@ -1095,7 +1096,8 @@ static void homematic_single_completion(const char* body, size_t length, bool su
         next_phase = HM_PHASE_VALUE; // same idx, now fetch value
     } else if (g_hm_seq.phase == HM_PHASE_VALUE) { // VALUE phase completed
         next_idx = (uint8_t)(idx + 1);
-        next_phase = (next_idx < g_hm_seq.total) ? HM_PHASE_UNIT : HM_PHASE_SERVICE; // after last, fetch service
+        if (next_idx < g_hm_seq.total) next_phase = HM_PHASE_UNIT;
+        else next_phase = HM_PHASE_SERVICE;
     } else { // HM_PHASE_SERVICE completion handled above
         next_idx = g_hm_seq.total;
     }
@@ -1256,7 +1258,8 @@ static bool homematic_make_request(void) {
             g_hm_seq.eff.data.count++;
         }
     }
-    g_hm_seq.eff.data.add_interface_prefix = homematic_config_flash.data.add_interface_prefix;
+    // Force no interface prefix for stability with current CCU setup
+    g_hm_seq.eff.data.add_interface_prefix = false;
     g_hm_seq.total = g_hm_seq.eff.data.count;
 
     debug_log("[HOMEMATIC] Sequential mode with %u items\n", g_hm_seq.total);

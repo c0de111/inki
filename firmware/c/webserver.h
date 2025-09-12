@@ -38,6 +38,8 @@ extern "C" {
         char action[16];
         char align[8];
         char font_size[16];
+        // Homematic (ephemeral toggles)
+        bool homematic_service_messages;
     } web_submission_t;
 
     typedef enum {

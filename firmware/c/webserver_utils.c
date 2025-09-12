@@ -218,6 +218,9 @@ void parse_form_fields(const char *body, int len, web_submission_t *result) {
         else if (key_len == 9 && strncmp(key, "font_size", 9) == 0) {
             strncpy(result->font_size, value_buf, sizeof(result->font_size)-1);
         }
+        else if (key_len == 16 && strncmp(key, "service_messages", 16) == 0) {
+            result->homematic_service_messages = true;
+        }
 
         // Gerätekonfiguration
         else if (key_len == 8 && strncmp(key, "roomname", 8) == 0) {

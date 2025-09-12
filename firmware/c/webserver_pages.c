@@ -993,7 +993,9 @@ void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
              "body { font-family: sans-serif; text-align: center; }"
              "form { max-width: 520px; margin: auto; padding: 1em; }"
              "label { display: block; margin-bottom: 1em; font-size: 1em; text-align:left;}"
-             "input[type='text'], input[type='number'], select { width: 100%%; padding: 0.5em; font-size: 1em; }"
+             "input[type='text'], input[type='number'], select { width: 100%%; padding: 0.45em; font-size: 1em; }"
+             "table input[type='text'] { font-size: .95em; padding: .4em; }"
+             "table input.key { font-size: .75em; }"
              "input[type='submit'] { padding: 0.6em 1em; font-size: 1em; margin: 0.5em; width: 45%%; max-width: 150px; }"
              "table { width:100%%; border-collapse: collapse; margin-top: 1em; }"
              "th, td { border: 1px solid #ccc; padding: .4em; font-size:.95em; }"
@@ -1010,17 +1012,9 @@ void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
     snprintf(page + strlen(page), sizeof(page) - strlen(page),
              "<form method=\"POST\" action=\"/homematic\">"
              "<label>Server IP:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
-             "<label>Port:<br><input type=\"number\" name=\"text2\" value=\"%d\"></label>"
-             "<label>Add interface prefix (HmIP-RF.):<br>"
-             "<select name=\"text3\"><option value=\"off\" %s>off</option><option value=\"on\" %s>on</option></select></label>"
-             "<label>Auto-label from CCU:<br>"
-             "<select name=\"text4\"><option value=\"off\" %s>off</option><option value=\"on\" %s>on</option></select></label>",
+             "<label>Port:<br><input type=\"number\" name=\"text2\" value=\"%d\"></label>",
              ip_string,
-             homematic_config_flash.data.port,
-             homematic_config_flash.data.add_interface_prefix ? "" : "selected",
-             homematic_config_flash.data.add_interface_prefix ? "selected" : "",
-             homematic_config_flash.data.auto_label ? "" : "selected",
-             homematic_config_flash.data.auto_label ? "selected" : "");
+             homematic_config_flash.data.port);
 
     // Items table
     strcat(page, "<table><tr><th>#</th><th>Address</th><th>Key</th><th>Fallback Label</th></tr>");
@@ -1032,7 +1026,7 @@ void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
         snprintf(row, sizeof(row),
                  "<tr><td>%d</td>"
                  "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td>"
-                 "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td>"
+                 "<td><input class=\"key\" type=\"text\" name=\"text%d\" value=\"%s\"></td>"
                  "<td><input type=\"text\" name=\"text%d\" value=\"%s\"></td></tr>",
                  i+1,
                  5 + 3*i, addr,
@@ -1526,18 +1520,18 @@ void handle_form_homematic(struct tcp_pcb *tpcb, const char *body, size_t len) {
     int port = atoi(result.text[1]);
     new_cfg.data.port = (port > 0 && port < 65536) ? (uint16_t)port : homematic_config_flash.data.port;
 
-    // text3: add_interface_prefix ("on"/"off")
-    new_cfg.data.add_interface_prefix = (strncmp(result.text[2], "on", 2) == 0 || strncmp(result.text[2], "true", 4) == 0);
-    // text4: auto_label ("on"/"off")
-    new_cfg.data.auto_label = (strncmp(result.text[3], "on", 2) == 0 || strncmp(result.text[3], "true", 4) == 0);
+    // Keep original flags in flash (no UI for these now)
+    new_cfg.data.add_interface_prefix = homematic_config_flash.data.add_interface_prefix;
+    new_cfg.data.auto_label = homematic_config_flash.data.auto_label;
 
     // Items: for i in 0..HOMEMATIC_MAX_ITEMS-1, fields are text(5+3*i), text(6+3*i), text(7+3*i)
     uint8_t count = 0;
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
         // text5/text6/text7 correspond to zero-based indices 4/5/6
-        const char* addr = result.text[4 + 3*i];       // text(5 + 3*i) → index 4 + 3*i
-        const char* key  = result.text[5 + 3*i];       // text(6 + 3*i) → index 5 + 3*i
-        const char* lab  = result.text[6 + 3*i];       // text(7 + 3*i) → index 6 + 3*i
+        // Keep original mapping: text5/text6/text7 for row 1 (indices 4/5/6)
+        const char* addr = result.text[4 + 3*i];
+        const char* key  = result.text[5 + 3*i];
+        const char* lab  = result.text[6 + 3*i];
 
         if (addr[0] == '\0' && key[0] == '\0' && lab[0] == '\0') {
             continue;
