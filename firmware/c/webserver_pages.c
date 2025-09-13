@@ -991,18 +991,22 @@ void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
              "<title>Homematic Configuration</title>"
              "<style>"
              "body { font-family: sans-serif; text-align: center; }"
-             "form { max-width: 520px; margin: auto; padding: 1em; }"
-             "label { display: block; margin-bottom: 1em; font-size: 1em; text-align:left;}"
-             "input[type='text'], input[type='number'], select { width: 100%%; padding: 0.45em; font-size: 1em; }"
-             "table input[type='text'] { font-size: .95em; padding: .4em; }"
-             "table input.key { font-size: .75em; }"
-             "input[type='submit'] { padding: 0.6em 1em; font-size: 1em; margin: 0.5em; width: 45%%; max-width: 150px; }"
-             "table { width:100%%; border-collapse: collapse; margin-top: 1em; }"
-             "th, td { border: 1px solid #ccc; padding: .4em; font-size:.95em; }"
+             "h1 { margin: .6em 0; }"
+             "form { max-width: 480px; margin: auto; padding: 0.6em; }"
+             "label { display: block; margin-bottom: 0.8em; font-size: .95em; text-align:left;}"
+             /* Uniform input sizing and prevent overflow */
+             "form input[type='text'], form input[type='number'], form select { width: 100%%; padding: .32em; font-size: .80em; box-sizing: border-box; }"
+             "table input[type='text'], table input[type='number'] { width: 100%%; padding: .32em; font-size: .80em; box-sizing: border-box; }"
+             "table input.key { font-size: .80em; }"
+             "input[type='submit'] { padding: 0.6em 1em; font-size: .9em; margin: 0.7em; width: 45%%; max-width: 180px; }"
+             "table { width:100%%; border-collapse: collapse; margin-top: 1em; table-layout: fixed; }"
+             "th, td { border: 1px solid #ccc; padding: .30em; font-size:.95em; }"
              "th { background:#f5f5f5; }"
              "a { display: inline-block; margin-top: 1.5em; font-size: 0.9em; text-decoration: none; color: #0066cc; }"
              "</style></head><body>"
              "<h1>Homematic Configuration</h1>");
+
+    // Logo rendering postponed
 
     if (message && *message) {
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
@@ -1016,8 +1020,14 @@ void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message) {
              ip_string,
              homematic_config_flash.data.port);
 
-    // Items table
-    strcat(page, "<table><tr><th>#</th><th>Address</th><th>Key</th><th>Fallback Label</th></tr>");
+    // Items table with fixed column widths so inputs roughly match content
+    strcat(page, "<table><colgroup>"
+                 "<col style='width:6%'>"      // row number
+                 "<col style='width:30%'>"     // address
+                 "<col style='width:38%'>"     // key
+                 "<col style='width:26%'>"     // name
+                 "</colgroup>"
+                 "<tr><th>#</th><th>Address</th><th>Key</th><th>Name</th></tr>");
     for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
         const char* addr = (i < homematic_config_flash.data.count) ? homematic_config_flash.data.items[i].address : "";
         const char* key  = (i < homematic_config_flash.data.count) ? homematic_config_flash.data.items[i].key     : "";
