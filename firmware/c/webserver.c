@@ -308,7 +308,6 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
 
 static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
     debug_log("GET /logo called\n");
-    // handle_logo_request(tpcb); // Commented out - no implementation
 }
 
 // =============================================================================
