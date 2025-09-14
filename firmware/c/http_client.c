@@ -31,6 +31,9 @@
 
 // lwIP headers
 #include "lwip/netif.h"
+#include "lwip/altcp_tls.h"
+#include "tls_trust_store.h"
+#include "mbedtls/ssl.h"
 
 // Standard C headers
 #include <stdio.h>
@@ -43,6 +46,7 @@
 // Global session (single session for now, can be extended later)
 static http_session_t g_session = {0};
 static bool g_transfer_was_successful = false;
+static bool g_next_no_store = false;
 
 // Synchronous operation tracking for both SeatSurfing and historian compatibility
 static bool sync_operation_complete = false;
@@ -73,6 +77,8 @@ static void reset_session(http_session_t* session) {
     session->header_complete = false;
     session->transfer_complete = false;
     session->fallback_mode = false;
+    session->no_store_body = false;
+    session->use_tls = false;
     session->header_length = 0;
     session->expected_length = 0;
     session->total_received = 0;
@@ -91,6 +97,7 @@ static void reset_session(http_session_t* session) {
     session->request_length = 0;
     
     session->pcb = NULL;
+    session->server_hostname[0] = '\0';
 }
 
 /**
@@ -130,6 +137,44 @@ static int parse_http_status_code(const char* header) {
     return atoi(p);
 }
 
+// Extract hostname from the HTTP request's Host header (without optional :port)
+static void extract_host_from_request(const char* request, char* out_host, size_t out_size) {
+    if (!request || !out_host || out_size == 0) return;
+    out_host[0] = '\0';
+    const char* p = request;
+    // Ensure we also scan the first line
+    if (strncasecmp(p, "Host:", 5) == 0) {
+        const char* v = p + 5;
+        while (*v == ' ' || *v == '\t') v++;
+        const char* end = v;
+        while (*end && *end != '\r' && *end != '\n') end++;
+        size_t len = (size_t)(end - v);
+        if (len >= out_size) len = out_size - 1;
+        size_t copy = len;
+        for (size_t i = 0; i < len; i++) { if (v[i] == ':') { copy = i; break; } }
+        memcpy(out_host, v, copy);
+        out_host[copy] = '\0';
+        return;
+    }
+    while ((p = strstr(p, "\n")) != NULL) {
+        p++;
+        if (strncasecmp(p, "Host:", 5) == 0) {
+            const char* v = p + 5;
+            while (*v == ' ' || *v == '\t') v++;
+            const char* end = v;
+            while (*end && *end != '\r' && *end != '\n') end++;
+            size_t len = (size_t)(end - v);
+            if (len >= out_size) len = out_size - 1;
+            size_t copy = len;
+            for (size_t i = 0; i < len; i++) { if (v[i] == ':') { copy = i; break; } }
+            memcpy(out_host, v, copy);
+            out_host[copy] = '\0';
+            return;
+        }
+    }
+}
+
+
 // === TCP Callbacks (based on historian architecture) ===
 
 /**
@@ -162,6 +207,10 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         return ERR_OK;
     }
     
+    if (p) {
+        debug_log("[HTTP] Received %d bytes from server\n", (int)p->tot_len);
+    }
+    
     if (!p) {
         // Connection closed
         debug_log("[HTTP] Connection closed by server\n");
@@ -170,12 +219,15 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         
         // Handle fallback mode (no Content-Length): connection close marks completion
         if (session->active && !session->transfer_complete && session->header_complete && session->fallback_mode) {
-            if (session->body_buffer && session->total_received > 0) {
-                session->body_buffer[session->total_received] = '\0';
-                session->transfer_complete = true;
+            session->transfer_complete = (session->total_received > 0);
+            if (session->transfer_complete) {
+                if (!session->no_store_body && session->body_buffer) {
+                    session->body_buffer[session->total_received] = '\0';
+                }
                 g_transfer_was_successful = true;
                 if (session->completion_callback) {
-                    session->completion_callback(session->body_buffer, session->total_received, true, session->callback_arg);
+                    session->completion_callback(session->no_store_body ? NULL : session->body_buffer,
+                                                 session->total_received, true, session->callback_arg);
                 }
                 reset_session(session);
                 return ERR_OK;
@@ -352,38 +404,48 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                     debug_log("[HTTP] Content-Length: %u bytes\n", (unsigned)clen);
                     #endif
 
-                    // Allocate body buffer
-                    session->body_buffer = (char*)malloc(clen + 1);
-                    if (!session->body_buffer) {
-                        debug_log_with_color(COLOR_RED,
-                                             "[HTTP] Failed to allocate %u bytes for body\n",
-                                             (unsigned)clen);
-                        altcp_recved(pcb, p->tot_len);
-                        pbuf_free(p);
-                        altcp_close(pcb);
-                        session->state = HTTP_SESSION_ERROR;
-                        session->last_error = ERR_MEM;
-                        if (session->completion_callback) {
-                            session->completion_callback(NULL, 0, false, session->callback_arg);
-                        }
-                        reset_session(session);
-                        return ERR_OK;
-                    }
-                    session->body_buffer_size = clen + 1;
                     session->total_received = 0;
 
-                    // Copy any body data that was already captured in header buffer
-                    size_t body_in_header = session->header_length - (header_end - session->header_buffer);
-                    if (body_in_header > 0) {
+                    if (!session->no_store_body) {
+                        // Allocate body buffer
+                        session->body_buffer = (char*)malloc(clen + 1);
+                        if (!session->body_buffer) {
+                            debug_log_with_color(COLOR_RED,
+                                                 "[HTTP] Failed to allocate %u bytes for body\n",
+                                                 (unsigned)clen);
+                            altcp_recved(pcb, p->tot_len);
+                            pbuf_free(p);
+                            altcp_close(pcb);
+                            session->state = HTTP_SESSION_ERROR;
+                            session->last_error = ERR_MEM;
+                            if (session->completion_callback) {
+                                session->completion_callback(NULL, 0, false, session->callback_arg);
+                            }
+                            reset_session(session);
+                            return ERR_OK;
+                        }
+                        session->body_buffer_size = clen + 1;
+
+                        // Copy any body data that was already captured in header buffer
+                        size_t body_in_header = session->header_length - (header_end - session->header_buffer);
+                        if (body_in_header > 0) {
+                            if (body_in_header > session->expected_length) {
+                                body_in_header = session->expected_length;
+                            }
+                            memcpy(session->body_buffer, header_end, body_in_header);
+                            session->total_received = body_in_header;
+                            #ifdef HIGH_VERBOSE_DEBUG
+                            debug_log("[HTTP] Found %d body bytes in header packet\n",
+                                      (int)body_in_header);
+                            #endif
+                        }
+                    } else {
+                        // Count-only: account for any body already in this packet
+                        size_t body_in_header = session->header_length - (header_end - session->header_buffer);
                         if (body_in_header > session->expected_length) {
                             body_in_header = session->expected_length;
                         }
-                        memcpy(session->body_buffer, header_end, body_in_header);
                         session->total_received = body_in_header;
-                        #ifdef HIGH_VERBOSE_DEBUG
-                        debug_log("[HTTP] Found %d body bytes in header packet\n",
-                                  (int)body_in_header);
-                        #endif
                     }
                 }
             }
@@ -398,6 +460,11 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 // Fallback mode: dynamically grow body buffer
                 if (step > 0) {
                     size_t sstep = (size_t)step;
+                    if (session->no_store_body) {
+                        // Count only in fallback mode - but still need to process the entire pbuf
+                        session->total_received += sstep;
+                        // Don't continue here - we need to process remaining chunks and ACK
+                    } else {
                     // Overflow guard for needed calculation
                     if (session->total_received > SIZE_MAX - (sstep + 1)) {
                         debug_log_with_color(COLOR_RED, "[HTTP] Body size overflow in fallback mode\n");
@@ -435,14 +502,19 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                     memcpy(session->body_buffer + session->total_received, chunk, sstep);
                     session->total_received += sstep;
                     session->body_buffer[session->total_received] = '\0';
+                    }
                 }
             } else {
                 // Normal mode with Content-Length
                 size_t remaining = session->expected_length - session->total_received;
                 size_t to_copy = ((size_t)step < remaining) ? (size_t)step : remaining;
                 if (to_copy > 0) {
+                    if (session->no_store_body) {
+                        session->total_received += to_copy;
+                    } else {
                     memcpy(session->body_buffer + session->total_received, chunk, to_copy);
                     session->total_received += to_copy;
+                    }
                 }
 
                 // Progress logging every 10%
@@ -473,7 +545,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     return ERR_OK;
 
     transfer_complete:
-    session->body_buffer[session->expected_length] = '\0';
+    if (!session->no_store_body && session->body_buffer) {
+        session->body_buffer[session->expected_length] = '\0';
+    }
     session->transfer_complete = true;
     session->state = HTTP_SESSION_COMPLETE;
 
@@ -486,8 +560,8 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
 
     // Call callback with complete data
     if (session->completion_callback) {
-        session->completion_callback(session->body_buffer, session->expected_length,
-                                     true, session->callback_arg);
+        session->completion_callback(session->no_store_body ? NULL : session->body_buffer,
+                                     session->expected_length, true, session->callback_arg);
     }
 
     // Clean up connection
@@ -534,12 +608,19 @@ static err_t http_connected_callback(void* arg, struct altcp_pcb* pcb, err_t err
         return err;
     }
 
+    // Success: TCP connection established
+    debug_log("[HTTP] TCP connection established successfully\n");
+    if (session->use_tls) {
+        debug_log("[HTTP] TLS handshake will begin...\n");
+    }
+
     #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[HTTP] Connected to server\n");
     #endif
     session->state = HTTP_SESSION_CONNECTED;
 
     // Send HTTP request
+    debug_log("[HTTP] Sending HTTP request (%d bytes)\n", (int)session->request_length);
     // Wrap write in cyw43 lock for safety
     cyw43_arch_lwip_begin();
     err_t write_err = altcp_write(pcb, session->request_data, session->request_length, TCP_WRITE_FLAG_COPY);
@@ -594,11 +675,35 @@ static void http_error_callback(void* arg, err_t err) {
         return;
     }
 
-    // Silently ignore pure close notifications
+    // Log all errors for debugging, even close notifications
+    debug_log_with_color(COLOR_RED, "[HTTP] TCP error occurred: %d\n", err);
+    
+    // Silently ignore pure close notifications for callback logic
     if (err == ERR_CLSD) {
         return;
     }
 
+    // Handle HTTP/1.0 connection close as success if we received data
+    if (!g_transfer_was_successful && session->fallback_mode && 
+        session->header_complete && session->total_received > 0 &&
+        (err == ERR_CLSD || err == ERR_RST || err == -13)) {
+        
+        debug_log("[HTTP] HTTP/1.0 connection closed normally after receiving %d bytes\n", 
+                 (int)session->total_received);
+        
+        if (!session->no_store_body && session->body_buffer) {
+            session->body_buffer[session->total_received] = '\0';
+        }
+        g_transfer_was_successful = true;
+        
+        if (session->completion_callback) {
+            session->completion_callback(session->no_store_body ? NULL : session->body_buffer,
+                                         session->total_received, true, session->callback_arg);
+        }
+        reset_session(session);
+        return;
+    }
+    
     // Genuine error before success
     if (!g_transfer_was_successful) {
         debug_log_with_color(COLOR_RED,
@@ -620,6 +725,8 @@ static void http_error_callback(void* arg, err_t err) {
 // === Public API Implementation ===
 
 bool http_client_init(void) {
+    // Prepare TLS trust store (idempotent). This does not change behavior unless TLS is used.
+    tls_trust_store_init();
     reset_session(&g_session);
     return true;
 }
@@ -630,6 +737,9 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
                                 void* callback_arg) {
     // Reset any previous session
     reset_session(&g_session);
+    // Apply next option flags (e.g., no-store) then clear
+    g_session.no_store_body = g_next_no_store;
+    g_next_no_store = false;
     g_transfer_was_successful = false;
 
     // Store request data
@@ -652,8 +762,38 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
     // Perform lwIP operations under cyw43 lock
     cyw43_arch_lwip_begin();
 
-    // Create TCP PCB
-    g_session.pcb = altcp_new(NULL);
+    // Decide on TLS based on port (443 -> TLS) and set SNI from Host header
+    g_session.use_tls = (port == 443);
+    if (g_session.use_tls) {
+        extract_host_from_request(g_session.request_data, g_session.server_hostname, sizeof(g_session.server_hostname));
+    }
+
+    // Create PCB (TLS or plain)
+    if (g_session.use_tls) {
+        struct altcp_tls_config* cfg = tls_get_client_config();
+        if (!cfg) {
+            cyw43_arch_lwip_end();
+            debug_log_with_color(COLOR_RED, "[TLS] No client config (CA) available; cannot create TLS PCB\n");
+            free(g_session.request_data);
+            g_session.request_data = NULL;
+            return HTTP_ERROR_CONNECTION;
+        }
+        u8_t ip_type = IPADDR_TYPE_V4;
+        #if LWIP_IPV6
+        ip_type = IP_IS_V6(server_ip) ? IPADDR_TYPE_V6 : IPADDR_TYPE_V4;
+        #endif
+        g_session.pcb = altcp_tls_new(cfg, ip_type);
+        if (g_session.pcb && g_session.server_hostname[0]) {
+            // Set SNI/hostname for certificate verification
+            void* ctx = altcp_tls_context(g_session.pcb);
+            if (ctx) {
+                mbedtls_ssl_set_hostname((mbedtls_ssl_context*)ctx, g_session.server_hostname);
+            }
+        }
+        debug_log("[HTTP] Using TLS: host='%s' port=%u\n", g_session.server_hostname[0] ? g_session.server_hostname : "(none)", (unsigned)port);
+    } else {
+        g_session.pcb = altcp_new(NULL);
+    }
     if (!g_session.pcb) {
         cyw43_arch_lwip_end();
         debug_log_with_color(COLOR_RED, "[HTTP] Failed to create PCB\n");
@@ -672,10 +812,17 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
     g_session.state = HTTP_SESSION_CONNECTING;
 
     // Connect to server
+    debug_log("[HTTP] Calling altcp_connect to %d.%d.%d.%d:%u\n", 
+              (int)((server_ip->addr >> 0) & 0xFF),
+              (int)((server_ip->addr >> 8) & 0xFF), 
+              (int)((server_ip->addr >> 16) & 0xFF),
+              (int)((server_ip->addr >> 24) & 0xFF),
+              (unsigned)port);
     err_t err = altcp_connect(g_session.pcb, server_ip, port, http_connected_callback);
 
     cyw43_arch_lwip_end();
 
+    debug_log("[HTTP] altcp_connect returned: %d\n", err);
     if (err != ERR_OK) {
         debug_log_with_color(COLOR_RED,
                              "[HTTP] Failed to connect: %d\n", err);
@@ -689,6 +836,14 @@ http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port,
     }
 
     return HTTP_SUCCESS;
+}
+
+http_result_t http_request_async_count_only(const ip_addr_t* server_ip, uint16_t port,
+                                const char* request_data,
+                                void (*callback)(const char* body, size_t length, bool success, void* arg),
+                                void* callback_arg) {
+    g_next_no_store = true;
+    return http_request_async(server_ip, port, request_data, callback, callback_arg);
 }
 
 
@@ -1314,18 +1469,30 @@ WifiResult wifi_server_communication(float voltage) {
     }
 
     // Make use-case specific request (fully encapsulated)
-#ifdef USE_CASE_HISTORIAN
+#if defined(USE_CASE_HISTORIAN)
     if (!historian_make_request()) {
-#elif defined(USE_CASE_SEATSURFING)
-    if (!seatsurfing_make_request()) {
-#elif defined(USE_CASE_HOMEMATIC)
-    if (!homematic_make_request()) {
-#endif
         // Log final RSSI before shutting down Wi‑Fi
         wifi_log_rssi();
         cyw43_arch_deinit();
         return WIFI_ERROR_SERVER;
     }
+#elif defined(USE_CASE_SEATSURFING)
+    if (!seatsurfing_make_request()) {
+        // Log final RSSI before shutting down Wi‑Fi
+        wifi_log_rssi();
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+#elif defined(USE_CASE_HOMEMATIC)
+    if (!homematic_make_request()) {
+        // Log final RSSI before shutting down Wi‑Fi
+        wifi_log_rssi();
+        cyw43_arch_deinit();
+        return WIFI_ERROR_SERVER;
+    }
+#else
+    // No background HTTP request for other use cases (e.g., WEATHERMAP)
+#endif
 
     // Wait for completion with timeout
     int max_waits = 0;

@@ -117,6 +117,29 @@ bool get_flash_logo_info(int* width, int* height, int* datalen) {
     return true;
 }
 
+bool get_weathermap_meta(uint32_t* bytes_out) {
+    if (bytes_out) *bytes_out = 0;
+    const weathermap_meta_t* meta = (const weathermap_meta_t*)FLASH_PTR(WEATHERMAP_META_FLASH_OFFSET);
+    if (memcmp(meta->magic, "WMAP", 4) == 0) {
+        if (bytes_out) *bytes_out = meta->bytes_count;
+        return true;
+    }
+    return false;
+}
+
+bool set_weathermap_meta(uint32_t bytes) {
+    weathermap_meta_t meta = {0};
+    memcpy(meta.magic, "WMAP", 4);
+    meta.bytes_count = bytes;
+
+    uint32_t sector_offset = WEATHERMAP_META_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
+    flash_range_program(WEATHERMAP_META_FLASH_OFFSET, (const uint8_t*)&meta, sizeof(meta));
+    restore_interrupts(ints);
+    return true;
+}
+
 const char* get_active_firmware_slot_info(void) {
     // Read current VTOR (Vector Table Offset Register) address
     uintptr_t vtor = *((volatile uint32_t*)(PPB_BASE + M0PLUS_VTOR_OFFSET));

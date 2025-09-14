@@ -29,6 +29,8 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message);
 void send_historian_config_page(struct tcp_pcb* tpcb, const char* message);
 #elif defined(USE_CASE_HOMEMATIC)
 void send_homematic_config_page(struct tcp_pcb* tpcb, const char* message);
+#elif defined(USE_CASE_WEATHERMAP)
+void send_weathermap_page(struct tcp_pcb* tpcb, const char* message);
 #endif
 void send_clock_page(struct tcp_pcb *tpcb, const char *message);
 void send_device_config_page(struct tcp_pcb* tpcb, const char* message);

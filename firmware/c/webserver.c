@@ -82,6 +82,13 @@
 #include "ds3231.h"
 #include "webserver_utils.h"
 #include "webserver_pages.h"
+#ifdef USE_CASE_WEATHERMAP
+// Ensure prototype visible when building for WEATHERMAP
+void send_weathermap_page(struct tcp_pcb* tpcb, const char* message);
+#endif
+#ifdef USE_CASE_WEATHERMAP
+#include "weathermap_client.h"
+#endif
 
 #include <stdint.h>
 #include <stddef.h>
@@ -178,6 +185,12 @@ static void send_firmware_update_page_wrapper(struct tcp_pcb *tpcb) {
 static void send_message_page_wrapper(struct tcp_pcb *tpcb) {
     send_message_page(tpcb, "");
 }
+
+#ifdef USE_CASE_WEATHERMAP
+static void send_weathermap_page_wrapper(struct tcp_pcb *tpcb) {
+    send_weathermap_page(tpcb, "");
+}
+#endif
 
 // Helper function for consistent cleanup
 static void cleanup_and_return(struct tcp_pcb *tpcb, struct pbuf *p, int copied) {
@@ -309,6 +322,69 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
 static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
     debug_log("GET /logo called\n");
 }
+
+#ifdef USE_CASE_WEATHERMAP
+static void handle_weathermap_png_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    enum { MAX_PNG = 256 * 1024 };
+    uint8_t* png = (uint8_t*)malloc(MAX_PNG);
+    if (!png) {
+        send_response(tpcb, "<html><body><h3>OOM fetching PNG</h3></body></html>");
+        return;
+    }
+    size_t out_len = 0;
+    bool ok = weathermap_fetch_png(png, MAX_PNG, &out_len);
+    if (!ok) {
+        free(png);
+        send_response(tpcb, "<html><body><h3>Fetch failed</h3></body></html>");
+        return;
+    }
+    // Send as binary image/png
+    // Reuse internal binary sender
+    extern void send_response(struct tcp_pcb* tpcb, const char* body); // keep symbol visible
+    // Implemented below: send_binary_response
+    {
+        char header[256];
+        int header_len = snprintf(header, sizeof(header),
+                                  "HTTP/1.0 200 OK\r\n"
+                                  "Content-Type: image/png\r\n"
+                                  "Content-Length: %u\r\n"
+                                  "Connection: close\r\n\r\n",
+                                  (unsigned)out_len);
+        err_t err = tcp_write(tpcb, header, header_len, TCP_WRITE_FLAG_COPY);
+        if (err == ERR_OK) {
+            // Stream in chunks of TCP_CHUNK_SIZE
+            const uint8_t* ptr = png;
+            size_t remaining = out_len;
+            while (remaining > 0) {
+                u16_t chunk = remaining > TCP_CHUNK_SIZE ? TCP_CHUNK_SIZE : remaining;
+                err = tcp_write(tpcb, ptr, chunk, TCP_WRITE_FLAG_COPY);
+                if (err != ERR_OK) break;
+                ptr += chunk;
+                remaining -= chunk;
+            }
+            tcp_output(tpcb);
+        }
+    }
+    free(png);
+}
+#endif
+
+#ifdef USE_CASE_WEATHERMAP
+static void handle_weathermap_fetch_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    size_t count = 0;
+    bool ok = weathermap_fetch_count(&count);
+    char page[256];
+    if (ok) {
+        snprintf(page, sizeof(page),
+                 "<!DOCTYPE html><html><body><h3>Weathermap fetch OK</h3><p>Bytes: %u</p><p><a href=\"/weathermap\">Back</a></p></body></html>",
+                 (unsigned)count);
+    } else {
+        snprintf(page, sizeof(page),
+                 "<!DOCTYPE html><html><body><h3>Weathermap fetch FAILED</h3><p><a href=\"/weathermap\">Back</a></p></body></html>");
+    }
+    send_response(tpcb, page);
+}
+#endif
 
 // =============================================================================
 // CORE WEBSERVER FUNCTIONS
@@ -961,6 +1037,12 @@ static const route_t routes[] = {
     {"/logo", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_logo_route}},
     {"/shutdown", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_shutdown_route}},
     
+#ifdef USE_CASE_WEATHERMAP
+    {"/weathermap", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_weathermap_page_wrapper}},
+    {"/weathermap.png", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_weathermap_png_route}},
+    {"/weathermap_fetch", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_weathermap_fetch_route}},
+#endif
+    
     // ADD NEW GET ROUTES HERE:
     // 1. Create send_new_page() function in webserver_pages.c
     // 2. Add declaration to webserver_pages.h  
@@ -1148,8 +1230,12 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                (upload_session.type == UPLOAD_FORM_WIFI ||
 #ifdef USE_CASE_SEATSURFING
                 upload_session.type == UPLOAD_FORM_SEATSURFING ||
-#elif defined(USE_CASE_HISTORIAN)
+#endif
+#ifdef USE_CASE_HISTORIAN
                 upload_session.type == UPLOAD_FORM_HISTORIAN ||
+#endif
+#ifdef USE_CASE_HOMEMATIC
+                upload_session.type == UPLOAD_FORM_HOMEMATIC ||
 #endif
                 upload_session.type == UPLOAD_FORM_DEVICE ||
                 upload_session.type == UPLOAD_FORM_CLOCK ||

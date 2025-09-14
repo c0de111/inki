@@ -46,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       USE_CASE="SEATSURFING" 
       shift
       ;;
+    --weathermap)
+      USE_CASE="WEATHERMAP"
+      shift
+      ;;
     --new-usecase)
       USE_CASE="NEW_USECASE"
       shift
@@ -75,12 +79,12 @@ done
 
 # Validate use case
 case $USE_CASE in
-  SEATSURFING|HISTORIAN|HOMEMATIC|NEW_USECASE)
+  SEATSURFING|HISTORIAN|HOMEMATIC|WEATHERMAP|NEW_USECASE)
     # Valid use case
     ;;
   *)
     echo "Error: Invalid use case '$USE_CASE'"
-    echo "Valid options: SEATSURFING, HISTORIAN, NEW_USECASE"
+    echo "Valid options: SEATSURFING, HISTORIAN, HOMEMATIC, WEATHERMAP, NEW_USECASE"
     exit 1
     ;;
 esac

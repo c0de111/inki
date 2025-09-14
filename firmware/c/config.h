@@ -38,6 +38,7 @@
 #if !defined(USE_CASE_SEATSURFING) && \
     !defined(USE_CASE_HISTORIAN)  && \
     !defined(USE_CASE_HOMEMATIC)  && \
+    !defined(USE_CASE_WEATHERMAP) && \
     !defined(USE_CASE_NEW_USECASE)
     #define USE_CASE_SEATSURFING    // Default fallback
 #endif
@@ -58,10 +59,12 @@
         #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
     #endif
     #define USE_CASE_NAME "Homematic"
+#elif defined(USE_CASE_WEATHERMAP)
+    #define USE_CASE_NAME "Weathermap"
 #elif defined(USE_CASE_NEW_USECASE)
     #define USE_CASE_NAME "NewUseCase"
 #else
-    #error "No use case defined! Define USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
+    #error "No use case defined! Define USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, USE_CASE_WEATHERMAP, or USE_CASE_NEW_USECASE."
 #endif
 
 #define WIFI_SETUP_TIMEOUT_MS (15 * 60 * 1000)
