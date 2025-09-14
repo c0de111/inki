@@ -27,6 +27,7 @@ case "$USE_CASE_LINE" in
   USE_CASE_HISTORIAN)   CASE_SUFFIX="historian" ;;
   USE_CASE_SEATSURFING) CASE_SUFFIX="seatsurfing" ;;
   USE_CASE_HOMEMATIC)   CASE_SUFFIX="homematic" ;;
+  USE_CASE_WEATHERMAP)  CASE_SUFFIX="weathermap" ;;
   USE_CASE_NEW_USECASE) CASE_SUFFIX="new_usecase" ;;
 esac
 OUTPUT_FILE="$BUILD_DIR/inki_${CASE_SUFFIX}.uf2"

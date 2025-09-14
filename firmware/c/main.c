@@ -16,6 +16,7 @@
 #include "EPD_2in9_V2.h"
 #include "ds3231.h"
 #include "debug.h"
+#include "http_client.h"
 #include "flash.h"
 #include "webserver.h"
 #include "main.h"
@@ -2754,6 +2755,9 @@ int main(void)
 
     stdio_init_all();     // Initialize standard I/O
 
+    // Initialize HTTP client + TLS trust store (for WEATHERMAP TLS)
+    http_client_init();
+
     if (wait_for_usb_connection(2500)) { // only used for debugging
         printf("USB connected\n");
     } else {
@@ -2808,17 +2812,22 @@ int main(void)
     WifiResult wifi_result = WIFI_NOT_REQUIRED;
 
     if (is_wifi_required(pushbutton)) {
-        // Set up callback for data processing (unified pattern for all use cases)
-#ifdef USE_CASE_HISTORIAN
+        // Use-case specific Wi-Fi data path
+#if defined(USE_CASE_HISTORIAN)
         set_data_callback(historian_data_received, NULL);
+        wifi_result = wifi_server_communication(battery_voltage);
 #elif defined(USE_CASE_SEATSURFING)
         set_data_callback(seatsurfing_data_received, NULL);
+        wifi_result = wifi_server_communication(battery_voltage);
 #elif defined(USE_CASE_HOMEMATIC)
         set_data_callback(homematic_data_received, NULL);
-#endif
-        
-        // Unified communication function handles use case selection internally
         wifi_result = wifi_server_communication(battery_voltage);
+#elif defined(USE_CASE_WEATHERMAP)
+        // WEATHERMAP: skip generic HTTP flow; run one-shot TLS fetch if needed
+        extern void weathermap_boot_fetch_if_needed(void);
+        weathermap_boot_fetch_if_needed();
+        wifi_result = WIFI_SUCCESS;
+#endif
     }
 
     UBYTE* BlackImage = init_epaper();

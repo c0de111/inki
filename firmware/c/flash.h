@@ -113,6 +113,17 @@ typedef struct __attribute__((packed)) {
     uint8_t reserved[185];      // Reserve für spätere Erweiterung
 } firmware_header_t;
 
+// Weathermap meta (marker only for now)
+#define WEATHERMAP_META_FLASH_OFFSET      (CONFIG_FLASH_OFFSET + 0x5000)  // 0x1EC000 - Weathermap marker/meta
+typedef struct __attribute__((packed)) {
+    char magic[4];   // "WMAP"
+    uint32_t bytes_count;
+    uint8_t reserved[8];
+} weathermap_meta_t;
+
+bool get_weathermap_meta(uint32_t* bytes_out);
+bool set_weathermap_meta(uint32_t bytes);
+
 /* Wi-Fi config */
 bool load_wifi_config(wifi_config_t* out);
 bool save_wifi_config(const wifi_config_t* in);

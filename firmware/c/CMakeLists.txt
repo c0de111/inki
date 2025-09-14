@@ -37,6 +37,7 @@ add_executable(inki_slot0
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
+    weathermap_client.c  # WEATHERMAP WMS HTTPS client (opt-in TLS)
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -44,6 +45,7 @@ add_executable(inki_slot0
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
     base64.c        # Base64 encoding for HTTP auth
+    tls_trust_store.c  # TLS trust store (HARICA root embedding)
     third_party/cjson/cJSON.c  # JSON parsing library for historian functionality (vendored)
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot0.c
 )
@@ -58,6 +60,7 @@ add_executable(inki_slot1
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
+    weathermap_client.c  # WEATHERMAP WMS HTTPS client (opt-in TLS)
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -65,6 +68,7 @@ add_executable(inki_slot1
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
     base64.c        # Base64 encoding for HTTP auth
+    tls_trust_store.c  # TLS trust store (HARICA root embedding)
     third_party/cjson/cJSON.c  # JSON parsing library for historian functionality (vendored)
     ${CMAKE_CURRENT_BINARY_DIR}/header_slot1.c
 )
@@ -199,6 +203,8 @@ target_link_libraries(inki_slot0
     hardware_adc                   # ADC hardware support
     pico_rand                      # Random number utilities
     pico_lwip
+    pico_lwip_mbedtls
+    pico_mbedtls
 )
 target_link_libraries(inki_slot1
     ePaper                         # ePaper driver
@@ -212,6 +218,8 @@ target_link_libraries(inki_slot1
     hardware_adc                   # ADC hardware support
     pico_rand                      # Random number utilities
     pico_lwip
+    pico_lwip_mbedtls
+    pico_mbedtls
 )
 
 target_link_libraries(inki_bootloader

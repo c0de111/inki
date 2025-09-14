@@ -46,6 +46,8 @@ typedef struct {
     bool header_complete;
     bool transfer_complete;
     bool fallback_mode; // true when response has no Content-Length (connection-close delimits body)
+    bool no_store_body; // if true, do not allocate body; only count bytes
+    bool use_tls;       // opt-in TLS for this session
     
     // Header processing
     char header_buffer[HTTP_HEADER_MAX];
@@ -63,6 +65,7 @@ typedef struct {
     
     // Connection management
     struct altcp_pcb* pcb;
+    char server_hostname[96]; // optional SNI hostname (for TLS)
     
     // Callback for completion
     void (*completion_callback)(const char* body, size_t length, bool success, void* arg);
@@ -95,6 +98,12 @@ WifiResult wifi_server_communication(float voltage);
 
 // Main HTTP request function
 http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port, 
+                                const char* request_data,
+                                void (*callback)(const char* body, size_t length, bool success, void* arg),
+                                void* callback_arg);
+
+// Same as http_request_async but does not store the response body in RAM; only counts bytes.
+http_result_t http_request_async_count_only(const ip_addr_t* server_ip, uint16_t port,
                                 const char* request_data,
                                 void (*callback)(const char* body, size_t length, bool success, void* arg),
                                 void* callback_arg);

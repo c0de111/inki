@@ -73,6 +73,8 @@ void send_landing_page(struct tcp_pcb *tpcb) {
            "<a href=\"/historian\">Historian Settings</a><br>"
 #elif defined(USE_CASE_HOMEMATIC)
            "<a href=\"/homematic\">Homematic Settings</a><br>"
+#elif defined(USE_CASE_WEATHERMAP)
+           "<a href=\"/weathermap\">Weathermap</a><br>"
 #endif
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
@@ -91,6 +93,33 @@ void send_landing_page(struct tcp_pcb *tpcb) {
 
     send_response(tpcb, page);
 }
+
+#ifdef USE_CASE_WEATHERMAP
+void send_weathermap_page(struct tcp_pcb* tpcb, const char* message) {
+    char page[2048];
+    const char* info = (message && *message) ? message : "";
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head>"
+             "<meta charset=\"UTF-8\">"
+             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+             "<title>Weathermap</title>"
+             "<style>body{font-family:sans-serif;max-width:720px;margin:auto;padding:1em;}"
+             "a.btn{display:inline-block;padding:.6em 1em;background:#eee;border:1px solid #ccc;border-radius:6px;text-decoration:none;color:#000;margin:.4em 0;}"
+             "small.note{color:#555;}"
+             "</style></head><body>\n"
+             "<h2>Weathermap</h2>");
+    if (*info) {
+        snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                 "<p style='color:green'>%s</p>", info);
+    }
+    strcat(page,
+           "<p><a class=\"btn\" href=\"/weathermap_fetch\">Fetch PNG (count bytes)</a></p>\n"
+           "<p><small class=\"note\">Note: counts bytes only (no image transfer yet).</small></p>\n"
+           "<p><a href=\"/\">Back</a></p>"
+           "</body></html>");
+    send_response(tpcb, page);
+}
+#endif
 
 void send_message_page(struct tcp_pcb* tpcb, const char* message) {
     char page[4096];
