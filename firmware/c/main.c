@@ -1277,22 +1277,34 @@ UBYTE* init_epaper() {
     #endif
     hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
 
-    UWORD Imagesize = 0;
+    UDOUBLE Imagesize = 0;
 
     // Initialize and clear the ePaper based on the configured type
     switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
             debug_log("Initializing Waveshare 7.5-inch V2 ePaper...\n");
+#ifdef USE_CASE_WEATHERMAP
+            EPD_7IN5_V2_Init_4Gray();
+            EPD_7IN5_V2_Clear(); // Clear is needed to reset display content
+            Imagesize = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 4) : (EPD_7IN5_V2_WIDTH / 4 + 1)) * EPD_7IN5_V2_HEIGHT; // 4Gray: 2 bits per pixel
+#else
             EPD_7IN5_V2_Init();
             EPD_7IN5_V2_Clear();
             Imagesize = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 8) : (EPD_7IN5_V2_WIDTH / 8 + 1)) * EPD_7IN5_V2_HEIGHT;
+#endif
             break;
 
         case EPAPER_WAVESHARE_4IN2_V2:
             debug_log("Initializing Waveshare 4.2-inch ePaper...\n");
+#ifdef USE_CASE_WEATHERMAP
+            EPD_4IN2_V2_Init_4Gray();
+            EPD_4IN2_V2_Clear(); // Clear is needed to reset display content
+            Imagesize = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 4) : (EPD_4IN2_V2_WIDTH / 4 + 1)) * EPD_4IN2_V2_HEIGHT; // 4Gray: 2 bits per pixel
+#else
             EPD_4IN2_V2_Init();
             EPD_4IN2_V2_Clear();
             Imagesize = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 8) : (EPD_4IN2_V2_WIDTH / 8 + 1)) * EPD_4IN2_V2_HEIGHT;
+#endif
             break;
 
         case EPAPER_WAVESHARE_2IN9_V2:
@@ -1337,7 +1349,12 @@ UBYTE* init_epaper() {
     debug_log("Selecting image...\n");
     #endif
     Paint_SelectImage(BlackImage);
+#ifdef USE_CASE_WEATHERMAP
+    Paint_SetScale(4); // Enable 4Gray mode for weathermap
+    Paint_Clear(GRAY4); // Clear to white (GRAY4 = 0x00 = white)
+#else
     Paint_Clear(WHITE);
+#endif
 
     watchdog_update();
 
@@ -1719,6 +1736,31 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
             Paint_DrawString_EN(20, by + i * (small->Height + 2), line, (sFONT*)small, WHITE, BLACK);
         }
     }
+
+#elif defined(USE_CASE_WEATHERMAP)
+    // WEATHERMAP: 4-level grayscale test pattern using Paint library
+    Paint_DrawString_EN(50, 50, "4-Level Grayscale Test", &font_ubuntu_mono_20pt_bold, GRAY1, GRAY4);
+    
+    // Draw 4 circles with different gray levels using Paint library + GRAY constants
+    // GRAY4 = 0x00 = White, GRAY3 = 0x01 = Light Gray, GRAY2 = 0x02 = Dark Gray, GRAY1 = 0x03 = Black
+    
+    // Circle 1: White (GRAY4)
+    Paint_DrawCircle(150, 200, 50, GRAY4, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(120, 270, "White", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
+    
+    // Circle 2: Light Gray (GRAY3)
+    Paint_DrawCircle(300, 200, 50, GRAY3, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(260, 270, "Light", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
+    
+    // Circle 3: Dark Gray (GRAY2)
+    Paint_DrawCircle(450, 200, 50, GRAY2, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(415, 270, "Dark", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
+    
+    // Circle 4: Black (GRAY1)
+    Paint_DrawCircle(600, 200, 50, GRAY1, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(570, 270, "Black", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
+    
+    Paint_DrawString_EN(50, 320, "Using Paint library + GRAY constants", &font_ubuntu_mono_14pt, GRAY1, GRAY4);
 
 #else
     // No use case defined - show error
@@ -2216,11 +2258,19 @@ void epaper_finalize_and_powerdown(UBYTE* image) {
 
     switch (device_config_flash.data.epapertype) {
         case EPAPER_WAVESHARE_7IN5_V2:
+#ifdef USE_CASE_WEATHERMAP
+            EPD_7IN5_V2_Display_4Gray(image);
+#else
             EPD_7IN5_V2_Display(image);
+#endif
             break;
 
         case EPAPER_WAVESHARE_4IN2_V2:
+#ifdef USE_CASE_WEATHERMAP
+            EPD_4IN2_V2_Display_4Gray(image);
+#else
             EPD_4IN2_V2_Display(image);
+#endif
             break;
 
         case EPAPER_WAVESHARE_2IN9_V2:
@@ -2764,7 +2814,19 @@ int main(void)
         printf("USB timeout\n");
     }
 
-    debug_log_with_color(COLOR_BOLD_GREEN, "System initializing\n");
+    debug_log_with_color(COLOR_BOLD_GREEN, "System initializing - inki-"
+#ifdef USE_CASE_SEATSURFING
+                          "seatsurfing"
+#elif defined(USE_CASE_HISTORIAN)
+                          "historian"
+#elif defined(USE_CASE_HOMEMATIC)
+                          "homematic"
+#elif defined(USE_CASE_WEATHERMAP)
+                          "weathermap"
+#else
+                          "unknown"
+#endif
+                          "\n");
 
     // Initialize external LED on GP16 and turn on to indicate power
     ext_led_init(16);

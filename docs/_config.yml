@@ -1,0 +1,8 @@
+title: inki
+description: Low-power ePaper signage on Raspberry Pi Pico W
+theme: jekyll-theme-cayman
+show_downloads: false
+github:
+  is_project_page: true
+  repository_url: https://github.com/c0de111/inki
+
