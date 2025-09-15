@@ -12,6 +12,7 @@ extern ds3231_t rtc;
 void set_rtc_from_display_string(ds3231_t* ds3231, const char* line);
 void set_alarmclock_and_powerdown(ds3231_t* clock);
 void epaper_finalize_and_powerdown(UBYTE* image);
+void render_4gray_test_pattern(void);
 void read_mac_address();
 float read_battery_voltage(float conversion_factor);
 float read_coin_cell_voltage(float conversion_factor);

@@ -1297,8 +1297,11 @@ UBYTE* init_epaper() {
         case EPAPER_WAVESHARE_4IN2_V2:
             debug_log("Initializing Waveshare 4.2-inch ePaper...\n");
 #ifdef USE_CASE_WEATHERMAP
+            // Waveshare official pattern: First clear in regular mode, then switch to 4Gray
+            EPD_4IN2_V2_Init();
+            EPD_4IN2_V2_Clear();
+            sleep_ms(500); // Official timing from Waveshare examples
             EPD_4IN2_V2_Init_4Gray();
-            EPD_4IN2_V2_Clear(); // Clear is needed to reset display content
             Imagesize = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 4) : (EPD_4IN2_V2_WIDTH / 4 + 1)) * EPD_4IN2_V2_HEIGHT; // 4Gray: 2 bits per pixel
 #else
             EPD_4IN2_V2_Init();
@@ -1351,7 +1354,7 @@ UBYTE* init_epaper() {
     Paint_SelectImage(BlackImage);
 #ifdef USE_CASE_WEATHERMAP
     Paint_SetScale(4); // Enable 4Gray mode for weathermap
-    Paint_Clear(GRAY4); // Clear to white (GRAY4 = 0x00 = white)
+    Paint_Clear(GRAY4); // Clear to white background
 #else
     Paint_Clear(WHITE);
 #endif
@@ -1398,6 +1401,49 @@ void format_name_from_email(const char* email, char* outbuf, size_t outbuf_len) 
 
     strncpy(outbuf, name_part, outbuf_len - 1);
     outbuf[outbuf_len - 1] = '\0';
+}
+
+/**
+ * @brief Renders a 4Gray test pattern for validating grayscale display functionality
+ * 
+ * Displays a test pattern with:
+ * - Title text demonstrating black text on white background
+ * - Four circles showing each gray level: White, Light Gray, Dark Gray, Black
+ * - Labels for each gray level
+ * - Verification text
+ * 
+ * Useful for:
+ * - Hardware validation of 4Gray ePaper displays
+ * - Color mapping verification after driver changes
+ * - Development reference for proper 4Gray usage
+ */
+void render_4gray_test_pattern(void) {
+    // Title
+    Paint_DrawString_EN(50, 30, "4-Level Grayscale Test", &font_ubuntu_mono_8pt_bold, GRAY4, GRAY1);
+    
+    // Draw 4 circles with different gray levels using Paint library + GRAY constants
+    // Final mapping: GRAY1=0x00=Black, GRAY2=0x01=Dark Gray, GRAY3=0x02=Light Gray, GRAY4=0x03=White
+    
+    // Top row: Circle 1 & 2
+    // Circle 1: White (GRAY4)
+    Paint_DrawCircle(100, 100, 30, GRAY4, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(75, 140, "White", &font_ubuntu_mono_8pt, GRAY4, GRAY1);
+    
+    // Circle 2: Light Gray (GRAY3)
+    Paint_DrawCircle(300, 100, 30, GRAY3, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(275, 140, "Light", &font_ubuntu_mono_8pt, GRAY4, GRAY1);
+    
+    // Bottom row: Circle 3 & 4
+    // Circle 3: Dark Gray (GRAY2)
+    Paint_DrawCircle(100, 200, 30, GRAY2, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(80, 240, "Dark", &font_ubuntu_mono_8pt, GRAY4, GRAY1);
+    
+    // Circle 4: Black (GRAY1)
+    Paint_DrawCircle(300, 200, 30, GRAY1, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(275, 240, "Black", &font_ubuntu_mono_8pt, GRAY4, GRAY1);
+    
+    // Footer
+    Paint_DrawString_EN(50, 270, "4Gray validation complete", &font_ubuntu_mono_12pt, GRAY4, GRAY1);
 }
 
 #ifdef USE_CASE_HISTORIAN
@@ -1738,30 +1784,9 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     }
 
 #elif defined(USE_CASE_WEATHERMAP)
-    // WEATHERMAP: 4-level grayscale test pattern using Paint library
-    Paint_DrawString_EN(50, 50, "4-Level Grayscale Test", &font_ubuntu_mono_20pt_bold, GRAY1, GRAY4);
+    // WEATHERMAP: 4Gray test pattern for hardware validation
+    render_4gray_test_pattern();
     
-    // Draw 4 circles with different gray levels using Paint library + GRAY constants
-    // GRAY4 = 0x00 = White, GRAY3 = 0x01 = Light Gray, GRAY2 = 0x02 = Dark Gray, GRAY1 = 0x03 = Black
-    
-    // Circle 1: White (GRAY4)
-    Paint_DrawCircle(150, 200, 50, GRAY4, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(120, 270, "White", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
-    
-    // Circle 2: Light Gray (GRAY3)
-    Paint_DrawCircle(300, 200, 50, GRAY3, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(260, 270, "Light", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
-    
-    // Circle 3: Dark Gray (GRAY2)
-    Paint_DrawCircle(450, 200, 50, GRAY2, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(415, 270, "Dark", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
-    
-    // Circle 4: Black (GRAY1)
-    Paint_DrawCircle(600, 200, 50, GRAY1, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(570, 270, "Black", &font_ubuntu_mono_12pt, GRAY1, GRAY4);
-    
-    Paint_DrawString_EN(50, 320, "Using Paint library + GRAY constants", &font_ubuntu_mono_14pt, GRAY1, GRAY4);
-
 #else
     // No use case defined - show error
     Paint_DrawString_EN(50, 100, "No use case configured", &font_ubuntu_mono_14pt, WHITE, BLACK);

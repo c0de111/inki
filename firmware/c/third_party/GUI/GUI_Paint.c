@@ -169,12 +169,14 @@ void Paint_SetScale(UBYTE scale)
     }else if(scale == 4){
         Paint.Scale = scale;
         Paint.WidthByte = (Paint.WidthMemory % 4 == 0)? (Paint.WidthMemory / 4 ): (Paint.WidthMemory / 4 + 1);
-    }else if(scale == 7){//Only applicable with 5in65 e-Paper
+    }else if(scale == 6 || scale == 7 || scale == 16){
+        /* 7 colours are only applicable with 5in65 e-Paper */
+        /* 16 colours are used for dithering */
 		Paint.Scale = scale;
 		Paint.WidthByte = (Paint.WidthMemory % 2 == 0)? (Paint.WidthMemory / 2 ): (Paint.WidthMemory / 2 + 1);;
 	}else{
         Debug("Set Scale Input parameter error\r\n");
-        Debug("Scale Only support: 2 4 7\r\n");
+        Debug("Scale Only support: 2 4 7 16\r\n");
     }
 }
 /******************************************************************************
@@ -245,10 +247,9 @@ void Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color)
         UDOUBLE Addr = X / 4 + Y * Paint.WidthByte;
         Color = Color % 4;//Guaranteed color scale is 4  --- 0~3
         UBYTE Rdata = Paint.Image[Addr];
-        
         Rdata = Rdata & (~(0xC0 >> ((X % 4)*2)));//Clear first, then set value
         Paint.Image[Addr] = Rdata | ((Color << 6) >> ((X % 4)*2));
-    }else if(Paint.Scale == 7){
+    }else if(Paint.Scale == 6 || Paint.Scale == 7 || Paint.Scale == 16){
 		UDOUBLE Addr = X / 2  + Y * Paint.WidthByte;
 		UBYTE Rdata = Paint.Image[Addr];
 		Rdata = Rdata & (~(0xF0 >> ((X % 2)*4)));//Clear first, then set value
@@ -264,14 +265,21 @@ parameter:
 ******************************************************************************/
 void Paint_Clear(UWORD Color)
 {	
-	if(Paint.Scale == 2 || Paint.Scale == 4){
+	if(Paint.Scale == 2) {
 		for (UWORD Y = 0; Y < Paint.HeightByte; Y++) {
 			for (UWORD X = 0; X < Paint.WidthByte; X++ ) {//8 pixel =  1 byte
 				UDOUBLE Addr = X + Y*Paint.WidthByte;
 				Paint.Image[Addr] = Color;
 			}
 		}		
-	}else if(Paint.Scale == 7){
+    }else if(Paint.Scale == 4) {
+        for (UWORD Y = 0; Y < Paint.HeightByte; Y++) {
+			for (UWORD X = 0; X < Paint.WidthByte; X++ ) {
+				UDOUBLE Addr = X + Y*Paint.WidthByte;
+				Paint.Image[Addr] = (Color<<6)|(Color<<4)|(Color<<2)|Color;
+			}
+		}		
+	}else if(Paint.Scale == 6 || Paint.Scale == 7 || Paint.Scale == 16) {
 		for (UWORD Y = 0; Y < Paint.HeightByte; Y++) {
 			for (UWORD X = 0; X < Paint.WidthByte; X++ ) {
 				UDOUBLE Addr = X + Y*Paint.WidthByte;
@@ -279,7 +287,6 @@ void Paint_Clear(UWORD Color)
 			}
 		}		
 	}
-
 }
 
 /******************************************************************************
@@ -712,11 +719,72 @@ void Paint_DrawNum(UWORD Xpoint, UWORD Ypoint, int32_t Nummber,
     }
 
     //Converts a number to a string
-    while (Nummber) {
+    do {
         Num_Array[Num_Bit] = Nummber % 10 + '0';
         Num_Bit++;
         Nummber /= 10;
+    } while(Nummber);
+    
+
+    //The string is inverted
+    while (Num_Bit > 0) {
+        Str_Array[Str_Bit] = Num_Array[Num_Bit - 1];
+        Str_Bit ++;
+        Num_Bit --;
     }
+
+    //show
+    Paint_DrawString_EN(Xpoint, Ypoint, (const char*)pStr, Font, Color_Background, Color_Foreground);
+}
+
+/******************************************************************************
+function:	Display nummber (Able to display decimals)
+parameter:
+    Xstart           ：X coordinate
+    Ystart           : Y coordinate
+    Nummber          : The number displayed
+    Font             ：A structure pointer that displays a character size
+    Digit            : Fractional width
+    Color_Foreground : Select the foreground color
+    Color_Background : Select the background color
+******************************************************************************/
+void Paint_DrawNumDecimals(UWORD Xpoint, UWORD Ypoint, double Nummber,
+                    sFONT* Font, UWORD Digit, UWORD Color_Foreground, UWORD Color_Background)
+{
+    int16_t Num_Bit = 0, Str_Bit = 0;
+    uint8_t Str_Array[ARRAY_LEN] = {0}, Num_Array[ARRAY_LEN] = {0};
+    uint8_t *pStr = Str_Array;
+	int temp = Nummber;
+	float decimals;
+	uint8_t i;
+    if (Xpoint > Paint.Width || Ypoint > Paint.Height) {
+        Debug("Paint_DisNum Input exceeds the normal display range\r\n");
+        return;
+    }
+
+	if(Digit > 0) {		
+		decimals = Nummber - temp;
+		for(i=Digit; i > 0; i--) {
+			decimals*=10;
+		}
+		temp = decimals;
+		//Converts a number to a string
+		for(i=Digit; i>0; i--) {
+			Num_Array[Num_Bit] = temp % 10 + '0';
+			Num_Bit++;
+			temp /= 10;						
+		}	
+		Num_Array[Num_Bit] = '.';
+		Num_Bit++;
+	}
+
+	temp = Nummber;
+    //Converts a number to a string
+    do {
+        Num_Array[Num_Bit] = temp % 10 + '0';
+        Num_Bit++;
+        temp /= 10;
+    } while(temp);
 
     //The string is inverted
     while (Num_Bit > 0) {
