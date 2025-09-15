@@ -21,6 +21,7 @@ add_subdirectory(third_party/Config)    # ePaper-specific configuration utilitie
 add_subdirectory(third_party/e-Paper)  # ePaper display libraries (third-party)
 add_subdirectory(third_party/Fonts)    # Font resources for ePaper (third-party)
 add_subdirectory(third_party/GUI)      # Drawing routines for ePaper (third-party)
+add_subdirectory(third_party/fonts_custom)        # Custom Ubuntu Mono fonts
 add_subdirectory(third_party/ds3231)   # RTC driver (DS3231)
 
 set(PICO_CYW43_ARCH_CONFIG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/c)
@@ -114,7 +115,8 @@ target_include_directories(inki_slot0 PRIVATE
     third_party/GUI          # Drawing utilities for ePaper
     third_party/Fonts        # Font resources
     third_party/Config       # ePaper-specific configuration utilities
-    third_party/cjson        # cJSON library
+    third_party/fonts_custom           # Custom Ubuntu Mono fonts
+    third_party/cjson                  # cJSON library
     ${CMAKE_CURRENT_LIST_DIR} # Current project directory
     ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
 )
@@ -125,7 +127,8 @@ target_include_directories(inki_slot1 PRIVATE
     third_party/GUI          # Drawing utilities for ePaper
     third_party/Fonts        # Font resources
     third_party/Config       # ePaper-specific configuration utilities
-    third_party/cjson        # cJSON library
+    third_party/fonts_custom           # Custom Ubuntu Mono fonts
+    third_party/cjson                  # cJSON library
     ${CMAKE_CURRENT_LIST_DIR} # Current project directory
     ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
 )
@@ -195,6 +198,7 @@ target_link_libraries(inki_slot0
     ePaper                         # ePaper driver
     GUI                            # Drawing utilities for ePaper
     Fonts                          # Font resources for ePaper
+    fonts_custom                   # Custom Ubuntu Mono fonts
     Config                         # ePaper-specific configuration utilities
     pico_stdlib                    # Standard Pico SDK library
     hardware_spi                   # SPI hardware support
@@ -210,6 +214,7 @@ target_link_libraries(inki_slot1
     ePaper                         # ePaper driver
     GUI                            # Drawing utilities for ePaper
     Fonts                          # Font resources for ePaper
+    fonts_custom                   # Custom Ubuntu Mono fonts
     Config                         # ePaper-specific configuration utilities
     pico_stdlib                    # Standard Pico SDK library
     hardware_spi                   # SPI hardware support
