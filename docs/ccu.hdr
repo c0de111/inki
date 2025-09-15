@@ -1,0 +1,15 @@
+HTTP/1.1 302 Found
+Accept-Ranges: bytes
+Cache-Control: private, no-cache, must-revalidate, no-transform, max-age=0
+Content-Type: text/html; charset=iso-8859-1
+Location: /login.htm?error=1
+X-Frame-Options: SAMEORIGIN
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 1; mode=block
+X-Robots-Tag: none
+X-Download-Options: noopen
+X-Permitted-Cross-Domain-Policies: none
+Referrer-Policy: no-referrer
+Content-Length: 0
+Date: Sat, 06 Sep 2025 21:55:27 GMT
+

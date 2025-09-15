@@ -725,8 +725,10 @@ static void http_error_callback(void* arg, err_t err) {
 // === Public API Implementation ===
 
 bool http_client_init(void) {
-    // Prepare TLS trust store (idempotent). This does not change behavior unless TLS is used.
+    // Prepare TLS trust store (idempotent) - only for weathermap use case
+#ifdef USE_CASE_WEATHERMAP
     tls_trust_store_init();
+#endif
     reset_session(&g_session);
     return true;
 }
