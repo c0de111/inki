@@ -428,27 +428,32 @@ void DrawSubImage(UBYTE* buffer, const SubImage* sub_image, int x, int y) {
             return;
     }
 
-    // Iterate over the sub-image and write pixels to the buffer
-    for (int j = 0; j < sub_image->height; j++) {
-        for (int i = 0; i < sub_image->width; i++) {
-            // Skip if the target position is outside the buffer bounds
-            if (x + i >= buffer_width || y + j >= buffer_height) {
-                continue;
+    // If Paint is in 4Gray mode, draw via Paint API to ensure proper 2bpp packing
+    if (Paint.Scale == 4) {
+        for (int j = 0; j < sub_image->height; j++) {
+            for (int i = 0; i < sub_image->width; i++) {
+                if (x + i >= buffer_width || y + j >= buffer_height) continue;
+                int sub_index = (j * sub_image->width + i) / 8;
+                int sub_bit = 7 - (i % 8);
+                bool is_black = (sub_image->data[sub_index] & (1 << sub_bit)) != 0;
+                UWORD col = is_black ? GRAY1 : GRAY4;
+                Paint_SetPixel((UWORD)(x + i), (UWORD)(y + j), col);
             }
-
-            // Calculate the target buffer index and bit position
-            int buffer_index = ((y + j) * buffer_width + (x + i)) / 8;
-            int buffer_bit = 7 - ((x + i) % 8);
-
-            // Calculate the sub-image index and bit position
-            int sub_index = (j * sub_image->width + i) / 8;
-            int sub_bit = 7 - (i % 8);
-
-            // Copy the pixel from the sub-image to the buffer
-            if ((sub_image->data[sub_index] & (1 << sub_bit)) != 0) {
-                buffer[buffer_index] &= ~(1 << buffer_bit); // Black pixel
-            } else {
-                buffer[buffer_index] |= (1 << buffer_bit);  // White pixel
+        }
+    } else {
+        // 1-bit buffer path: manipulate target buffer directly for speed
+        for (int j = 0; j < sub_image->height; j++) {
+            for (int i = 0; i < sub_image->width; i++) {
+                if (x + i >= buffer_width || y + j >= buffer_height) continue;
+                int buffer_index = ((y + j) * buffer_width + (x + i)) / 8;
+                int buffer_bit = 7 - ((x + i) % 8);
+                int sub_index = (j * sub_image->width + i) / 8;
+                int sub_bit = 7 - (i % 8);
+                if ((sub_image->data[sub_index] & (1 << sub_bit)) != 0) {
+                    buffer[buffer_index] &= ~(1 << buffer_bit); // Black pixel
+                } else {
+                    buffer[buffer_index] |= (1 << buffer_bit);  // White pixel
+                }
             }
         }
     }
@@ -1340,7 +1345,7 @@ UBYTE* init_epaper() {
     }
 
     #ifdef HIGH_VERBOSE_DEBUG
-    debug_log("Creating new image...\n");
+    
     #endif
 
     Paint_NewImage(BlackImage,
@@ -1349,7 +1354,7 @@ UBYTE* init_epaper() {
                    0, WHITE);
 
     #ifdef HIGH_VERBOSE_DEBUG
-    debug_log("Selecting image...\n");
+    
     #endif
     Paint_SelectImage(BlackImage);
 #ifdef USE_CASE_WEATHERMAP
@@ -1443,7 +1448,7 @@ void render_4gray_test_pattern(void) {
     Paint_DrawString_EN(275, 240, "Black", &font_ubuntu_mono_8pt, GRAY4, GRAY1);
     
     // Footer
-    Paint_DrawString_EN(50, 270, "4Gray validation complete", &font_ubuntu_mono_12pt, GRAY4, GRAY1);
+  // Paint_DrawString_EN(50, 270, "4Gray validation complete", &font_ubuntu_mono_12pt, GRAY4, GRAY1);
 }
 
 #ifdef USE_CASE_HISTORIAN
@@ -1784,8 +1789,12 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     }
 
 #elif defined(USE_CASE_WEATHERMAP)
-    // WEATHERMAP: 4Gray test pattern for hardware validation
-    render_4gray_test_pattern();
+    // WEATHERMAP: try to render stored 2-bit image from flash; fallback to test pattern
+    extern bool weathermap_render_from_flash(void);
+    if (!weathermap_render_from_flash()) {
+        render_4gray_test_pattern();
+        Paint_DrawString_EN(10, 10, "No map in flash", &font_ubuntu_mono_8pt_bold, WHITE, BLACK);
+    }
     
 #else
     // No use case defined - show error
@@ -2880,7 +2889,6 @@ int main(void)
         enter_wifi_setup_mode(&ds3231);  // Starts AP + webserver; handles shutdown internally
     }
 #endif
-
 
     // Enter WiFi setup mode if all three buttons are held
     if (pushbutton == 7) {

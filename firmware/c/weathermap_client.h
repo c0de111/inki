@@ -20,6 +20,14 @@ bool weathermap_fetch_count(size_t* out_len);
 // log details, and store bytes count marker in flash. Safe to call once at boot.
 void weathermap_boot_fetch_if_needed(void);
 
+// Decode a PNG (400x300 expected), convert to 2-bit packed buffer, and write to flash.
+// Prints sample pixels to debug log for verification. Frees temp buffers before return.
+bool weathermap_process_png_and_store(const uint8_t* png_data, size_t png_len);
+
+// Render the stored 2-bit image from flash onto the current ePaper canvas using Paint_SetPixel.
+// Returns false if no valid image is stored.
+bool weathermap_render_from_flash(void);
+
 #ifdef __cplusplus
 }
 #endif

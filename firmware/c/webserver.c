@@ -135,6 +135,8 @@ typedef struct {
 static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
 static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len);
+// Binary streaming helper (implemented later)
+static void send_binary_response(struct tcp_pcb* tpcb, const char* content_type, const uint8_t* data, size_t len);
 static int64_t shutdown_callback(alarm_id_t id, void *user_data);
 
 // Forward declarations for flash functions
@@ -320,68 +322,131 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
 }
 
 static void handle_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
-    debug_log("GET /logo called\n");
+    const logo_header_t* hdr = (const logo_header_t*)FLASH_PTR(LOGO_FLASH_OFFSET);
+    if (memcmp(hdr->magic, "LOGO", 4) != 0 || hdr->width == 0 || hdr->height == 0) {
+        // No logo in flash – return tiny 1x1 white BMP as placeholder
+        static const unsigned char bmp1x1[] = {
+            0x42,0x4D, // 'BM'
+            0x3E,0x00,0x00,0x00, // file size 62
+            0x00,0x00,0x00,0x00, // reserved
+            0x3E,0x00,0x00,0x00, // offset to pixel array (62)
+            0x28,0x00,0x00,0x00, // DIB header size (40)
+            0x01,0x00,0x00,0x00, // width 1
+            0x01,0x00,0x00,0x00, // height 1
+            0x01,0x00,             // planes 1
+            0x01,0x00,             // bpp 1
+            0x00,0x00,0x00,0x00,   // compression BI_RGB
+            0x04,0x00,0x00,0x00,   // image size (4 bytes row padded)
+            0x13,0x0B,0x00,0x00,   // ppm X
+            0x13,0x0B,0x00,0x00,   // ppm Y
+            0x00,0x00,0x00,0x00,   // colors used
+            0x00,0x00,0x00,0x00,   // important colors
+            // Color table (2 entries, BGRA): black, white
+            0x00,0x00,0x00,0x00,   // black
+            0xFF,0xFF,0xFF,0x00,   // white
+            // Pixel data (bottom-up, 4-byte padded)
+            0x00,0x00,0x00,0x00
+        };
+        send_binary_response(tpcb, "image/bmp", bmp1x1, sizeof(bmp1x1));
+        return;
+    }
+
+    int width = hdr->width;
+    int height = hdr->height;
+    const uint8_t* src = FLASH_PTR(LOGO_FLASH_OFFSET + sizeof(logo_header_t));
+
+    // BMP row size in bytes (padded to 4-byte boundary)
+    int row_bits = width;
+    int row_bytes = (row_bits + 7) / 8;
+    int row_padded = (row_bytes + 3) & ~3;
+    int pixel_array_size = row_padded * height;
+    int file_size = 14 + 40 + 8 + pixel_array_size;
+    int offset_pixels = 14 + 40 + 8;
+
+    uint8_t* bmp = (uint8_t*)malloc(file_size);
+    if (!bmp) {
+        send_response(tpcb, "<html><body><h3>OOM logo</h3></body></html>");
+        return;
+    }
+
+    // BITMAPFILEHEADER
+    uint8_t* d = bmp;
+    *d++ = 'B'; *d++ = 'M';
+    d[0]=file_size&0xFF; d[1]=(file_size>>8)&0xFF; d[2]=(file_size>>16)&0xFF; d[3]=(file_size>>24)&0xFF; d+=4;
+    d[0]=d[1]=d[2]=d[3]=0; d+=4; // reserved
+    d[0]=offset_pixels&0xFF; d[1]=(offset_pixels>>8)&0xFF; d[2]=(offset_pixels>>16)&0xFF; d[3]=(offset_pixels>>24)&0xFF; d+=4;
+    // BITMAPINFOHEADER (40 bytes)
+    d[0]=40; d[1]=d[2]=d[3]=0; d+=4; // header size
+    d[0]=width&0xFF; d[1]=(width>>8)&0xFF; d[2]=(width>>16)&0xFF; d[3]=(width>>24)&0xFF; d+=4;
+    d[0]=height&0xFF; d[1]=(height>>8)&0xFF; d[2]=(height>>16)&0xFF; d[3]=(height>>24)&0xFF; d+=4;
+    d[0]=1; d[1]=0; d+=2; // planes
+    d[0]=1; d[1]=0; d+=2; // bpp=1
+    d[0]=d[1]=d[2]=d[3]=0; d+=4; // compression BI_RGB
+    d[0]=pixel_array_size&0xFF; d[1]=(pixel_array_size>>8)&0xFF; d[2]=(pixel_array_size>>16)&0xFF; d[3]=(pixel_array_size>>24)&0xFF; d+=4;
+    d[0]=0x13; d[1]=0x0B; d[2]=0; d[3]=0; d+=4; // ppm X
+    d[0]=0x13; d[1]=0x0B; d[2]=0; d[3]=0; d+=4; // ppm Y
+    d[0]=d[1]=d[2]=d[3]=0; d+=4; // colors used
+    d[0]=d[1]=d[2]=d[3]=0; d+=4; // important colors
+    // Color table (black, white) in BGRA
+    *d++ = 0x00; *d++ = 0x00; *d++ = 0x00; *d++ = 0x00; // black
+    *d++ = 0xFF; *d++ = 0xFF; *d++ = 0xFF; *d++ = 0x00; // white
+
+    // Pixel data: bottom-up, left-to-right, MSB first in each byte, padded per row to 4 bytes
+    uint8_t* pix = bmp + offset_pixels;
+    for (int y = 0; y < height; y++) {
+        int src_y = height - 1 - y; // bottom-up
+        const uint8_t* src_row = src + (src_y * ((width + 7) / 8));
+        int out_byte = 0; int bitpos = 7;
+        for (int x = 0; x < width; x++) {
+            int src_bit = 7 - (x % 8);
+            int src_byte = x / 8;
+            int bit = (src_row[src_byte] >> src_bit) & 1; // 1=black
+            // In BMP 1bpp, bit=1 means white or black? Using palette order: index 0=black, 1=white, so use inverse
+            int idx = bit ? 0 : 1; // black→0, white→1
+            out_byte |= (idx << bitpos);
+            if (bitpos == 0) { *pix++ = (uint8_t)out_byte; out_byte = 0; bitpos = 7; } else { bitpos--; }
+        }
+        if (bitpos != 7) { *pix++ = (uint8_t)out_byte; }
+        // pad row
+        int written = (width + 7) / 8;
+        while (written < row_padded) { *pix++ = 0x00; written++; }
+    }
+
+    // Send HTTP response (binary streaming)
+    send_binary_response(tpcb, "image/bmp", bmp, file_size);
+    free(bmp);
 }
 
 #ifdef USE_CASE_WEATHERMAP
 static void handle_weathermap_png_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
-    enum { MAX_PNG = 256 * 1024 };
-    uint8_t* png = (uint8_t*)malloc(MAX_PNG);
-    if (!png) {
-        send_response(tpcb, "<html><body><h3>OOM fetching PNG</h3></body></html>");
+    // Serve the cached PNG staged in flash (slot1) if present
+    uint32_t staged_bytes = 0;
+    if (!get_weathermap_meta(&staged_bytes) || staged_bytes < 8) {
+        send_response(tpcb, "<html><body><h3>No cached map</h3></body></html>");
         return;
     }
-    size_t out_len = 0;
-    bool ok = weathermap_fetch_png(png, MAX_PNG, &out_len);
-    if (!ok) {
-        free(png);
-        send_response(tpcb, "<html><body><h3>Fetch failed</h3></body></html>");
+    const uint8_t* data = FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
+    if (!(data[0]==0x89 && data[1]=='P' && data[2]=='N' && data[3]=='G')) {
+        send_response(tpcb, "<html><body><h3>Invalid PNG in cache</h3></body></html>");
         return;
     }
-    // Send as binary image/png
-    // Reuse internal binary sender
-    extern void send_response(struct tcp_pcb* tpcb, const char* body); // keep symbol visible
-    // Implemented below: send_binary_response
-    {
-        char header[256];
-        int header_len = snprintf(header, sizeof(header),
-                                  "HTTP/1.0 200 OK\r\n"
-                                  "Content-Type: image/png\r\n"
-                                  "Content-Length: %u\r\n"
-                                  "Connection: close\r\n\r\n",
-                                  (unsigned)out_len);
-        err_t err = tcp_write(tpcb, header, header_len, TCP_WRITE_FLAG_COPY);
-        if (err == ERR_OK) {
-            // Stream in chunks of TCP_CHUNK_SIZE
-            const uint8_t* ptr = png;
-            size_t remaining = out_len;
-            while (remaining > 0) {
-                u16_t chunk = remaining > TCP_CHUNK_SIZE ? TCP_CHUNK_SIZE : remaining;
-                err = tcp_write(tpcb, ptr, chunk, TCP_WRITE_FLAG_COPY);
-                if (err != ERR_OK) break;
-                ptr += chunk;
-                remaining -= chunk;
-            }
-            tcp_output(tpcb);
-        }
-    }
-    free(png);
+    send_binary_response(tpcb, "image/png", data, staged_bytes);
 }
 #endif
 
+
 #ifdef USE_CASE_WEATHERMAP
-static void handle_weathermap_fetch_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
-    size_t count = 0;
-    bool ok = weathermap_fetch_count(&count);
-    char page[256];
-    if (ok) {
-        snprintf(page, sizeof(page),
-                 "<!DOCTYPE html><html><body><h3>Weathermap fetch OK</h3><p>Bytes: %u</p><p><a href=\"/weathermap\">Back</a></p></body></html>",
-                 (unsigned)count);
-    } else {
-        snprintf(page, sizeof(page),
-                 "<!DOCTYPE html><html><body><h3>Weathermap fetch FAILED</h3><p><a href=\"/weathermap\">Back</a></p></body></html>");
-    }
+static void handle_weathermap_clear_route(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int len) {
+    // Clear stored image and meta so a fresh fetch occurs next boot
+    weathermap_flash_clear_image();
+    clear_weathermap_meta();
+    char page[512];
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+             "<title>Weathermap</title><style>body{font-family:sans-serif;margin:2em;}</style></head><body>"
+             "<h3>Weathermap cleared</h3><p>The cached image and marker were erased. A fresh fetch will occur on next boot.</p>"
+             "<p><a href=\"/\">Back</a></p>"
+             "</body></html>");
     send_response(tpcb, page);
 }
 #endif
@@ -442,6 +507,7 @@ void add_timeout_info(char *buf, size_t buf_size) {
     }
 }
 
+static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len);
 static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len);
 void send_response(struct tcp_pcb* tpcb, const char* body) {
     int body_len = strlen(body);
@@ -522,6 +588,51 @@ static err_t send_next_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
 
     tcp_output(tpcb);
     return ERR_OK;
+}
+
+// Binary streaming (e.g., images) using lwIP tcp_sent backpressure
+typedef struct {
+    struct tcp_pcb* pcb;
+    const uint8_t* ptr;
+    size_t remaining;
+} bin_response_state_t;
+
+static err_t send_next_binary_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
+    bin_response_state_t* st = (bin_response_state_t*)arg;
+    if (st->remaining == 0) {
+        free(st);
+        return ERR_OK;
+    }
+    u16_t chunk = st->remaining > TCP_CHUNK_SIZE ? TCP_CHUNK_SIZE : (u16_t)st->remaining;
+    err_t err = tcp_write(tpcb, st->ptr, chunk, TCP_WRITE_FLAG_COPY);
+    if (err != ERR_OK) {
+        return err;
+    }
+    st->ptr += chunk;
+    st->remaining -= chunk;
+    tcp_output(tpcb);
+    return ERR_OK;
+}
+
+static void send_binary_response(struct tcp_pcb* tpcb, const char* content_type, const uint8_t* data, size_t len) {
+    char header[160];
+    int header_len = snprintf(header, sizeof(header),
+                              "HTTP/1.0 200 OK\r\n"
+                              "Content-Type: %s\r\n"
+                              "Content-Length: %u\r\n"
+                              "Connection: close\r\n\r\n",
+                              content_type, (unsigned)len);
+    if (tcp_write(tpcb, header, header_len, TCP_WRITE_FLAG_COPY) != ERR_OK) {
+        return;
+    }
+    bin_response_state_t* st = (bin_response_state_t*)malloc(sizeof(bin_response_state_t));
+    if (!st) return;
+    st->pcb = tpcb;
+    st->ptr = data;
+    st->remaining = len;
+    tcp_arg(tpcb, st);
+    tcp_sent(tpcb, send_next_binary_chunk);
+    send_next_binary_chunk(st, tpcb, 0);
 }
 
 
@@ -1040,7 +1151,7 @@ static const route_t routes[] = {
 #ifdef USE_CASE_WEATHERMAP
     {"/weathermap", HTTP_GET, ROUTE_SIMPLE, {.simple_handler = send_weathermap_page_wrapper}},
     {"/weathermap.png", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_weathermap_png_route}},
-    {"/weathermap_fetch", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_weathermap_fetch_route}},
+    {"/weathermap_clear", HTTP_GET, ROUTE_INLINE, {.inline_handler = handle_weathermap_clear_route}},
 #endif
     
     // ADD NEW GET ROUTES HERE:

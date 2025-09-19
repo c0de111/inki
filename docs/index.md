@@ -3,40 +3,111 @@ layout: default
 title: inki
 ---
 
-# inki
+**Set it up once, and it runs for years.** inki is the wireless epaper display that shows live information exactly where you need it. No cables, no maintenance — just insert batteries and configure via your browser.
+
+**One device, multiple applications** — the same hardware runs them all. Start with room booking, switch to weather displays, or try home automation monitoring. Available in compact 4.2" and large 7.5" sizes to fit your space.
+
+Perfect for room booking, home automation monitoring, weather displays, and data visualization.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/c0de111/inki/main/images/inki_octopus.png" alt="inki icon" width="120">
+  <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="inki room booking display" width="300" style="border-radius: 8px; margin: 20px 0;">
 </p>
+**Key Benefits:**
+- **Years of battery life** — up to 10,000 refresh cycles on standard AA batteries
+- **Browser setup** — configure via Wi-Fi hotspot, no programming required
+- **epaper display** — content stays visible even when powered off
+- **Multiple applications** — room booking, home automation, weather mapping, data visualization
+- **Wireless updates** — firmware and content updates over Wi-Fi
 
-inki is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi‑Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the SeatSurfing desk sharing system and display of live information from home automation with homematic and ccu-historian. It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. See also https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device
+## Applications
 
-## Try it
-- Historian UF2: https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2
-- SeatSurfing UF2: https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2
-- All releases: https://github.com/c0de111/inki/releases
-
-## Documentation
-- Project README (build, hardware, details): https://github.com/c0de111/inki#readme
-
-## Interested in a kit?
-- Contact: https://github.com/c0de111 ("@c0de111")
-
-## Gallery
-
-<p>
-  <a href="https://raw.githubusercontent.com/c0de111/inki/main/images/esign_4_2_1_cropped.jpg" target="_blank">
-    <img src="https://raw.githubusercontent.com/c0de111/inki/main/images/esign_4_2_1_cropped.jpg" alt="inki 4.2 inch" width="380" style="border-radius:8px;margin:6px;">
+<div class="use-cases-grid">
+  <a href="/seatsurfing" class="use-case-tile">
+    <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="Room booking display" class="tile-image">
+    <h3>Seatsurfing</h3>
+    <p>Room booking and desk sharing display</p>
+    <small>REST API integration for live booking data</small>
   </a>
-  <a href="https://raw.githubusercontent.com/c0de111/inki/main/images/7_5_ccu-historian.JPG" target="_blank">
-    <img src="https://raw.githubusercontent.com/c0de111/inki/main/images/7_5_ccu-historian.JPG" alt="inki 7.5 inch historian" width="380" style="border-radius:8px;margin:6px;">
+
+  <a href="/historian" class="use-case-tile">
+    <img src="/assets/images/7_5_ccu-historian.JPG" alt="Time-series visualization" class="tile-image">
+    <h3>Historian</h3>
+    <p>Time-series data visualization</p>
+    <small>CCU-Historian integration with trend analysis</small>
   </a>
-  <a href="https://raw.githubusercontent.com/c0de111/inki/main/images/inki_webinterface_landingpage_combined.png" target="_blank">
-    <img src="https://raw.githubusercontent.com/c0de111/inki/main/images/inki_webinterface_landingpage_combined.png" alt="inki web interface" width="380" style="border-radius:8px;margin:6px;">
+
+  <a href="/homematic" class="use-case-tile">
+    <img src="/assets/images/inki-homematic_3.JPG" alt="Home automation display" class="tile-image">
+    <h3>Homematic</h3>
+    <p>Home automation display</p>
+    <small>Live sensor data and device status monitoring</small>
   </a>
-</p>
+
+  <a href="/weathermap" class="use-case-tile">
+    <h3>Weathermap</h3>
+    <p>Real-time weather mapping</p>
+    <small>HTTPS WMS tile retrieval with TLS support</small>
+  </a>
+
+  <a href="https://github.com/c0de111/inki#build-your-own-inki" class="use-case-tile">
+    <img src="/assets/images/assembly.gif" alt="inki assembly animation" class="tile-image">
+    <h3>DIY</h3>
+    <p>Build your own inki</p>
+    <small>Open source hardware and software, PCB files included</small>
+  </a>
+</div>
 
 <style>
-/* Optional: tighten top spacing */
-h1#inki{margin-top:0.2rem}
+.use-cases-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.use-case-tile {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  background: #f9f9f9;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.use-case-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.use-case-tile h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.2em;
+}
+
+.use-case-tile p {
+  margin: 10px 0;
+  font-weight: bold;
+}
+
+.use-case-tile small {
+  color: #666;
+  font-style: italic;
+}
+
+.tile-image {
+  width: 80px;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  float: right;
+  opacity: 0.7;
+}
 </style>
+
+<p align="center">
+<strong>Interested in a kit?</strong><br>
+<strong>Contact:</strong> <a href="mailto:c0de@posteo.de">c0de@posteo.de</a>
+</p>

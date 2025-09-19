@@ -123,6 +123,50 @@ typedef struct __attribute__((packed)) {
 
 bool get_weathermap_meta(uint32_t* bytes_out);
 bool set_weathermap_meta(uint32_t bytes);
+bool clear_weathermap_meta(void);
+
+// Weathermap image storage (2-bit packed 400x300)
+#define WEATHERMAP_IMG_FLASH_OFFSET      (CONFIG_FLASH_OFFSET + 0x6000)  // 0x1ED000 - 64 KB reserved for image
+#define WEATHERMAP_IMG_FLASH_SIZE        0x10000                         // 64 KB budget
+
+typedef struct __attribute__((packed)) {
+    char magic[4];   // "WIMG"
+    uint16_t width;  // pixels
+    uint16_t height; // pixels
+    uint8_t bpp;     // bits per pixel in payload (2)
+    uint8_t reserved[3];
+    uint32_t datalen; // bytes of packed payload following header
+    uint32_t crc32;   // optional CRC of payload (0 if unused)
+} weathermap_image_header_t;
+
+bool weathermap_flash_write_image_2bpp(const uint8_t* packed_data, size_t packed_len,
+                                       uint16_t width, uint16_t height);
+bool weathermap_flash_info(uint16_t* width, uint16_t* height, uint32_t* datalen);
+const uint8_t* weathermap_flash_data_ptr(void);
+bool weathermap_flash_clear_image(void);
+
+// Alternate storage in slot1 (for robustness/debug): header+payload at slot1 base
+// Slot1 image storage (header page + payload pages) – streaming API
+bool wmap_slot1_begin_image(uint16_t width, uint16_t height);
+bool wmap_slot1_append_row_2bpp(const uint8_t* row_packed, size_t row_len);
+bool wmap_slot1_end_image(void);
+bool wmap_slot1_image_info(uint16_t* width, uint16_t* height, uint32_t* datalen);
+const uint8_t* wmap_slot1_image_data_ptr(void);
+
+// Streaming writer for WEATHERMAP 2‑bpp image region
+bool weathermap_flash_begin_image(uint16_t width, uint16_t height);
+bool weathermap_flash_append_row_2bpp(const uint8_t* row_packed, size_t row_len);
+bool weathermap_flash_end_image(void);
+
+#ifdef USE_CASE_WEATHERMAP
+// Streaming PNG staging into unused firmware slot1 (tolerates overwrite by firmware updates)
+bool wmap_staging_begin(void);
+bool wmap_staging_append(const uint8_t* data, size_t len);
+bool wmap_staging_end(uint32_t* total_bytes);
+void wmap_staging_abort(void);
+const uint8_t* wmap_staging_ptr(void);    // pointer to staged bytes (XIP)
+uint32_t wmap_staging_size(void);         // last finalized size (or 0 if not finalized)
+#endif
 
 /* Wi-Fi config */
 bool load_wifi_config(wifi_config_t* out);

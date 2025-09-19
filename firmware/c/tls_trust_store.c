@@ -33,19 +33,25 @@ void tls_trust_store_init(void) {
         debug_log("[TLS] HARICA certificate bundle available (%u bytes)\n", (unsigned)harica_bundle_der_len);
     }
     
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[TLS] TLS trust store initialized (config creation deferred until after Wi-Fi init)\n");
+    #endif
 }
 
 void tls_create_config_after_wifi(void) {
     if (s_tls_cfg) return;
     
     // Create TLS config AFTER Wi-Fi initialization (like pico-examples)
+    #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[TLS] Creating ALTCP TLS client config after Wi-Fi init (pico-examples pattern)\n");
+    #endif
     
     // Use certificate validation if available
     if (harica_bundle_der_len > 0) {
         s_tls_cfg = altcp_tls_create_config_client(harica_bundle_der, harica_bundle_der_len);
+        #ifdef HIGH_VERBOSE_DEBUG
         debug_log("[TLS] Using HARICA certificate bundle for certificate validation\n");
+        #endif
     } else {
         s_tls_cfg = altcp_tls_create_config_client(NULL, 0);
         debug_log_with_color(COLOR_YELLOW, "[TLS] No certificate validation (fallback for testing)\n");

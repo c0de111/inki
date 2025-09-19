@@ -1,0 +1,32 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+/* Make logo smaller */
+header img {
+  max-width: 100px !important;
+  width: 100px !important;
+}
+
+/* Custom download button styling for sidebar */
+.download-btn {
+  display: inline-block;
+  background: #0066cc;
+  color: white !important;
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-weight: bold;
+  font-size: 11px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.download-btn:hover {
+  background: #0052a3;
+  color: white !important;
+  text-decoration: none;
+}

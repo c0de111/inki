@@ -112,11 +112,25 @@ void send_weathermap_page(struct tcp_pcb* tpcb, const char* message) {
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
                  "<p style='color:green'>%s</p>", info);
     }
-    strcat(page,
-           "<p><a class=\"btn\" href=\"/weathermap_fetch\">Fetch PNG (count bytes)</a></p>\n"
-           "<p><small class=\"note\">Note: counts bytes only (no image transfer yet).</small></p>\n"
-           "<p><a href=\"/\">Back</a></p>"
-           "</body></html>");
+    // Check if a cached PNG exists in flash
+    uint32_t staged_bytes = 0;
+    bool has_png = get_weathermap_meta(&staged_bytes) && staged_bytes >= 8;
+    if (has_png) {
+        // Optional quick signature check
+        const uint8_t* data = FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
+        if (!(data[0]==0x89 && data[1]=='P' && data[2]=='N' && data[3]=='G')) {
+            has_png = false;
+        }
+    }
+
+    if (has_png) {
+        strcat(page, "<p><img src=\"/weathermap.png\" alt=\"cached map\" style=\"max-width:100%;height:auto;border:1px solid #ccc\"></p>\n");
+        strcat(page, "<p><a class=\"btn\" href=\"/weathermap_clear\">Clear cached image</a></p>\n");
+    } else {
+        strcat(page, "<p><i>No cached map stored in device.</i></p>\n");
+    }
+
+    strcat(page, "<p><a href=\"/\">Back</a></p></body></html>");
     send_response(tpcb, page);
 }
 #endif
