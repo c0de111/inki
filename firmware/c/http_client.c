@@ -78,6 +78,7 @@ static void reset_session(http_session_t* session) {
     session->transfer_complete = false;
     session->fallback_mode = false;
     session->no_store_body = false;
+    session->stream_mode = false;
     session->use_tls = false;
     session->header_length = 0;
     session->expected_length = 0;
@@ -98,6 +99,11 @@ static void reset_session(http_session_t* session) {
     
     session->pcb = NULL;
     session->server_hostname[0] = '\0';
+
+    session->stream_on_header = NULL;
+    session->stream_on_data = NULL;
+    session->stream_on_complete = NULL;
+    session->stream_arg = NULL;
 }
 
 /**
@@ -208,7 +214,9 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     }
     
     if (p) {
+        #ifdef HIGH_VERBOSE_DEBUG
         debug_log("[HTTP] Received %d bytes from server\n", (int)p->tot_len);
+        #endif
     }
     
     if (!p) {
@@ -228,6 +236,8 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 if (session->completion_callback) {
                     session->completion_callback(session->no_store_body ? NULL : session->body_buffer,
                                                  session->total_received, true, session->callback_arg);
+                } else if (session->no_store_body && session->stream_on_complete) {
+                    session->stream_on_complete(true, session->stream_arg);
                 }
                 reset_session(session);
                 return ERR_OK;
@@ -235,8 +245,12 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
         }
 
         // Only call callback if transfer was NOT complete (error case)
-        if (session->active && !session->transfer_complete && session->completion_callback) {
-            session->completion_callback(NULL, 0, false, session->callback_arg);
+        if (session->active && !session->transfer_complete) {
+            if (session->completion_callback) {
+                session->completion_callback(NULL, 0, false, session->callback_arg);
+            } else if (session->no_store_body && session->stream_on_complete) {
+                session->stream_on_complete(false, session->stream_arg);
+            }
         }
         reset_session(session);
         // Notify close hook for sequencing (e.g., Homematic next request)
@@ -333,6 +347,11 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
 
                 // Parse Content-Length
                 int content_length = parse_content_length(session->header_buffer);
+                // Inform streaming client about header if requested
+                if ((session->no_store_body || session->stream_mode) && session->stream_on_header) {
+                    int status_code = parse_http_status_code(session->header_buffer);
+                    session->stream_on_header(session->header_buffer, session->header_length, status_code, content_length, session->stream_arg);
+                }
                 if (content_length < 0) {
                     // No Content-Length: start fallback dynamic accumulation
                     session->fallback_mode = true;
@@ -341,30 +360,35 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                     session->body_buffer_size = 0;
                     session->total_received = 0;
 
-                    // Copy any body bytes already captured in header buffer
+                    // Copy/stream any body bytes already captured in header buffer
                     size_t body_in_header = session->header_length - (header_end - session->header_buffer);
                     if (body_in_header > 0) {
-                        session->body_buffer = (char*)malloc(body_in_header + 1);
-                        if (!session->body_buffer) {
-                            debug_log_with_color(COLOR_RED, "[HTTP] Failed to allocate fallback body buffer\n");
-                            altcp_recved(pcb, p->tot_len);
-                            pbuf_free(p);
-                            altcp_close(pcb);
-                            session->state = HTTP_SESSION_ERROR;
-                            session->last_error = ERR_MEM;
-                            if (session->completion_callback) {
-                                session->completion_callback(NULL, 0, false, session->callback_arg);
+                        if (session->no_store_body && session->stream_on_data) {
+                            session->stream_on_data((const uint8_t*)header_end, body_in_header, session->stream_arg);
+                            session->total_received = body_in_header;
+                        } else {
+                            session->body_buffer = (char*)malloc(body_in_header + 1);
+                            if (!session->body_buffer) {
+                                debug_log_with_color(COLOR_RED, "[HTTP] Failed to allocate fallback body buffer\n");
+                                altcp_recved(pcb, p->tot_len);
+                                pbuf_free(p);
+                                altcp_close(pcb);
+                                session->state = HTTP_SESSION_ERROR;
+                                session->last_error = ERR_MEM;
+                                if (session->completion_callback) {
+                                    session->completion_callback(NULL, 0, false, session->callback_arg);
+                                }
+                                reset_session(session);
+                                return ERR_OK;
                             }
-                            reset_session(session);
-                            return ERR_OK;
+                            memcpy(session->body_buffer, header_end, body_in_header);
+                            session->total_received = body_in_header;
+                            session->body_buffer[session->total_received] = '\0';
+                            session->body_buffer_size = body_in_header + 1;
+                            #ifdef HIGH_VERBOSE_DEBUG
+                            debug_log("[HTTP] Fallback: captured %d body bytes in header packet\n", (int)body_in_header);
+                            #endif
                         }
-                        memcpy(session->body_buffer, header_end, body_in_header);
-                        session->total_received = body_in_header;
-                        session->body_buffer[session->total_received] = '\0';
-                        session->body_buffer_size = body_in_header + 1;
-                        #ifdef HIGH_VERBOSE_DEBUG
-                        debug_log("[HTTP] Fallback: captured %d body bytes in header packet\n", (int)body_in_header);
-                        #endif
                     }
                 } else if (content_length == 0) {
                     // Explicit zero-length body; complete immediately
@@ -440,10 +464,13 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                             #endif
                         }
                     } else {
-                        // Count-only: account for any body already in this packet
+                        // Count/stream: account for any body already in this packet
                         size_t body_in_header = session->header_length - (header_end - session->header_buffer);
                         if (body_in_header > session->expected_length) {
                             body_in_header = session->expected_length;
+                        }
+                        if (body_in_header > 0 && session->stream_on_data) {
+                            session->stream_on_data((const uint8_t*)header_end, body_in_header, session->stream_arg);
                         }
                         session->total_received = body_in_header;
                     }
@@ -461,9 +488,11 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 if (step > 0) {
                     size_t sstep = (size_t)step;
                     if (session->no_store_body) {
-                        // Count only in fallback mode - but still need to process the entire pbuf
+                        // Stream/count only in fallback mode
+                        if (session->stream_on_data) {
+                            session->stream_on_data((const uint8_t*)chunk, sstep, session->stream_arg);
+                        }
                         session->total_received += sstep;
-                        // Don't continue here - we need to process remaining chunks and ACK
                     } else {
                     // Overflow guard for needed calculation
                     if (session->total_received > SIZE_MAX - (sstep + 1)) {
@@ -510,10 +539,13 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
                 size_t to_copy = ((size_t)step < remaining) ? (size_t)step : remaining;
                 if (to_copy > 0) {
                     if (session->no_store_body) {
+                        if (session->stream_on_data) {
+                            session->stream_on_data((const uint8_t*)chunk, to_copy, session->stream_arg);
+                        }
                         session->total_received += to_copy;
                     } else {
-                    memcpy(session->body_buffer + session->total_received, chunk, to_copy);
-                    session->total_received += to_copy;
+                        memcpy(session->body_buffer + session->total_received, chunk, to_copy);
+                        session->total_received += to_copy;
                     }
                 }
 
@@ -562,6 +594,8 @@ static err_t http_recv_callback(void* arg, struct altcp_pcb* pcb, struct pbuf* p
     if (session->completion_callback) {
         session->completion_callback(session->no_store_body ? NULL : session->body_buffer,
                                      session->expected_length, true, session->callback_arg);
+    } else if (session->no_store_body && session->stream_on_complete) {
+        session->stream_on_complete(true, session->stream_arg);
     }
 
     // Clean up connection
@@ -846,6 +880,99 @@ http_result_t http_request_async_count_only(const ip_addr_t* server_ip, uint16_t
                                 void* callback_arg) {
     g_next_no_store = true;
     return http_request_async(server_ip, port, request_data, callback, callback_arg);
+}
+
+http_result_t http_request_async_stream(const ip_addr_t* server_ip, uint16_t port,
+                                const char* request_data,
+                                void (*on_header)(const char* header, size_t header_len, int status_code, int content_length, void* arg),
+                                void (*on_data)(const uint8_t* data, size_t len, void* arg),
+                                void (*on_complete)(bool success, void* arg),
+                                void* cb_arg) {
+    // Reset any previous session and configure for streaming (no body accumulation)
+    reset_session(&g_session);
+    g_session.no_store_body = true;
+    g_session.stream_mode = true;
+    g_transfer_was_successful = false;
+
+    // Store request data
+    g_session.request_length = strlen(request_data);
+    g_session.request_data = malloc(g_session.request_length + 1);
+    if (!g_session.request_data) {
+        debug_log_with_color(COLOR_RED, "[HTTP] Failed to allocate request buffer\n");
+        return HTTP_ERROR_MEMORY;
+    }
+    strcpy(g_session.request_data, request_data);
+
+    // Register streaming callbacks
+    g_session.stream_on_header = on_header;
+    g_session.stream_on_data = on_data;
+    g_session.stream_on_complete = on_complete;
+    g_session.stream_arg = cb_arg;
+
+    // Perform lwIP operations under cyw43 lock
+    cyw43_arch_lwip_begin();
+
+    // Decide on TLS based on port (443 -> TLS) and set SNI from Host header
+    g_session.use_tls = (port == 443);
+    if (g_session.use_tls) {
+        extract_host_from_request(g_session.request_data, g_session.server_hostname, sizeof(g_session.server_hostname));
+    }
+
+    // Create PCB (TLS or plain)
+    if (g_session.use_tls) {
+        struct altcp_tls_config* cfg = tls_get_client_config();
+        if (!cfg) {
+            cyw43_arch_lwip_end();
+            debug_log_with_color(COLOR_RED, "[TLS] No client config (CA) available; cannot create TLS PCB\n");
+            free(g_session.request_data);
+            g_session.request_data = NULL;
+            return HTTP_ERROR_CONNECTION;
+        }
+        u8_t ip_type = IPADDR_TYPE_V4;
+        #if LWIP_IPV6
+        ip_type = IP_IS_V6(server_ip) ? IPADDR_TYPE_V6 : IPADDR_TYPE_V4;
+        #endif
+        g_session.pcb = altcp_tls_new(cfg, ip_type);
+        if (g_session.pcb && g_session.server_hostname[0]) {
+            // Set SNI/hostname for certificate verification
+            void* ctx = altcp_tls_context(g_session.pcb);
+            if (ctx) {
+                mbedtls_ssl_set_hostname((mbedtls_ssl_context*)ctx, g_session.server_hostname);
+            }
+        }
+        debug_log("[HTTP] Using TLS: host='%s' port=%u\n", g_session.server_hostname[0] ? g_session.server_hostname : "(none)", (unsigned)port);
+    } else {
+        g_session.pcb = altcp_new(NULL);
+    }
+    if (!g_session.pcb) {
+        cyw43_arch_lwip_end();
+        debug_log_with_color(COLOR_RED, "[HTTP] Failed to create PCB\n");
+        free(g_session.request_data);
+        g_session.request_data = NULL;
+        return HTTP_ERROR_CONNECTION;
+    }
+
+    // Set callbacks
+    altcp_arg(g_session.pcb, &g_session);
+    altcp_recv(g_session.pcb, http_recv_callback);
+    altcp_err(g_session.pcb, http_error_callback);
+
+    // Mark session as active
+    g_session.active = true;
+    g_session.state = HTTP_SESSION_CONNECTING;
+
+    // Connect to server
+    err_t err = altcp_connect(g_session.pcb, server_ip, port, http_connected_callback);
+    cyw43_arch_lwip_end();
+    if (err != ERR_OK) {
+        cyw43_arch_lwip_begin();
+        altcp_close(g_session.pcb);
+        cyw43_arch_lwip_end();
+        g_session.pcb = NULL;
+        reset_session(&g_session);
+        return HTTP_ERROR_CONNECTION;
+    }
+    return HTTP_SUCCESS;
 }
 
 

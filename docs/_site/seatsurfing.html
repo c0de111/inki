@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Seatsurfing - inki | inki</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Seatsurfing - inki" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Wireless information displays for modern spaces" />
+<meta property="og:description" content="Wireless information displays for modern spaces" />
+<link rel="canonical" href="http://localhost:4000/seatsurfing.html" />
+<meta property="og:url" content="http://localhost:4000/seatsurfing.html" />
+<meta property="og:site_name" content="inki" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Seatsurfing - inki" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Wireless information displays for modern spaces","headline":"Seatsurfing - inki","publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/images/inki_octopus.png"}},"url":"http://localhost:4000/seatsurfing.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=d80a81dd6da8f91d4a08c4ef9989e40f00a43ea9">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1><a href="http://localhost:4000/">inki</a></h1>
+
+        
+          <img src="/assets/images/inki_octopus.png" alt="Logo" />
+        
+
+        <p>Wireless information displays for modern spaces</p>
+
+        
+        <p class="view"><a href="https://github.com/c0de111/inki">View the Project on GitHub <small>c0de111/inki</small></a></p>
+        
+
+        
+
+        
+        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+        
+
+      </header>
+      <section>
+
+      <p><a href="/">← Back to homepage</a></p>
+
+<p><strong>Room booking and desk sharing display</strong> - inki-seatsurfing</p>
+
+<p align="center">
+  <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="Seatsurfing room booking display" width="400" style="border-radius: 8px; margin: 20px 0;" />
+</p>
+
+<h2 id="overview">Overview</h2>
+
+<p>The Seatsurfing use case transforms inki into a smart room booking display that shows real-time availability and scheduling information for meeting rooms and desk spaces.</p>
+
+<h2 id="features">Features</h2>
+
+<ul>
+  <li><strong>Live booking data</strong> via REST API integration</li>
+  <li><strong>Room availability status</strong> with occupant names</li>
+  <li><strong>Schedule information</strong> for upcoming meetings</li>
+  <li><strong>Custom logos and layouts</strong> for branding</li>
+  <li><strong>Multiple spaces per display</strong> support</li>
+</ul>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<ul>
+  <li><strong>API Integration</strong>: Connects to Seatsurfing servers via REST API</li>
+  <li><strong>Authentication</strong>: Basic authentication with configurable credentials</li>
+  <li><strong>Data Format</strong>: JSON response parsing for booking information</li>
+  <li><strong>Update Frequency</strong>: Configurable refresh intervals</li>
+  <li><strong>Display</strong>: Room status, occupant names, and schedule information</li>
+</ul>
+
+<h2 id="configuration">Configuration</h2>
+
+<p>The device configuration includes:</p>
+<ul>
+  <li>Seatsurfing server credentials</li>
+  <li>Location IDs for room mapping</li>
+  <li>Refresh intervals</li>
+  <li>Display layout preferences</li>
+</ul>
+
+<h2 id="build">Build</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd </span>firmware/c
+./build.sh <span class="nt">--seatsurfing</span>
+</code></pre></div></div>
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/c0de111">c0de111</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

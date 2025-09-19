@@ -133,7 +133,7 @@ This repository provides all design files, documentation, and code to build your
    
    ### Assembly Animation (4.2" version)
 
-![Assembly Animation](hardware/enclosure/images/assembly.gif)
+![Assembly Animation](docs/assets/images/assembly.gif)
 
 This animation shows the step-by-step assembly of the 4.2" enclosure.
 

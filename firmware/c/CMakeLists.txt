@@ -39,6 +39,8 @@ add_executable(inki_slot0
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
     weathermap_client.c  # WEATHERMAP WMS HTTPS client (opt-in TLS)
+    png_stream.c         # Streaming PNG decoder (WEATHERMAP)
+    third_party/miniz/miniz_tinfl.c  # tinfl implementation
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -62,6 +64,8 @@ add_executable(inki_slot1
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
     weathermap_client.c  # WEATHERMAP WMS HTTPS client (opt-in TLS)
+    png_stream.c         # Streaming PNG decoder (WEATHERMAP)
+    third_party/miniz/miniz_tinfl.c  # tinfl implementation
     ImageResources.c     # Image data for ePaper display
     debug.c         # Debug functions
     flash.c         # Persistent config handling
@@ -243,4 +247,8 @@ target_link_libraries(inki_default_config
 )]]
 
 
-# pico_add_extra_outputs(inki_default_config)
+# Generate UF2/BIN/HEX outputs via SDK helpers (requires elf2uf2/picotool setup)
+pico_add_extra_outputs(inki_bootloader)
+pico_add_extra_outputs(inki_slot0)
+pico_add_extra_outputs(inki_slot1)
+pico_add_extra_outputs(inki_default_config)

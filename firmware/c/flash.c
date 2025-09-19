@@ -140,6 +140,344 @@ bool set_weathermap_meta(uint32_t bytes) {
     return true;
 }
 
+bool clear_weathermap_meta(void) {
+    uint32_t sector_offset = WEATHERMAP_META_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
+    restore_interrupts(ints);
+    return true;
+}
+
+bool weathermap_flash_write_image_2bpp(const uint8_t* packed_data, size_t packed_len,
+                                       uint16_t width, uint16_t height) {
+    if (!packed_data || packed_len == 0) return false;
+    if ((WEATHERMAP_IMG_FLASH_OFFSET + sizeof(weathermap_image_header_t) + packed_len) > (CONFIG_FLASH_OFFSET + 0x19000)) {
+        debug_log_with_color(COLOR_RED, "[WMAP] Image too large for reserved flash\n");
+        return false;
+    }
+
+    weathermap_image_header_t hdr = {0};
+    memcpy(hdr.magic, "WIMG", 4);
+    hdr.width = width;
+    hdr.height = height;
+    hdr.bpp = 2;
+    hdr.datalen = packed_len;
+    hdr.crc32 = 0; // optional
+
+    uint32_t sector_offset = WEATHERMAP_IMG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+    size_t erase_len = ((sizeof(hdr) + packed_len + FLASH_SECTOR_SIZE - 1) & ~(FLASH_SECTOR_SIZE - 1));
+
+    // Program header as a full 256-byte page for alignment
+    uint8_t page_hdr[FLASH_PAGE_SIZE];
+    memset(page_hdr, 0xFF, sizeof(page_hdr));
+    memcpy(page_hdr, &hdr, sizeof(hdr));
+
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, erase_len);
+    flash_range_program(WEATHERMAP_IMG_FLASH_OFFSET, page_hdr, FLASH_PAGE_SIZE);
+    // Program payload starting at next page boundary
+    uint32_t data_offset = WEATHERMAP_IMG_FLASH_OFFSET + FLASH_PAGE_SIZE;
+    size_t written = 0;
+    while (written < packed_len) {
+        size_t chunk = packed_len - written;
+        if (chunk > FLASH_PAGE_SIZE) chunk = FLASH_PAGE_SIZE;
+        uint8_t page_buf[FLASH_PAGE_SIZE];
+        memset(page_buf, 0xFF, sizeof(page_buf));
+        memcpy(page_buf, packed_data + written, chunk);
+        flash_range_program(data_offset, page_buf, FLASH_PAGE_SIZE);
+        data_offset += FLASH_PAGE_SIZE;
+        written += chunk;
+    }
+    restore_interrupts(ints);
+    return true;
+}
+
+bool weathermap_flash_info(uint16_t* width, uint16_t* height, uint32_t* datalen) {
+    const weathermap_image_header_t* hdr = (const weathermap_image_header_t*)FLASH_PTR(WEATHERMAP_IMG_FLASH_OFFSET);
+    if (memcmp(hdr->magic, "WIMG", 4) != 0) return false;
+    if (width) *width = hdr->width;
+    if (height) *height = hdr->height;
+    if (datalen) *datalen = hdr->datalen;
+    return true;
+}
+
+const uint8_t* weathermap_flash_data_ptr(void) {
+    // Payload begins at next page boundary after the 256-byte header page.
+    return FLASH_PTR(WEATHERMAP_IMG_FLASH_OFFSET + FLASH_PAGE_SIZE);
+}
+
+bool weathermap_flash_clear_image(void) {
+    uint32_t start = WEATHERMAP_IMG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+    uint32_t erase_len = WEATHERMAP_IMG_FLASH_SIZE; // reserved size
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(start, erase_len);
+    restore_interrupts(ints);
+    return true;
+}
+
+// --- Slot1 image storage (header page + payload pages) ---
+static struct {
+    bool active;
+    uint32_t write_offset;
+    uint32_t total_needed;
+    uint32_t written;
+    uint8_t  page_buf[FLASH_PAGE_SIZE];
+    size_t   page_filled;
+} s_wmap_slot1 = {0};
+
+bool wmap_slot1_begin_image(uint16_t width, uint16_t height) {
+    if (s_wmap_slot1.active) return false;
+    weathermap_image_header_t hdr = {0};
+    memcpy(hdr.magic, "WIMG", 4);
+    hdr.width = width;
+    hdr.height = height;
+    hdr.bpp = 2;
+    hdr.datalen = ((uint32_t)width * height + 3) / 4;
+    hdr.crc32 = 0;
+
+    uint32_t base = FIRMWARE_SLOT1_FLASH_OFFSET;
+    uint32_t erase_len = ((FLASH_PAGE_SIZE + hdr.datalen + FLASH_SECTOR_SIZE - 1) & ~(FLASH_SECTOR_SIZE - 1));
+
+    uint8_t page_hdr[FLASH_PAGE_SIZE];
+    memset(page_hdr, 0xFF, sizeof(page_hdr));
+    memcpy(page_hdr, &hdr, sizeof(hdr));
+
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(base & ~(FLASH_SECTOR_SIZE - 1), erase_len);
+    flash_range_program(base, page_hdr, FLASH_PAGE_SIZE);
+    restore_interrupts(ints);
+
+    s_wmap_slot1.active = true;
+    s_wmap_slot1.write_offset = base + FLASH_PAGE_SIZE;
+    s_wmap_slot1.total_needed = hdr.datalen;
+    s_wmap_slot1.written = 0;
+    s_wmap_slot1.page_filled = 0;
+    return true;
+}
+
+bool wmap_slot1_append_row_2bpp(const uint8_t* row_packed, size_t row_len) {
+    if (!s_wmap_slot1.active || !row_packed || row_len == 0) return false;
+    if (s_wmap_slot1.written + row_len > s_wmap_slot1.total_needed) {
+        row_len = s_wmap_slot1.total_needed - s_wmap_slot1.written;
+    }
+    size_t off = 0;
+    while (off < row_len) {
+        size_t space = FLASH_PAGE_SIZE - s_wmap_slot1.page_filled;
+        size_t n = (row_len - off < space) ? (row_len - off) : space;
+        memcpy(s_wmap_slot1.page_buf + s_wmap_slot1.page_filled, row_packed + off, n);
+        s_wmap_slot1.page_filled += n;
+        off += n;
+        if (s_wmap_slot1.page_filled == FLASH_PAGE_SIZE) {
+            uint32_t ints = save_and_disable_interrupts();
+            flash_range_program(s_wmap_slot1.write_offset, s_wmap_slot1.page_buf, FLASH_PAGE_SIZE);
+            restore_interrupts(ints);
+            s_wmap_slot1.write_offset += FLASH_PAGE_SIZE;
+            s_wmap_slot1.written += FLASH_PAGE_SIZE;
+            s_wmap_slot1.page_filled = 0;
+        }
+    }
+    return true;
+}
+
+bool wmap_slot1_end_image(void) {
+    if (!s_wmap_slot1.active) return false;
+    if (s_wmap_slot1.page_filled > 0) {
+        memset(s_wmap_slot1.page_buf + s_wmap_slot1.page_filled, 0xFF, FLASH_PAGE_SIZE - s_wmap_slot1.page_filled);
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_program(s_wmap_slot1.write_offset, s_wmap_slot1.page_buf, FLASH_PAGE_SIZE);
+        restore_interrupts(ints);
+        s_wmap_slot1.write_offset += FLASH_PAGE_SIZE;
+        s_wmap_slot1.written += s_wmap_slot1.page_filled;
+        s_wmap_slot1.page_filled = 0;
+    }
+    s_wmap_slot1.active = false;
+    return (s_wmap_slot1.written >= s_wmap_slot1.total_needed);
+}
+
+bool wmap_slot1_image_info(uint16_t* width, uint16_t* height, uint32_t* datalen) {
+    const weathermap_image_header_t* hdr = (const weathermap_image_header_t*)FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
+    if (memcmp(hdr->magic, "WIMG", 4) != 0) return false;
+    if (width) *width = hdr->width;
+    if (height) *height = hdr->height;
+    if (datalen) *datalen = hdr->datalen;
+    return true;
+}
+
+const uint8_t* wmap_slot1_image_data_ptr(void) {
+    return FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET + FLASH_PAGE_SIZE);
+}
+
+// --- Streaming writer for WEATHERMAP image ---
+typedef struct {
+    bool active;
+    uint32_t write_offset;  // absolute flash offset for next program
+    uint32_t total_needed;  // expected payload bytes (rows * row_len)
+    uint32_t written;       // how many payload bytes written so far
+    uint8_t  page_buf[FLASH_PAGE_SIZE];
+    size_t   page_filled;
+} wmap_img_writer_t;
+
+static wmap_img_writer_t s_wmap_img = {0};
+
+bool weathermap_flash_begin_image(uint16_t width, uint16_t height) {
+    if (s_wmap_img.active) return false;
+    weathermap_image_header_t hdr = {0};
+    memcpy(hdr.magic, "WIMG", 4);
+    hdr.width = width;
+    hdr.height = height;
+    hdr.bpp = 2;
+    hdr.datalen = ((uint32_t)width * height + 3) / 4;
+    hdr.crc32 = 0;
+
+    // Erase enough sectors to hold header + payload
+    uint32_t start = WEATHERMAP_IMG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
+    uint32_t erase_len = ((sizeof(hdr) + hdr.datalen + FLASH_SECTOR_SIZE - 1) & ~(FLASH_SECTOR_SIZE - 1));
+    // Program header as full 256-byte page
+    uint8_t page_hdr[FLASH_PAGE_SIZE];
+    memset(page_hdr, 0xFF, sizeof(page_hdr));
+    memcpy(page_hdr, &hdr, sizeof(hdr));
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(start, erase_len);
+    flash_range_program(WEATHERMAP_IMG_FLASH_OFFSET, page_hdr, FLASH_PAGE_SIZE);
+    restore_interrupts(ints);
+
+    s_wmap_img.active = true;
+    // Start writing payload at next page boundary after header page
+    s_wmap_img.write_offset = WEATHERMAP_IMG_FLASH_OFFSET + FLASH_PAGE_SIZE;
+    s_wmap_img.total_needed = hdr.datalen;
+    s_wmap_img.written = 0;
+    s_wmap_img.page_filled = 0;
+    return true;
+}
+
+bool weathermap_flash_append_row_2bpp(const uint8_t* row_packed, size_t row_len) {
+    if (!s_wmap_img.active || !row_packed || row_len == 0) return false;
+    // Ensure we do not exceed expected length
+    if (s_wmap_img.written + row_len > s_wmap_img.total_needed) {
+        row_len = s_wmap_img.total_needed - s_wmap_img.written;
+    }
+    size_t off = 0;
+    while (off < row_len) {
+        size_t space = FLASH_PAGE_SIZE - s_wmap_img.page_filled;
+        size_t n = (row_len - off < space) ? (row_len - off) : space;
+        memcpy(s_wmap_img.page_buf + s_wmap_img.page_filled, row_packed + off, n);
+        s_wmap_img.page_filled += n;
+        off += n;
+        if (s_wmap_img.page_filled == FLASH_PAGE_SIZE) {
+            uint32_t ints = save_and_disable_interrupts();
+            // Sector erase was done upfront across region
+            flash_range_program(s_wmap_img.write_offset, s_wmap_img.page_buf, FLASH_PAGE_SIZE);
+            restore_interrupts(ints);
+            s_wmap_img.write_offset += FLASH_PAGE_SIZE;
+            s_wmap_img.written += FLASH_PAGE_SIZE;
+            s_wmap_img.page_filled = 0;
+        }
+    }
+    return true;
+}
+
+bool weathermap_flash_end_image(void) {
+    if (!s_wmap_img.active) return false;
+    if (s_wmap_img.page_filled > 0) {
+        // Pad remaining page with 0xFF and program
+        memset(s_wmap_img.page_buf + s_wmap_img.page_filled, 0xFF, FLASH_PAGE_SIZE - s_wmap_img.page_filled);
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_program(s_wmap_img.write_offset, s_wmap_img.page_buf, FLASH_PAGE_SIZE);
+        restore_interrupts(ints);
+        s_wmap_img.write_offset += FLASH_PAGE_SIZE;
+        s_wmap_img.written += s_wmap_img.page_filled;
+        s_wmap_img.page_filled = 0;
+    }
+    s_wmap_img.active = false;
+    return (s_wmap_img.written >= s_wmap_img.total_needed);
+}
+
+#ifdef USE_CASE_WEATHERMAP
+// --- Streaming staging writer into slot1 (PNG) ---
+typedef struct {
+    bool active;
+    uint32_t write_offset;               // absolute flash offset for next program
+    uint32_t total_bytes;                // exact bytes of payload (not rounded to page)
+    uint32_t last_erased_sector;         // last sector base we erased
+    uint8_t  page_buf[FLASH_PAGE_SIZE];  // staging for partial page
+    size_t   page_filled;                // bytes filled in page_buf
+} wmap_stage_t;
+
+static wmap_stage_t s_wmap_stage = {0};
+
+static inline void ensure_sector_erased(uint32_t abs_offset) {
+    uint32_t sector_base = abs_offset & ~(FLASH_SECTOR_SIZE - 1);
+    if (s_wmap_stage.last_erased_sector != sector_base) {
+        flash_range_erase(sector_base, FLASH_SECTOR_SIZE);
+        s_wmap_stage.last_erased_sector = sector_base;
+    }
+}
+
+bool wmap_staging_begin(void) {
+    
+    s_wmap_stage.active = true;
+    s_wmap_stage.write_offset = FIRMWARE_SLOT1_FLASH_OFFSET;
+    s_wmap_stage.total_bytes = 0;
+    s_wmap_stage.last_erased_sector = 0xFFFFFFFFu;
+    s_wmap_stage.page_filled = 0;
+    return true;
+}
+
+bool wmap_staging_append(const uint8_t* data, size_t len) {
+    if (!s_wmap_stage.active || !data || len == 0) return true; // treat as no-op
+    while (len > 0) {
+        size_t space = FLASH_PAGE_SIZE - s_wmap_stage.page_filled;
+        size_t n = (len < space) ? len : space;
+        memcpy(s_wmap_stage.page_buf + s_wmap_stage.page_filled, data, n);
+        s_wmap_stage.page_filled += n;
+        data += n;
+        len -= n;
+        if (s_wmap_stage.page_filled == FLASH_PAGE_SIZE) {
+            uint32_t ints = save_and_disable_interrupts();
+            ensure_sector_erased(s_wmap_stage.write_offset);
+            flash_range_program(s_wmap_stage.write_offset, s_wmap_stage.page_buf, FLASH_PAGE_SIZE);
+            restore_interrupts(ints);
+            s_wmap_stage.write_offset += FLASH_PAGE_SIZE;
+            s_wmap_stage.total_bytes += FLASH_PAGE_SIZE;
+            s_wmap_stage.page_filled = 0;
+        }
+    }
+    return true;
+}
+
+bool wmap_staging_end(uint32_t* total_bytes) {
+    if (!s_wmap_stage.active) return false;
+    if (s_wmap_stage.page_filled > 0) {
+        // pad remainder with 0xFF (erased state) before programming
+        memset(s_wmap_stage.page_buf + s_wmap_stage.page_filled, 0xFF, FLASH_PAGE_SIZE - s_wmap_stage.page_filled);
+        uint32_t ints = save_and_disable_interrupts();
+        ensure_sector_erased(s_wmap_stage.write_offset);
+        flash_range_program(s_wmap_stage.write_offset, s_wmap_stage.page_buf, FLASH_PAGE_SIZE);
+        restore_interrupts(ints);
+        s_wmap_stage.write_offset += FLASH_PAGE_SIZE;
+        s_wmap_stage.total_bytes += s_wmap_stage.page_filled; // only count actual data
+        s_wmap_stage.page_filled = 0;
+    }
+    if (total_bytes) *total_bytes = s_wmap_stage.total_bytes;
+    
+    s_wmap_stage.active = false;
+    return true;
+}
+
+void wmap_staging_abort(void) {
+    s_wmap_stage.active = false;
+    s_wmap_stage.page_filled = 0;
+}
+
+const uint8_t* wmap_staging_ptr(void) {
+    return FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
+}
+
+uint32_t wmap_staging_size(void) {
+    return s_wmap_stage.total_bytes;
+}
+#endif // USE_CASE_WEATHERMAP
+
 const char* get_active_firmware_slot_info(void) {
     // Read current VTOR (Vector Table Offset Register) address
     uintptr_t vtor = *((volatile uint32_t*)(PPB_BASE + M0PLUS_VTOR_OFFSET));

@@ -48,6 +48,7 @@ typedef struct {
     bool fallback_mode; // true when response has no Content-Length (connection-close delimits body)
     bool no_store_body; // if true, do not allocate body; only count bytes
     bool use_tls;       // opt-in TLS for this session
+    bool stream_mode;   // if true, invoke streaming callbacks instead of accumulating body
     
     // Header processing
     char header_buffer[HTTP_HEADER_MAX];
@@ -70,6 +71,12 @@ typedef struct {
     // Callback for completion
     void (*completion_callback)(const char* body, size_t length, bool success, void* arg);
     void* callback_arg;
+
+    // Streaming callbacks (enabled when stream_mode==true)
+    void (*stream_on_header)(const char* header, size_t header_len, int status_code, int content_length, void* arg);
+    void (*stream_on_data)(const uint8_t* data, size_t len, void* arg);
+    void (*stream_on_complete)(bool success, void* arg);
+    void* stream_arg;
     
     // Error tracking
     err_t last_error;
@@ -107,6 +114,14 @@ http_result_t http_request_async_count_only(const ip_addr_t* server_ip, uint16_t
                                 const char* request_data,
                                 void (*callback)(const char* body, size_t length, bool success, void* arg),
                                 void* callback_arg);
+
+// Streaming request: does not store body; calls header/data/complete callbacks as data arrives.
+http_result_t http_request_async_stream(const ip_addr_t* server_ip, uint16_t port,
+                                const char* request_data,
+                                void (*on_header)(const char* header, size_t header_len, int status_code, int content_length, void* arg),
+                                void (*on_data)(const uint8_t* data, size_t len, void* arg),
+                                void (*on_complete)(bool success, void* arg),
+                                void* cb_arg);
 
 // Session management
 bool http_session_is_active(void);
