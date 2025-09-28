@@ -62,3 +62,5 @@ cd firmware/c
 - **Datenübertragung**: 334.808 Bytes erfolgreich empfangen
 - **Cipher-Suite**: `TLS_AES_256_GCM_SHA384`
 - **Speichereffizienz**: Count-only-Modus für große Übertragungen
+
+{% include contact_cta_de.md %}

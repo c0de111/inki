@@ -165,7 +165,4 @@ Suitable for room booking, home automation monitoring, weather displays, and dat
 }
 </style>
 
-<p align="center">
-<strong>Interested in a kit?</strong><br>
-<strong>Contact:</strong> <a href="mailto:c0de@posteo.de">c0de@posteo.de</a>
-</p>
+{% include contact_cta_en.md %}

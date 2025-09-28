@@ -45,3 +45,5 @@ Die Gerätekonfiguration umfasst:
 cd firmware/c
 ./build.sh --seatsurfing
 ```
+
+{% include contact_cta_de.md %}

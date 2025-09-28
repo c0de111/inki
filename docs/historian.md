@@ -87,7 +87,4 @@ Detailed sensor configuration showing data point IDs and labels for temperature 
 - **Battery Life**: Years of operation depending on update frequency
 - **Network**: Automatic WiFi connection and data synchronization
 
-<p align="center">
-<strong>Questions? Ideas? Interested in a kit?</strong><br>
-<strong>Contact:</strong> <a href="mailto:c0de@posteo.de">c0de@posteo.de</a>
-</p>
+{% include contact_cta_en.md %}
