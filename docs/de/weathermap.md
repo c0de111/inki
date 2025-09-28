@@ -11,6 +11,20 @@ title: Weathermap - inki
 
 Der Weathermap-Anwendungsfall verbindet inki mit deutschen Behörden-Kartendiensten, um Echtzeit-Wetter-Overlays auf geografischen Basiskarten anzuzeigen, optimiert für ePaper-Displays.
 
+<p align="center">
+  <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap-Beispiel auf dem 4,2 Zoll Display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+</p>
+<p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
+Layout-Vorschau der Weathermap für das 4,2" Panel.
+</p>
+
+<p align="center">
+  <img src="{{ '/assets/images/weathermap_7_5.JPG' | relative_url }}" alt="Weathermap-Beispiel auf dem 7,5 Zoll Display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+</p>
+<p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
+Layout-Vorschau der Weathermap für das 7,5" Panel.
+</p>
+
 ## Funktionen
 
 - **Echtzeit-Wetterkarten** von offiziellen Quellen

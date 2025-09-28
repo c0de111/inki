@@ -43,7 +43,8 @@ Geeignet für Raumbuchung, Home-Automation-Überwachung, Wetteranzeigen und Date
     <small>Live-Sensordaten und Gerätestatus-Überwachung</small>
   </a>
 
-  <a href="{{ '/de/weathermap' | relative_url }}" class="use-case-tile">
+  <a href="{{ '/de/weathermap' | relative_url }}" class="use-case-tile weathermap-wip">
+    <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap Vorschau" class="tile-image">
     <h3>Weathermap</h3>
     <p>Echtzeit-Wetterkarten</p>
     <small>HTTPS WMS Kachel-Abruf mit TLS-Unterstützung</small>
