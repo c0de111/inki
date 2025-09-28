@@ -2,6 +2,8 @@ title: inki
 description: Wireless information displays for modern spaces
 theme: jekyll-theme-minimal
 show_downloads: false
+url: "https://c0de111.github.io"
+baseurl: "/inki" # overridden to "" by docs/_plugins/dev_baseurl.rb during local `jekyll serve`
 logo: /assets/images/inki_octopus.png
 github:
   is_project_page: true
@@ -28,4 +30,3 @@ plugins:
   - jekyll-sitemap
   - jekyll-feed
   - jekyll-seo-tag
-

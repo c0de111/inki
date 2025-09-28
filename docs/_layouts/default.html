@@ -31,11 +31,11 @@
         <div class="language-selector">
           {% assign current_url = page.url %}
           {% if current_url contains '/de/' %}
-            <a href="{{ current_url | replace: '/de/', '/' }}" class="lang-link">🇺🇸 English</a> |
+            <a href="{{ current_url | remove_first: '/de' | relative_url }}" class="lang-link">🇺🇸 English</a> |
             <span class="lang-current">🇩🇪 Deutsch</span>
           {% else %}
             <span class="lang-current">🇺🇸 English</span> |
-            <a href="/de{{ current_url }}" class="lang-link">🇩🇪 Deutsch</a>
+            <a href="{{ '/de' | append: current_url | relative_url }}" class="lang-link">🇩🇪 Deutsch</a>
           {% endif %}
         </div>
 
