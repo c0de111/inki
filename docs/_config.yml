@@ -7,3 +7,25 @@ github:
   is_project_page: true
   repository_url: https://github.com/c0de111/inki
 
+# Language configuration
+lang: en-US
+languages: ["en", "de"]
+
+# Multilingual descriptions
+description_en: "Wireless information displays for modern spaces"
+description_de: "Drahtlose Informationsanzeigen für moderne Räume"
+
+# Default collections and paths
+collections:
+  posts:
+    output: true
+
+# Set permalink structure
+permalink: pretty
+
+# Enable plugins for SEO
+plugins:
+  - jekyll-sitemap
+  - jekyll-feed
+  - jekyll-seo-tag
+

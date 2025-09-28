@@ -5,19 +5,19 @@ title: inki
 
 **Set it up once, and it runs for years.** inki is the wireless epaper display that shows live information exactly where you need it. No cables, no maintenance — just insert batteries and configure via your browser.
 
-**One device, multiple applications** — the same hardware runs them all. Start with room booking, switch to weather displays, or try home automation monitoring. Available in compact 4.2" and large 7.5" sizes to fit your space.
+**One device, multiple applications** — the same hardware runs them all. Available in compact 4.2" and large 7.5" sizes with 3D printable enclosures to fit your space.
 
-Perfect for room booking, home automation monitoring, weather displays, and data visualization.
+Suitable for room booking, home automation monitoring, weather displays, and data visualization.
 
 <p align="center">
-  <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="inki room booking display" width="300" style="border-radius: 8px; margin: 20px 0;">
+  <img src="/assets/images/esign_7_5_front.JPG" alt="inki 7.5 inch display" width="300" style="border-radius: 8px; margin: 20px 0;">
 </p>
 **Key Benefits:**
 - **Years of battery life** — up to 10,000 refresh cycles on standard AA batteries
 - **Browser setup** — configure via Wi-Fi hotspot, no programming required
 - **epaper display** — content stays visible even when powered off
-- **Multiple applications** — room booking, home automation, weather mapping, data visualization
 - **Wireless updates** — firmware and content updates over Wi-Fi
+- **Easy mounting** — dovetail mount for quick installation and removal
 
 ## Applications
 
@@ -43,19 +43,52 @@ Perfect for room booking, home automation monitoring, weather displays, and data
     <small>Live sensor data and device status monitoring</small>
   </a>
 
-  <a href="/weathermap" class="use-case-tile">
+  <a href="/weathermap" class="use-case-tile weathermap-wip">
     <h3>Weathermap</h3>
     <p>Real-time weather mapping</p>
-    <small>HTTPS WMS tile retrieval with TLS support</small>
+    <small>HTTPS WMS tile retrieval with geodata overlay</small>
   </a>
 
   <a href="https://github.com/c0de111/inki#build-your-own-inki" class="use-case-tile">
     <img src="/assets/images/assembly.gif" alt="inki assembly animation" class="tile-image">
-    <h3>DIY</h3>
-    <p>Build your own inki</p>
-    <small>Open source hardware and software, PCB files included</small>
+    <h3>Build your own inki</h3>
+    <p>Open source hardware and software</p>
+    <small>Complete package: PCB, firmware, and 3D printable enclosure</small>
   </a>
 </div>
+
+## Engineering Facts
+
+| Specification | Value |
+|---------------|-------|
+| **Supply Current** | ~80mA (active), µA (sleep) |
+| **Battery Life** | Up to 10,000 refresh cycles |
+| **Display** | 4.2" or 7.5" ePaper (4 gray scales) |
+| **Connectivity** | Wi-Fi 802.11b/g/n (2.4GHz), TLS 1.2/1.3 |
+| **MCU** | Raspberry Pi Pico W (RP2040) |
+| **RTC** | DS3231 with battery backup |
+| **Web Interface** | Wi-Fi setup and OTA updates |
+| **Power** | 3x AA or 3x AAA batteries |
+
+## Quick Setup (for kit builders)
+
+**Got your inki hardware ready?** Here's how to get started:
+
+1. **Download firmware**
+   - Get the latest UF2 from [GitHub Releases](https://github.com/c0de111/inki/releases/latest)
+   - Choose: `inki_historian.uf2`, `inki_seatsurfing.uf2`, or `inki_homematic.uf2`
+
+2. **Flash to Pico W**
+   - Hold BOOTSEL button while connecting USB
+   - Copy UF2 file to RPI-RP2 drive
+   - Device restarts automatically
+
+3. **Configure via browser**
+   - Connect to WiFi "inki-setup" (password: `12345678`)
+   - Open http://192.168.4.1 in browser
+   - Set your WiFi, ePaper model, and application settings
+
+**Note:** Works as web preview with just Pico W. Add DS3231 + ePaper for full automation.
 
 <style>
 .use-cases-grid {
@@ -104,6 +137,31 @@ Perfect for room booking, home automation monitoring, weather displays, and data
   margin-bottom: 10px;
   float: right;
   opacity: 0.7;
+}
+
+.weathermap-wip {
+  position: relative;
+  overflow: hidden;
+}
+
+.weathermap-wip::before {
+  content: "WORK IN PROGRESS";
+  position: absolute;
+  top: 0;
+  left: -50px;
+  right: -50px;
+  bottom: 0;
+  background: rgba(255, 0, 0, 0.1);
+  color: #cc0000;
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 2px;
+  transform: rotate(-35deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
 }
 </style>
 

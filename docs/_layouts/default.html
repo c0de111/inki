@@ -21,26 +21,60 @@
           <img src="{{site.logo | relative_url}}" alt="Logo" />
         {% endif %}
 
-        <p>{{ site.description | default: site.github.project_tagline }}</p>
+        {% if page.url contains '/de/' %}
+          <p>{{ site.description_de | default: "Drahtlose Informationsanzeigen für moderne Räume" }}</p>
+        {% else %}
+          <p>{{ site.description | default: site.github.project_tagline }}</p>
+        {% endif %}
+
+        <!-- Language Selector -->
+        <div class="language-selector">
+          {% assign current_url = page.url %}
+          {% if current_url contains '/de/' %}
+            <a href="{{ current_url | replace: '/de/', '/' }}" class="lang-link">🇺🇸 English</a> |
+            <span class="lang-current">🇩🇪 Deutsch</span>
+          {% else %}
+            <span class="lang-current">🇺🇸 English</span> |
+            <a href="/de{{ current_url }}" class="lang-link">🇩🇪 Deutsch</a>
+          {% endif %}
+        </div>
 
         {% if site.github.is_project_page %}
-        <p class="view"><a href="{{ site.github.repository_url }}">View the Project on GitHub <small>{{ site.github.repository_nwo }}</small></a></p>
+          {% if page.url contains '/de/' %}
+            <p class="view"><a href="{{ site.github.repository_url }}">Projekt auf GitHub ansehen <small>{{ site.github.repository_nwo }}</small></a></p>
+          {% else %}
+            <p class="view"><a href="{{ site.github.repository_url }}">View the Project on GitHub <small>{{ site.github.repository_nwo }}</small></a></p>
+          {% endif %}
         {% endif %}
 
         {% if site.github.is_user_page %}
         <p class="view"><a href="{{ site.github.owner_url }}">View My GitHub Profile</a></p>
         {% endif %}
 
-        {% if page.title contains "Seatsurfing" %}
-        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
-        {% elsif page.title contains "Historian" %}
-        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
-        {% elsif page.title contains "Homematic" %}
-        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_homematic.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
-        {% elsif page.title contains "Weathermap" %}
-        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_weathermap.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+        {% if page.url contains '/de/' %}
+          {% if page.title contains "Seatsurfing" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2" class="download-btn">uf2-Datei herunterladen - für direktes USB-Flashen</a></p>
+          {% elsif page.title contains "Historian" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2" class="download-btn">uf2-Datei herunterladen - für direktes USB-Flashen</a></p>
+          {% elsif page.title contains "Homematic" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_homematic.uf2" class="download-btn">uf2-Datei herunterladen - für direktes USB-Flashen</a></p>
+          {% elsif page.title contains "Weathermap" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_weathermap.uf2" class="download-btn">uf2-Datei herunterladen - für direktes USB-Flashen</a></p>
+          {% else %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest" class="download-btn">uf2-Datei herunterladen - für direktes USB-Flashen</a></p>
+          {% endif %}
         {% else %}
-        <p class="view"><a href="https://github.com/c0de111/inki/releases/latest" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% if page.title contains "Seatsurfing" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% elsif page.title contains "Historian" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% elsif page.title contains "Homematic" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_homematic.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% elsif page.title contains "Weathermap" %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest/download/inki_weathermap.uf2" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% else %}
+          <p class="view"><a href="https://github.com/c0de111/inki/releases/latest" class="download-btn">Download uf2-file - for direct USB flashing</a></p>
+          {% endif %}
         {% endif %}
 
       </header>
@@ -51,9 +85,17 @@
       </section>
       <footer>
         {% if site.github.is_project_page %}
-        <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
+          {% if page.url contains '/de/' %}
+            <p>Dieses Projekt wird gepflegt von <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
+          {% else %}
+            <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
+          {% endif %}
         {% endif %}
-        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+        {% if page.url contains '/de/' %}
+          <p><small>Gehostet auf GitHub Pages &mdash; Theme von <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+        {% else %}
+          <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+        {% endif %}
       </footer>
     </div>
     <script src="{{ "/assets/js/scale.fix.js" | relative_url }}"></script>

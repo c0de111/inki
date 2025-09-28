@@ -6,15 +6,24 @@
 #include "lwip/altcp_tls.h"
 #include "debug.h"
 #include "mbedtls/debug.h"
+#include <stdlib.h>
+#include <string.h>
 
-// HARICA certificate bundle (intermediate + root CA) - required to verify *.geodatenzentrum.de
-// If the header is present, we include the real DER bytes.
-// Otherwise, we fall back to an empty trust store (verification disabled) for bring-up.
-#if __has_include("certs/harica_bundle.h")
-#include "certs/harica_bundle.h"
+// Trust store selection
+// Prefer a consolidated PEM trust bundle if available (can include multiple CAs such as HARICA, ISRG Root X1, etc.).
+// Fallback to legacy HARICA bundle if present. Otherwise, validation is disabled.
+
+#if __has_include("certs/trust_store_pem.h")
+#include "certs/trust_store_pem.h"  // defines: trust_store_pem, trust_store_pem_len (bytes)
+#define HAVE_TRUST_PEM 1
+#elif __has_include("certs/harica_bundle.h")
+#include "certs/harica_bundle.h"     // defines: harica_bundle_der, harica_bundle_der_len (bytes)
+#define HAVE_HARICA_DER 1
 #else
-static const uint8_t harica_bundle_der[] = { };
-static const size_t harica_bundle_der_len = 0;
+#define HAVE_TRUST_PEM 0
+#define HAVE_HARICA_DER 0
+static const uint8_t empty_ca[] = { };
+static const size_t empty_ca_len = 0;
 #endif
 
 static struct altcp_tls_config* s_tls_cfg = NULL;
@@ -27,11 +36,13 @@ static void tls_debug_callback(void *ctx, int level, const char *file, int line,
 void tls_trust_store_init(void) {
     if (s_tls_cfg) return;
 
-    if (harica_bundle_der_len == 0) {
-        debug_log_with_color(COLOR_YELLOW, "[TLS] No HARICA certificate bundle embedded - using no certificate validation\n");
-    } else {
-        debug_log("[TLS] HARICA certificate bundle available (%u bytes)\n", (unsigned)harica_bundle_der_len);
-    }
+    #if HAVE_TRUST_PEM
+        debug_log("[TLS] Trust store (PEM) available (%u bytes)\n", (unsigned)trust_store_pem_len);
+    #elif HAVE_HARICA_DER
+        debug_log("[TLS] HARICA certificate bundle (DER) available (%u bytes)\n", (unsigned)harica_bundle_der_len);
+    #else
+        debug_log_with_color(COLOR_YELLOW, "[TLS] No certificate bundle embedded - certificate validation disabled\n");
+    #endif
     
     #ifdef HIGH_VERBOSE_DEBUG
     debug_log("[TLS] TLS trust store initialized (config creation deferred until after Wi-Fi init)\n");
@@ -47,15 +58,40 @@ void tls_create_config_after_wifi(void) {
     #endif
     
     // Use certificate validation if available
-    if (harica_bundle_der_len > 0) {
-        s_tls_cfg = altcp_tls_create_config_client(harica_bundle_der, harica_bundle_der_len);
-        #ifdef HIGH_VERBOSE_DEBUG
-        debug_log("[TLS] Using HARICA certificate bundle for certificate validation\n");
-        #endif
-    } else {
-        s_tls_cfg = altcp_tls_create_config_client(NULL, 0);
-        debug_log_with_color(COLOR_YELLOW, "[TLS] No certificate validation (fallback for testing)\n");
-    }
+    #if HAVE_TRUST_PEM
+        // Ensure PEM is NUL-terminated for parsers that expect it
+        const u8_t* ca_ptr = (const u8_t*)trust_store_pem;
+        size_t ca_len = (size_t)trust_store_pem_len;
+        u8_t* tmp_buf = NULL;
+        if (ca_len == 0 || trust_store_pem[ca_len - 1] != '\0') {
+            tmp_buf = (u8_t*)malloc(ca_len + 1);
+            if (tmp_buf) {
+                memcpy(tmp_buf, trust_store_pem, ca_len);
+                tmp_buf[ca_len] = '\0';
+                ca_ptr = tmp_buf;
+                ca_len = ca_len + 1;
+            }
+        }
+        s_tls_cfg = altcp_tls_create_config_client(ca_ptr, ca_len);
+        if (tmp_buf) { free(tmp_buf); tmp_buf = NULL; }
+        if (!s_tls_cfg) {
+            debug_log_with_color(COLOR_YELLOW, "[TLS] PEM trust store parse failed; attempting fallback CA bundle (if present)\n");
+        }
+    #endif
+    #if !HAVE_TRUST_PEM || (HAVE_TRUST_PEM && 0)
+        /* nothing */
+    #endif
+    #if HAVE_HARICA_DER
+        if (!s_tls_cfg) {
+            s_tls_cfg = altcp_tls_create_config_client(harica_bundle_der, harica_bundle_der_len);
+        }
+    #endif
+    #if !HAVE_TRUST_PEM && !HAVE_HARICA_DER
+        if (!s_tls_cfg) {
+            s_tls_cfg = altcp_tls_create_config_client(NULL, 0);
+            debug_log_with_color(COLOR_YELLOW, "[TLS] No certificate validation (fallback for testing)\n");
+        }
+    #endif
     
     if (!s_tls_cfg) {
         debug_log_with_color(COLOR_RED, "[TLS] Failed to create ALTCP TLS client config\n");

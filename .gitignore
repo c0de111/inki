@@ -90,3 +90,14 @@ AGENTS.md
 firmware/c/uf2conv.py
 firmware/c/uf2families.json
 
+# Docs build output (do not commit generated site)
+docs/_site/
+
+# Firmware build output
+firmware/c/build/
+
+# TLS cert sources (public CA material; not required in repo)
+firmware/c/certs/*.pem
+firmware/c/certs/*.p7c
+firmware/c/certs/trust_store.pem
+firmware/c/certs/trust_store_pem.h
