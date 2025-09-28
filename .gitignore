@@ -92,6 +92,7 @@ firmware/c/uf2families.json
 
 # Docs build output (do not commit generated site)
 docs/_site/
+docs/vendor/
 
 # Firmware build output
 firmware/c/build/
