@@ -3,7 +3,7 @@ layout: default
 title: Seatsurfing - inki
 ---
 
-[← Zurück zur Startseite](/de/)
+[← Zurück zur Startseite]({{ '/de/' | relative_url }})
 
 **Raumbuchung und Desk-Sharing-Display** - inki-seatsurfing
 

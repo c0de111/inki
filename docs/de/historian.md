@@ -3,7 +3,7 @@ layout: default
 title: Historian - inki
 ---
 
-[← Zurück zur Startseite](/de/)
+[← Zurück zur Startseite]({{ '/de/' | relative_url }})
 
 **Zeitreihen-Datenvisualisierung** - inki-historian
 

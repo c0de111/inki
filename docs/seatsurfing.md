@@ -3,7 +3,7 @@ layout: default
 title: Seatsurfing - inki
 ---
 
-[← Back to homepage](/)
+[← Back to homepage]({{ '/' | relative_url }})
 
 **Room booking and desk sharing display** - inki-seatsurfing
 

@@ -3,7 +3,7 @@ layout: default
 title: Historian - inki
 ---
 
-[← Back to homepage](/)
+[← Back to homepage]({{ '/' | relative_url }})
 
 **Time-series data visualization** - inki-historian
 
