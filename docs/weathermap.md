@@ -3,7 +3,7 @@ layout: default
 title: Weathermap - inki
 ---
 
-[← Back to homepage](/)
+[← Back to homepage]({{ '/' | relative_url }})
 
 <div class="weathermap-wip-banner">
   **Real-time weather mapping** - inki-weathermap

@@ -46,7 +46,7 @@ Suitable for room booking, home automation monitoring, weather displays, and dat
   <a href="{{ '/weathermap' | relative_url }}" class="use-case-tile weathermap-wip">
     <h3>Weathermap</h3>
     <p>Real-time weather mapping</p>
-    <small>HTTPS WMS tile retrieval with geodata overlay</small>
+    <small>Free basemap.de WMS service from BKG (CC BY 4.0)</small>
   </a>
 
   <a href="https://github.com/c0de111/inki#build-your-own-inki" class="use-case-tile">

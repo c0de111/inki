@@ -3,7 +3,7 @@ layout: default
 title: Weathermap - inki
 ---
 
-[← Zurück zur Startseite](/de/)
+[← Zurück zur Startseite]({{ '/de/' | relative_url }})
 
 **Echtzeit-Wetterkarten** - inki-weathermap
 

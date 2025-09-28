@@ -3,7 +3,7 @@ layout: default
 title: Homematic - inki
 ---
 
-[← Back to homepage](/)
+[← Back to homepage]({{ '/' | relative_url }})
 
 **Home automation display** - inki-homematic
 
