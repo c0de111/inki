@@ -44,6 +44,7 @@ Suitable for room booking, home automation monitoring, weather displays, and dat
   </a>
 
   <a href="{{ '/weathermap' | relative_url }}" class="use-case-tile weathermap-wip">
+    <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap preview" class="tile-image">
     <h3>Weathermap</h3>
     <p>Real-time weather mapping</p>
     <small>Free basemap.de WMS service from BKG (CC BY 4.0)</small>

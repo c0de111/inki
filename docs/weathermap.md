@@ -13,7 +13,21 @@ title: Weathermap - inki
 
 The Weathermap use case connects inki to German government mapping services to display real-time weather map overlays on geographic base maps, optimized for ePaper displays.
 
-**Data Source**: The maps are provided by BKG (Bundesamt für Kartographie und Geodäsie - German Federal Agency for Cartography and Geodesy) through their free basemap.de WMS service. This official government service provides high-quality geographic base maps under the Creative Commons Attribution 4.0 license (CC BY 4.0), making it freely available for all users.
+<p align="center">
+  <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap sample on 4.2 inch display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+</p>
+<p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
+Preview of the Weathermap layout optimized for the 4.2" panel.
+</p>
+
+<p align="center">
+  <img src="{{ '/assets/images/weathermap_7_5.JPG' | relative_url }}" alt="Weathermap sample on 7.5 inch display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+</p>
+<p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
+Preview of the Weathermap layout ready for the 7.5" panel.
+</p>
+
+**Data Source**: The maps are provided by BKG (Bundesamt für Kartographie und Geodäsie - German Federal Agency for Cartography and Geodesy) through their free basemap.de WMS service. This official government service provides high-quality geographic base maps under the Creative Commons Attribution 4.0 license (CC BY 4.0).
 
 ## Features (work in progress)
 
