@@ -94,7 +94,4 @@ The system uses standard Homematic XML-RPC calls like:
 - **Network**: Automatic WiFi connection and CCU synchronization
 - **Service Monitoring**: Automatic retrieval and display of CCU service messages
 
-<p align="center">
-<strong>Questions? Ideas? Interested in a kit?</strong><br>
-<strong>Contact:</strong> <a href="mailto:c0de@posteo.de">c0de@posteo.de</a>
-</p>
+{% include contact_cta_en.md %}

@@ -54,3 +54,5 @@ Setup umfasst:
 cd firmware/c
 ./build.sh --historian
 ```
+
+{% include contact_cta_de.md %}

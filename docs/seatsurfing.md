@@ -38,3 +38,5 @@ The device configuration includes:
 - Location IDs for room mapping
 - Refresh intervals
 - Display layout preferences
+
+{% include contact_cta_en.md %}

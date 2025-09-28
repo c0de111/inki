@@ -55,3 +55,5 @@ Geräte-Setup umfasst:
 cd firmware/c
 ./build.sh --homematic
 ```
+
+{% include contact_cta_de.md %}

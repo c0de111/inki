@@ -120,7 +120,4 @@ Geeignet für Raumbuchung, Home-Automation-Überwachung, Wetteranzeigen und Date
 }
 </style>
 
-<p align="center">
-<strong>Interesse an einem Kit?</strong><br>
-<strong>Kontakt:</strong> <a href="mailto:c0de@posteo.de">c0de@posteo.de</a>
-</p>
+{% include contact_cta_de.md %}
