@@ -804,6 +804,27 @@ void setup_and_read_pushbuttons() {
     // Reset pushbutton state
     pushbutton = 0;
 
+    // --- Read GP0/GP1/GP2 strap pull-ups (10k to 3V3 if populated) ---
+    {
+        const uint strap_pins[4] = {0, 1, 2, 3};   // GP0..GP3
+        uint8_t strap_bits = 0;
+
+        for (int i = 0; i < 4; i++) {
+            uint pin = strap_pins[i];
+            gpio_init(pin);
+            gpio_set_dir(pin, GPIO_IN);
+            gpio_pull_down(pin);           // bias low; external 10k to 3V3 will override
+            sleep_ms(1);                   // settle briefly
+            int val = gpio_get(pin);       // 1 if pull-up populated, 0 if open
+            strap_bits |= (val & 1) << i;  // bit0=GP0, bit1=GP1, bit2=GP2
+            gpio_disable_pulls(pin);       // remove bias to avoid any static current
+        }
+
+        debug_log("Strap read GP3..GP0 = %d%d%d%d (mask=0x%02X)\n",
+                  (strap_bits >> 3) & 1, (strap_bits >> 2) & 1,
+                  (strap_bits >> 1) & 1, strap_bits & 1, strap_bits);
+    }
+
     // Setup and read pushbutton 1
     if (device_config_flash.data.num_pushbuttons >= 1 && device_config_flash.data.pushbutton1_pin != 0xFF) {
         gpio_init(device_config_flash.data.pushbutton1_pin);
@@ -1667,12 +1688,12 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         }
 
 #elif defined(USE_CASE_HISTORIAN)
-    // Historian use case - render temperature graph
+   // Historian use case - render temperature graph
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         // Large temperature graph for 7.5" display
         render_temperature_graph(image_buffer, 20, 20, 760, 400);
-        
-        // Additional info below graph  
+
+        // Additional info below graph
         char info[128];
         snprintf(info, sizeof(info), "%d data points", historian_data.count);
         Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
@@ -1682,9 +1703,9 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         // Smaller graph for 4.2" display
         render_temperature_graph(image_buffer, 10, 10, 380, 250);
-        
+
         // Info below graph
-        char info[64];  
+        char info[64];
         snprintf(info, sizeof(info), "%d points", historian_data.count);
         Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
     }
@@ -2918,9 +2939,9 @@ int main(void)
         set_data_callback(homematic_data_received, NULL);
         wifi_result = wifi_server_communication(battery_voltage);
 #elif defined(USE_CASE_WEATHERMAP)
-        // WEATHERMAP: skip generic HTTP flow; run one-shot TLS fetch if needed
-        extern void weathermap_boot_fetch_if_needed(void);
-        weathermap_boot_fetch_if_needed();
+        // GEODATA: run one-shot TLS fetch (radar preferred, basemap fallback)
+        extern void geodata_fetch(void);
+        geodata_fetch();
         wifi_result = WIFI_SUCCESS;
 #endif
     }

@@ -18,21 +18,32 @@
 
 #ifdef USE_CASE_WEATHERMAP
 
-// Host and IP for sgx.geodatenzentrum.de (DNS disabled, using known IP)
-#define WEATHERMAP_HOST   "sgx.geodatenzentrum.de"
-#define WEATHERMAP_IP0    141
-#define WEATHERMAP_IP1    74
-#define WEATHERMAP_IP2    64
-#define WEATHERMAP_IP3    40
-#define WEATHERMAP_PORT   443
+// Provider: BKG basemap (sgx.geodatenzentrum.de) — static cartographic base
+#define BKG_HOST   "sgx.geodatenzentrum.de"
+#define BKG_IP0    141
+#define BKG_IP1    74
+#define BKG_IP2    64
+#define BKG_IP3    40
+#define BKG_PORT   443
 
-// Dynamic WMS path centered on Dibbesdorf (Braunschweig) with 4:3 window
+// Provider: DWD radar (maps.dwd.de) — dynamic weather layers (hourly+)
+// Note: We currently avoid DNS; if you know the IP, set it here.
+#define DWD_HOST   "maps.dwd.de"
+#ifndef DWD_IP0
+#define DWD_IP0    0
+#define DWD_IP1    0
+#define DWD_IP2    0
+#define DWD_IP3    0
+#endif
+#define DWD_PORT   443
+
+// Dynamic WMS path with 4:3 window
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-#define WMAP_CENTER_LAT   (52.302373)   // New center
-#define WMAP_CENTER_LON   (10.6021966)
-#define WMAP_HALF_WIDTH_M   (20000.0)   // Base: 40 km total horizontal span (adjust height by aspect)
+#define WMAP_CENTER_LAT   (52.505373)   // Center
+#define WMAP_CENTER_LON   (11.1921966)
+#define WMAP_HALF_WIDTH_M   (40000.0)   // Base: 40 km total horizontal span (adjust height by aspect)
 
 // Resolve target PNG size from configured ePaper type
 static inline void wmap_get_target_size(int* out_w, int* out_h) {
@@ -58,7 +69,8 @@ static void wmap_center_to_bbox(double lat_deg, double lon_deg,
     *ymin = y - half_h_m; *ymax = y + half_h_m;
 }
 
-static int wmap_build_http_get(char* dst, size_t dst_len) {
+// Build WMS GetMap for BKG basemap (PNG8, gray)
+static int bkg_build_http_get(char* dst, size_t dst_len) {
     double xmin, ymin, xmax, ymax;
     int tw, th; wmap_get_target_size(&tw, &th);
     // Adjust vertical half-size to match target aspect
@@ -75,7 +87,30 @@ static int wmap_build_http_get(char* dst, size_t dst_len) {
     if (pn <= 0 || (size_t)pn >= sizeof(path)) return -1;
     int n = snprintf(dst, dst_len,
         "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: inki/weathermap\r\nConnection: close\r\n\r\n",
-        path, WEATHERMAP_HOST);
+        path, BKG_HOST);
+    return (n > 0 && (size_t)n < dst_len) ? n : -1;
+}
+
+// Build WMS GetMap for DWD radar (transparent PNG). Layer name may be adapted later.
+// Common candidates: dwd:RX-Ref (composite reflectivity). We use PNG for alpha support.
+static int dwd_build_http_get(char* dst, size_t dst_len) {
+    double xmin, ymin, xmax, ymax;
+    int tw, th; wmap_get_target_size(&tw, &th);
+    double half_h_m = WMAP_HALF_WIDTH_M * ((double)th / (double)tw);
+    wmap_center_to_bbox(WMAP_CENTER_LAT, WMAP_CENTER_LON,
+                        WMAP_HALF_WIDTH_M, half_h_m,
+                        &xmin, &ymin, &xmax, &ymax);
+    char path[512];
+    // Transparent PNG, WMS 1.1.1, SRS EPSG:3857
+    int pn = snprintf(path, sizeof(path),
+        "/geoserver/dwd/wms?service=WMS&version=1.1.1&request=GetMap&"
+        "layers=dwd:RX-Ref&styles=&format=image/png&transparent=true&"
+        "srs=EPSG:3857&bbox=%.1f,%.1f,%.1f,%.1f&width=%d&height=%d",
+        xmin, ymin, xmax, ymax, tw, th);
+    if (pn <= 0 || (size_t)pn >= sizeof(path)) return -1;
+    int n = snprintf(dst, dst_len,
+        "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: inki/geodata\r\nConnection: close\r\n\r\n",
+        path, DWD_HOST);
     return (n > 0 && (size_t)n < dst_len) ? n : -1;
 }
 
@@ -123,14 +158,14 @@ bool weathermap_fetch_png(uint8_t* out_buf, size_t max_len, size_t* out_len) {
 
     // Build simple HTTP/1.0 GET with Host header; TLS will be enabled by port==443
     char req[512];
-    int n = wmap_build_http_get(req, sizeof(req));
+    int n = bkg_build_http_get(req, sizeof(req));
     if (n <= 0 || (size_t)n >= sizeof(req)) {
         debug_log_with_color(COLOR_RED, "[WEATHERMAP] Request build failed\n");
         return false;
     }
 
     ip_addr_t ip;
-    IP4_ADDR(&ip, WEATHERMAP_IP0, WEATHERMAP_IP1, WEATHERMAP_IP2, WEATHERMAP_IP3);
+    IP4_ADDR(&ip, BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3);
 
     fetch_ctx_t ctx = {
         .buf = out_buf,
@@ -140,7 +175,7 @@ bool weathermap_fetch_png(uint8_t* out_buf, size_t max_len, size_t* out_len) {
         .success = false
     };
 
-    http_result_t r = http_request_async(&ip, WEATHERMAP_PORT, req, fetch_complete_cb, &ctx);
+    http_result_t r = http_request_async(&ip, BKG_PORT, req, fetch_complete_cb, &ctx);
     if (r != HTTP_SUCCESS) {
         debug_log_with_color(COLOR_RED, "[WEATHERMAP] http_request_async failed: %d\n", r);
         return false;
@@ -227,14 +262,11 @@ static void stream_complete_cb(bool success, void* arg) {
     sctx->complete = true;
 }
 
-static bool weathermap_fetch_and_store_inline(size_t* out_len) {
-    // Build request
-    char req[512];
-    int n = wmap_build_http_get(req, sizeof(req));
-    if (n <= 0 || (size_t)n >= sizeof(req)) return false;
-    ip_addr_t ip; IP4_ADDR(&ip, WEATHERMAP_IP0, WEATHERMAP_IP1, WEATHERMAP_IP2, WEATHERMAP_IP3);
+// Generic inline fetch for a prebuilt GET to a specific provider (by IP/port/Host in req)
+static bool geodata_fetch_and_store_inline(const ip_addr_t* ip, uint16_t port,
+                                           const char* req, size_t* out_len) {
     stage_ctx_t sctx = { .complete = false, .success = false, .total = 0, .is_bmp = false };
-    http_result_t r = http_request_async_stream(&ip, WEATHERMAP_PORT, req,
+    http_result_t r = http_request_async_stream(ip, port, req,
                                                 stream_header_cb,
                                                 stream_data_cb,
                                                 stream_complete_cb,
@@ -262,14 +294,14 @@ static void count_complete_cb(const char* body, size_t length, bool success, voi
 bool weathermap_fetch_count(size_t* out_len) {
     if (!out_len) return false;
     char req[512];
-    int n = wmap_build_http_get(req, sizeof(req));
+    int n = bkg_build_http_get(req, sizeof(req));
     if (n <= 0 || (size_t)n >= sizeof(req)) {
         return false;
     }
     ip_addr_t ip;
-    IP4_ADDR(&ip, WEATHERMAP_IP0, WEATHERMAP_IP1, WEATHERMAP_IP2, WEATHERMAP_IP3);
+    IP4_ADDR(&ip, BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3);
     count_ctx_t ctx = { .out_len = 0, .complete = false, .success = false };
-    http_result_t r = http_request_async_count_only(&ip, WEATHERMAP_PORT, req, count_complete_cb, &ctx);
+    http_result_t r = http_request_async_count_only(&ip, BKG_PORT, req, count_complete_cb, &ctx);
     if (r != HTTP_SUCCESS) return false;
     int waits = 0;
     const int max_waits = 500; // 5s should be enough based on curl
@@ -363,13 +395,13 @@ bool weathermap_render_from_flash(void) {
     return ok;
 }
 
-void weathermap_boot_fetch_if_needed(void) {
+void geodata_fetch(void) {
     // Ensure HTTP client/TLS is initialized
     extern bool http_client_init(void);
     http_client_init();
 
-    // Always refetch on boot (overwrite any previous image)
-    debug_log_with_color(COLOR_BOLD_YELLOW, "[WEATHERMAP] Always refetch enabled — fetching on boot.\n");
+    // Always refetch on boot for now (later: schedule basemap vs radar differently)
+    debug_log_with_color(COLOR_BOLD_YELLOW, "[GEODATA] Boot fetch enabled — fetching now.\n");
 
     // Connect Wi‑Fi (STA)
     WifiResult w = wifi_connect();
@@ -382,29 +414,44 @@ void weathermap_boot_fetch_if_needed(void) {
     extern void tls_create_config_after_wifi(void);
     tls_create_config_after_wifi();
 
-    // Build and log request for transparency (static path)
+    // Try DWD radar first if IP is configured; else fall back to BKG basemap
     char req[512];
-    int n = wmap_build_http_get(req, sizeof(req));
-    if (n <= 0 || (size_t)n >= sizeof(req)) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Request build failed\n");
-        cyw43_arch_deinit();
-        return;
+    size_t count = 0;
+    bool ok = false;
+
+    if ((DWD_IP0 | DWD_IP1 | DWD_IP2 | DWD_IP3) != 0) {
+        int n = dwd_build_http_get(req, sizeof(req));
+        if (n > 0 && (size_t)n < sizeof(req)) {
+            ip_addr_t dwd_ip; IP4_ADDR(&dwd_ip, DWD_IP0, DWD_IP1, DWD_IP2, DWD_IP3);
+            debug_log("[GEODATA] HTTPS request (radar) to %s (%d.%d.%d.%d):\n%.*s\n",
+                      DWD_HOST, DWD_IP0, DWD_IP1, DWD_IP2, DWD_IP3, n, req);
+            ok = geodata_fetch_and_store_inline(&dwd_ip, DWD_PORT, req, &count);
+        }
+        if (!ok) {
+            debug_log_with_color(COLOR_YELLOW, "[GEODATA] DWD fetch failed or not configured — falling back to BKG basemap.\n");
+        }
     }
 
-    debug_log("[WEATHERMAP] HTTPS request (port 443) to %s (%d.%d.%d.%d):\n%.*s\n",
-              WEATHERMAP_HOST, WEATHERMAP_IP0, WEATHERMAP_IP1, WEATHERMAP_IP2, WEATHERMAP_IP3, n, req);
-
-    // Fetch PNG via streaming into slot1
-    size_t count = 0;
-    bool ok = weathermap_fetch_and_store_inline(&count);
     if (!ok) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Fetch failed\n");
+        int n2 = bkg_build_http_get(req, sizeof(req));
+        if (n2 <= 0 || (size_t)n2 >= sizeof(req)) {
+            debug_log_with_color(COLOR_RED, "[GEODATA] BKG request build failed\n");
+            cyw43_arch_deinit();
+            return;
+        }
+        ip_addr_t bkg_ip; IP4_ADDR(&bkg_ip, BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3);
+        debug_log("[GEODATA] HTTPS request (basemap) to %s (%d.%d.%d.%d):\n%.*s\n",
+                  BKG_HOST, BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3, n2, req);
+        ok = geodata_fetch_and_store_inline(&bkg_ip, BKG_PORT, req, &count);
+    }
+    if (!ok) {
+        debug_log_with_color(COLOR_RED, "[GEODATA] Fetch failed\n");
         wifi_log_rssi();
         cyw43_arch_deinit();
         return;
     }
 
-    debug_log_with_color(COLOR_GREEN, "[WEATHERMAP] TLS fetch OK, bytes=%u\n", (unsigned)count);
+    debug_log_with_color(COLOR_GREEN, "[GEODATA] TLS fetch OK, bytes=%u\n", (unsigned)count);
     set_weathermap_meta((uint32_t)count);
     wifi_log_rssi();
     cyw43_arch_deinit();
@@ -413,7 +460,7 @@ void weathermap_boot_fetch_if_needed(void) {
     const uint8_t* data = wmap_staging_ptr();
     size_t data_len = wmap_staging_size();
     if (!(data && data_len >= 8 && data[0]==0x89 && data[1]=='P' && data[2]=='N' && data[3]=='G')) {
-        debug_log_with_color(COLOR_YELLOW, "[WMAP] Staged content missing/invalid PNG signature.\n");
+        debug_log_with_color(COLOR_YELLOW, "[GEODATA] Staged content missing/invalid PNG signature.\n");
     }
 }
 #endif // USE_CASE_WEATHERMAP

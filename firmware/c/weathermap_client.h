@@ -16,9 +16,10 @@ bool weathermap_fetch_png(uint8_t* out_buf, size_t max_len, size_t* out_len);
 // Fetch but do not store; only count received bytes
 bool weathermap_fetch_count(size_t* out_len);
 
-// Boot-time helper: if no map marker present, connect Wi‑Fi, perform count-only fetch,
-// log details, and store bytes count marker in flash. Safe to call once at boot.
-void weathermap_boot_fetch_if_needed(void);
+// Boot-time helper: connect Wi‑Fi, fetch geodata via HTTPS and stage PNG into flash.
+// Currently fetches from a configured provider (DWD preferred, BKG fallback).
+// Later this can become conditional (static basemap vs. periodically refreshed radar).
+void geodata_fetch(void);
 
 // Decode a PNG (400x300 expected), convert to 2-bit packed buffer, and write to flash.
 // Prints sample pixels to debug log for verification. Frees temp buffers before return.

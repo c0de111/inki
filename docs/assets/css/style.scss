@@ -30,3 +30,27 @@ header img {
   color: white !important;
   text-decoration: none;
 }
+
+/* Language selector styling */
+.language-selector {
+  text-align: center;
+  margin: 15px 0;
+  font-size: 14px;
+}
+
+.lang-link {
+  color: #0066cc;
+  text-decoration: none;
+  padding: 2px 4px;
+}
+
+.lang-link:hover {
+  color: #0052a3;
+  text-decoration: underline;
+}
+
+.lang-current {
+  font-weight: bold;
+  color: #333;
+  padding: 2px 4px;
+}

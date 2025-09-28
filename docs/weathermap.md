@@ -5,7 +5,9 @@ title: Weathermap - inki
 
 [← Back to homepage](/)
 
-**Real-time weather mapping** - inki-weathermap
+<div class="weathermap-wip-banner">
+  **Real-time weather mapping** - inki-weathermap
+</div>
 
 ## Overview
 
@@ -62,3 +64,35 @@ cd firmware/c
 - **Data Transfer**: 334,808 bytes successfully received
 - **Cipher Suite**: `TLS_AES_256_GCM_SHA384`
 - **Memory Efficiency**: Count-only mode for large transfers
+
+<style>
+.weathermap-wip-banner {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  margin: 20px 0;
+  border: 2px solid #cc0000;
+  border-radius: 8px;
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.weathermap-wip-banner::before {
+  content: "WORK IN PROGRESS";
+  position: absolute;
+  top: 0;
+  left: -50px;
+  right: -50px;
+  bottom: 0;
+  background: rgba(255, 0, 0, 0.1);
+  color: #cc0000;
+  font-weight: bold;
+  font-size: 16px;
+  letter-spacing: 3px;
+  transform: rotate(-35deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+</style>
