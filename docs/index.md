@@ -10,7 +10,7 @@ title: inki
 Suitable for room booking, home automation monitoring, weather displays, and data visualization.
 
 <p align="center">
-  <img src="/assets/images/esign_7_5_front.JPG" alt="inki 7.5 inch display" width="300" style="border-radius: 8px; margin: 20px 0;">
+  <img src="{{ '/assets/images/esign_7_5_front.JPG' | relative_url }}" alt="inki 7.5 inch display" width="300" style="border-radius: 8px; margin: 20px 0;">
 </p>
 **Key Benefits:**
 - **Years of battery life** — up to 10,000 refresh cycles on standard AA batteries
@@ -22,35 +22,35 @@ Suitable for room booking, home automation monitoring, weather displays, and dat
 ## Applications
 
 <div class="use-cases-grid">
-  <a href="/seatsurfing" class="use-case-tile">
-    <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="Room booking display" class="tile-image">
+  <a href="{{ '/seatsurfing' | relative_url }}" class="use-case-tile">
+    <img src="{{ '/assets/images/esign_4_2_1_cropped.jpg' | relative_url }}" alt="Room booking display" class="tile-image">
     <h3>Seatsurfing</h3>
     <p>Room booking and desk sharing display</p>
     <small>REST API integration for live booking data</small>
   </a>
 
-  <a href="/historian" class="use-case-tile">
-    <img src="/assets/images/7_5_ccu-historian.JPG" alt="Time-series visualization" class="tile-image">
+  <a href="{{ '/historian' | relative_url }}" class="use-case-tile">
+    <img src="{{ '/assets/images/7_5_ccu-historian.JPG' | relative_url }}" alt="Time-series visualization" class="tile-image">
     <h3>Historian</h3>
     <p>Time-series data visualization</p>
     <small>CCU-Historian integration with trend analysis</small>
   </a>
 
-  <a href="/homematic" class="use-case-tile">
-    <img src="/assets/images/inki-homematic_3.JPG" alt="Home automation display" class="tile-image">
+  <a href="{{ '/homematic' | relative_url }}" class="use-case-tile">
+    <img src="{{ '/assets/images/inki-homematic_3.JPG' | relative_url }}" alt="Home automation display" class="tile-image">
     <h3>Homematic</h3>
     <p>Home automation display</p>
     <small>Live sensor data and device status monitoring</small>
   </a>
 
-  <a href="/weathermap" class="use-case-tile weathermap-wip">
+  <a href="{{ '/weathermap' | relative_url }}" class="use-case-tile weathermap-wip">
     <h3>Weathermap</h3>
     <p>Real-time weather mapping</p>
     <small>HTTPS WMS tile retrieval with geodata overlay</small>
   </a>
 
   <a href="https://github.com/c0de111/inki#build-your-own-inki" class="use-case-tile">
-    <img src="/assets/images/assembly.gif" alt="inki assembly animation" class="tile-image">
+    <img src="{{ '/assets/images/assembly.gif' | relative_url }}" alt="inki assembly animation" class="tile-image">
     <h3>Build your own inki</h3>
     <p>Open source hardware and software</p>
     <small>Complete package: PCB, firmware, and 3D printable enclosure</small>
