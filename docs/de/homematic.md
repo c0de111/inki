@@ -8,7 +8,7 @@ title: Homematic - inki
 **Home-Automation-Display** - inki-homematic
 
 <p align="center">
-  <img src="/assets/images/inki-homematic_3.JPG" alt="Homematic Home-Automation-Display" width="400" style="border-radius: 8px; margin: 20px 0;">
+  <img src="{{ '/assets/images/inki-homematic_3.JPG' | relative_url }}" alt="Homematic Home-Automation-Display" width="400" style="border-radius: 8px; margin: 20px 0;">
 </p>
 
 ## Überblick

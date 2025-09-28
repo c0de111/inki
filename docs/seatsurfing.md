@@ -8,7 +8,7 @@ title: Seatsurfing - inki
 **Room booking and desk sharing display** - inki-seatsurfing
 
 <p align="center">
-  <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="Seatsurfing room booking display" width="400" style="border-radius: 8px; margin: 20px 0;">
+  <img src="{{ '/assets/images/esign_4_2_1_cropped.jpg' | relative_url }}" alt="Seatsurfing room booking display" width="400" style="border-radius: 8px; margin: 20px 0;">
 </p>
 
 ## Overview
