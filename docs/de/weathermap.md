@@ -5,11 +5,13 @@ title: Weathermap - inki
 
 [← Zurück zur Startseite]({{ '/de/' | relative_url }})
 
-**Echtzeit-Wetterkarten** - inki-weathermap
+<div class="weathermap-wip-banner">
+  **Echtzeit-Wetterkarten** - inki-weathermap
+</div>
 
 ## Überblick
 
-Der Weathermap-Anwendungsfall verbindet inki mit deutschen Behörden-Kartendiensten, um Echtzeit-Wetter-Overlays auf geografischen Basiskarten anzuzeigen, optimiert für ePaper-Displays.
+Der Weathermap-Anwendungsfall verbindet inki mit deutschen Behörden-Kartendiensten, um Echtzeit-Wetter-Overlays auf geografischen Basiskarten anzuzeigen und für ePaper-Displays zu optimieren.
 
 <p align="center">
   <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap-Beispiel auf dem 4,2 Zoll Display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
@@ -25,56 +27,62 @@ Layout-Vorschau der Weathermap für das 4,2" Panel.
 Layout-Vorschau der Weathermap für das 7,5" Panel.
 </p>
 
-## Funktionen
+**Datenquelle:** Die Karten stammen vom Bundesamt für Kartographie und Geodäsie (BKG) und werden über den kostenlosen basemap.de WMS-Dienst bereitgestellt. Der Dienst steht unter der Creative Commons Attribution 4.0-Lizenz (CC BY 4.0) und liefert hochwertige amtliche Geodaten.
 
-- **Echtzeit-Wetterkarten** von offiziellen Quellen
-- **WMS-Kachel-Abruf** von `sgx.geodatenzentrum.de`
+## Funktionen (in Arbeit)
+
+- **Echtzeit-Wetterkarten** aus offiziellen Quellen
+- **WMS-Kachelabruf** von `sgx.geodatenzentrum.de`
 - **HTTPS-Konnektivität** mit vollständiger TLS 1.2/1.3-Unterstützung
-- **Schwarz-Weiß-Verarbeitung** für ePaper-Kompatibilität
-- **Speichereffizientes Streaming** für begrenzte RAM-Beschränkungen
-
-## Technische Details
-
-- **Protokoll**: HTTPS mit TLS 1.2/1.3-Verschlüsselung
-- **Datenquelle**: Bundesamt für Kartographie und Geodäsie
-- **Bildverarbeitung**: PNG zu 1-Bit-Konvertierung für ePaper
-- **Sicherheit**: mbedTLS mit Zertifikatvalidierung
-- **Performance**: ~196KB/s Übertragungsrate über TLS
+- **Speichereffizientes Streaming** für begrenzte RAM-Ressourcen
+- **Datenquelle**: Bundesamt für Kartographie und Geodäsie (BKG)
+- **Bildverarbeitung**: PNG-zu-1-Bit-Konvertierung für ePaper
+- **Sicherheit**: mbedTLS mit Zertifikatsprüfung
 
 ## Implementierungsstatus
 
-### ✅ Phase 1 Abgeschlossen: TLS-Infrastruktur
-- TLS/HTTPS-Client mit ordnungsgemäßer Zertifikatvalidierung
-- Erfolgreiche Datenübertragung (334KB Wetter-Kacheln)
-- ALTCP-Integration mit Timeout-Optimierung
-- Vollständige Cipher-Suite-Unterstützung
-
-### 🔄 Phase 2 Geplant: Bildverarbeitung
+- TLS/HTTPS-Client mit vollständiger Zertifikatsprüfung
 - Streaming-PNG-Dekomprimierung
-- RGB zu 1-Bit-Dithering
-- Speicherbeschränkte Verarbeitung
-- ePaper-Display-Integration
+- Geodaten abrufen und direkt auf dem ePaper in vier Graustufen oder Schwarz-Weiß darstellen
 
 ## Konfiguration
 
 Setup umfasst:
 - Karten-Kachel-Koordinaten
-- Zoom-Level-Einstellungen
+- Zoomlevel-Einstellungen
 - Update-Intervalle
-- Geografische Regionsauswahl
+- Auswahl der geografischen Region
 
-## Build
+<style>
+.weathermap-wip-banner {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  margin: 20px 0;
+  border: 2px solid #cc0000;
+  border-radius: 8px;
+  background: rgba(255, 0, 0, 0.05);
+}
 
-```bash
-cd firmware/c
-./build.sh --weathermap
-```
-
-## Technische Errungenschaften
-
-- **TLS-Handshake**: Abgeschlossen in ~1,6 Sekunden
-- **Datenübertragung**: 334.808 Bytes erfolgreich empfangen
-- **Cipher-Suite**: `TLS_AES_256_GCM_SHA384`
-- **Speichereffizienz**: Count-only-Modus für große Übertragungen
+.weathermap-wip-banner::before {
+  content: "IN ARBEIT";
+  position: absolute;
+  top: 0;
+  left: -50px;
+  right: -50px;
+  bottom: 0;
+  background: rgba(255, 0, 0, 0.1);
+  color: #cc0000;
+  font-weight: bold;
+  font-size: 16px;
+  letter-spacing: 3px;
+  transform: rotate(-35deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+</style>
 
 {% include contact_cta_de.md %}

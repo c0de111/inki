@@ -47,7 +47,7 @@ Geeignet für Raumbuchung, Home-Automation-Überwachung, Wetteranzeigen und Date
     <img src="{{ '/assets/images/weathermap_4_2.JPG' | relative_url }}" alt="Weathermap Vorschau" class="tile-image">
     <h3>Weathermap</h3>
     <p>Echtzeit-Wetterkarten</p>
-    <small>HTTPS WMS Kachel-Abruf mit TLS-Unterstützung</small>
+    <small>Kostenloser basemap.de WMS-Dienst (BKG, CC BY 4.0)</small>
   </a>
 
   <a href="https://github.com/c0de111/inki#build-your-own-inki" class="use-case-tile">
@@ -70,6 +70,26 @@ Geeignet für Raumbuchung, Home-Automation-Überwachung, Wetteranzeigen und Date
 | **RTC** | DS3231 mit Batterie-Backup |
 | **Web-Interface** | Wi-Fi-Setup und OTA-Updates |
 | **Stromversorgung** | 3x AA oder 3x AAA Batterien |
+
+## Schnellstart (für Kit-Bauer)
+
+**Ist deine inki-Hardware bereit?** So geht's los:
+
+1. **Firmware herunterladen**
+   - Lade die neueste UF2 von [GitHub Releases](https://github.com/c0de111/inki/releases/latest) herunter
+   - Wähle: `inki_historian.uf2`, `inki_seatsurfing.uf2` oder `inki_homematic.uf2`
+
+2. **Auf Pico W flashen**
+   - BOOTSEL-Taste halten und USB anschließen
+   - UF2-Datei auf RPI-RP2-Laufwerk kopieren
+   - Gerät startet automatisch neu
+
+3. **Über Browser konfigurieren**
+   - Mit WLAN "inki-setup" verbinden (Passwort: `12345678`)
+   - http://192.168.4.1 im Browser öffnen
+   - WLAN, ePaper-Modell und Anwendungseinstellungen festlegen
+
+**Hinweis:** Funktioniert als Web-Vorschau nur mit Pico W. Für volle Automatisierung DS3231 + ePaper hinzufügen.
 
 <style>
 .use-cases-grid {
@@ -118,6 +138,31 @@ Geeignet für Raumbuchung, Home-Automation-Überwachung, Wetteranzeigen und Date
   margin-bottom: 10px;
   float: right;
   opacity: 0.7;
+}
+
+.weathermap-wip {
+  position: relative;
+  overflow: hidden;
+}
+
+.weathermap-wip::before {
+  content: "WORK IN PROGRESS";
+  position: absolute;
+  top: 0;
+  left: -50px;
+  right: -50px;
+  bottom: 0;
+  background: rgba(255, 0, 0, 0.1);
+  color: #cc0000;
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 2px;
+  transform: rotate(-35deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
 }
 </style>
 
