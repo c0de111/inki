@@ -8,7 +8,7 @@ title: Seatsurfing - inki
 **Raumbuchung und Desk-Sharing-Display** - inki-seatsurfing
 
 <p align="center">
-  <img src="/assets/images/esign_4_2_1_cropped.jpg" alt="Seatsurfing Raumbuchungs-Display" width="400" style="border-radius: 8px; margin: 20px 0;">
+  <img src="{{ '/assets/images/esign_4_2_1_cropped.jpg' | relative_url }}" alt="Seatsurfing Raumbuchungs-Display" width="400" style="border-radius: 8px; margin: 20px 0;">
 </p>
 
 ## Überblick

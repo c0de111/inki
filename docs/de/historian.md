@@ -8,7 +8,7 @@ title: Historian - inki
 **Zeitreihen-Datenvisualisierung** - inki-historian
 
 <p align="center">
-  <img src="/assets/images/7_5_ccu-historian.JPG" alt="Historian Temperatur-Visualisierung" width="500" style="border-radius: 8px; margin: 20px 0;">
+  <img src="{{ '/assets/images/7_5_ccu-historian.JPG' | relative_url }}" alt="Historian Temperatur-Visualisierung" width="500" style="border-radius: 8px; margin: 20px 0;">
 </p>
 
 ## Überblick

@@ -8,7 +8,7 @@ title: Homematic - inki
 **Home automation display** - inki-homematic
 
 <p align="center">
-  <img src="/assets/images/inki-homematic_3.JPG" alt="Homematic home automation display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki-homematic_3.JPG' | relative_url }}" alt="Homematic home automation display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Homematic sensor data displayed on 4.2" ePaper showing temperature, heating status, and service messages
@@ -42,7 +42,7 @@ Live demonstration of inki-homematic displaying real-time sensor data and update
 You can easily configure inki-homematic through the web interface, such as from your smartphone. Here's what the configuration screens look like:
 
 <p align="center">
-  <img src="/assets/images/inki-homematic_webinterface2.png" alt="Homematic web interface device configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki-homematic_webinterface2.png' | relative_url }}" alt="Homematic web interface device configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Main configuration screen 
@@ -58,7 +58,7 @@ Specific homematic settings are accessed by the corresponding page and allow to 
 - WiFi credentials and network settings
 
 <p align="center">
-  <img src="/assets/images/inki-homematic_webinterface.png" alt="Homematic web interface main configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki-homematic_webinterface.png' | relative_url }}" alt="Homematic web interface main configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Detailed device configuration showing XML-RPC query parameters and sensor mappings for homematic

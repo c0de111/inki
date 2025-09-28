@@ -8,7 +8,7 @@ title: Historian - inki
 **Time-series data visualization** - inki-historian
 
 <p align="center">
-  <img src="/assets/images/7_5_ccu-historian.JPG" alt="Historian temperature visualization" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/7_5_ccu-historian.JPG' | relative_url }}" alt="Historian temperature visualization" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Temperature progression of a Homematic sensor in our garden over the last 24 hours
@@ -18,7 +18,7 @@ Temperature progression of a Homematic sensor in our garden over the last 24 hou
 In home automation systems you often have quite a lot of constantly changing and interesting data. Of course, you can look it up in your favorite web interface. However, it might be nice to have this automatically happen, and have a attractive "electronic picture" on your wall that you can briefly look at in your all-days routine. Above you see the 7.5" version of inki displaying the temperature in our garden from the ccu-historian home automation system from the last 24 hours, and the gas consumption in our home. It is quite fun to see the dynamics this way. 
 
 <p align="center">
-  <img src="/assets/images/inki_historian_gas.JPG" alt="Historian gas visualization" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki_historian_gas.JPG' | relative_url }}" alt="Historian gas visualization" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Gas consumption of our heating system - as hoped for in summer, very little gas is consumed
@@ -40,7 +40,7 @@ The Historian use case connects inki to [CCU-Historian](https://github.com/mdzio
 Once your inki device is powered on and connected, you'll access the web interface to configure your historian settings. Here's what the actual interface looks like:
 
 <p align="center">
-  <img src="/assets/images/inki-historian-webinterface.png" alt="Historian web interface main configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki-historian-webinterface.png' | relative_url }}" alt="Historian web interface main configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Main configuration screen showing CCU-Historian server settings and sensor data points
@@ -54,7 +54,7 @@ Main configuration screen showing CCU-Historian server settings and sensor data 
 - WiFi credentials and network settings
 
 <p align="center">
-  <img src="/assets/images/inki-historian-webinterface_2.png" alt="Historian web interface sensor configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
+  <img src="{{ '/assets/images/inki-historian-webinterface_2.png' | relative_url }}" alt="Historian web interface sensor configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
 Detailed sensor configuration showing data point IDs and labels for temperature monitoring
