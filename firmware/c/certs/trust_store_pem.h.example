@@ -1,0 +1,26 @@
+// Consolidated TLS trust store (PEM) for HTTPS client
+//
+// Populate this file with a concatenation of PEM-encoded CA certificates
+// required to validate your target hosts, e.g.:
+//  - HARICA Root CA / intermediates (for *.geodatenzentrum.de)
+//  - ISRG Root X1 (for Let's Encrypt chains used by maps.dwd.de)
+//  - Any other CA roots you rely on
+//
+// How to generate (example for maps.dwd.de + geodatenzentrum):
+//  1) Fetch and save server chains:
+//     openssl s_client -showcerts -connect maps.dwd.de:443 </dev/null 2>/dev/null \
+//        | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { print }' > dwd_chain.pem
+//     openssl s_client -showcerts -connect sgx.geodatenzentrum.de:443 </dev/null 2>/dev/null \
+//        | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { print }' > harica_chain.pem
+//  2) Extract/keep only the root CA(s) you trust (or include full chains if desired)
+//  3) Concatenate into trust_store.pem, then convert to a C header:
+//     awk 'BEGIN{print "static const unsigned char trust_store_pem[] = \""} \
+//          {gsub(/\\n/,""); printf "%s\\n", $0} \
+//          END{print "\";"}' trust_store.pem > certs/trust_store_pem.h
+//     echo "static const unsigned int trust_store_pem_len = sizeof(trust_store_pem);" >> certs/trust_store_pem.h
+//
+// Finally, enable by renaming this file to trust_store_pem.h and rebuilding.
+//
+static const unsigned char trust_store_pem[] = "";
+static const unsigned int trust_store_pem_len = sizeof(trust_store_pem);
+
