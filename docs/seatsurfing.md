@@ -36,7 +36,7 @@ Live demonstration of inki-seatsurfing displaying real-time room booking data an
 - **Custom logo display** with configurable branding through web interface
 - **Ultra-low power operation** with ~10,000 queries per battery set
 - **Wireless configuration** via web interface with automatic updates
-- **Cable-less wall mounting** perfect for door signage and desk sharing environments
+- **Cable-less wall mounting** no need to install power cables or network infrastructure - perfect for existing buildings
 
 ## Configuration & Setup
 

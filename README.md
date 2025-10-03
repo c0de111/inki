@@ -45,6 +45,7 @@ If you have a Pico W at hand, you can quickly test:
 - Download a prebuilt UF2 from the latest Release:
   - Historian: [inki_historian.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2)
   - SeatSurfing: [inki_seatsurfing.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2)
+  - Homematic: [inki_homematic.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_homematic.uf2)
 - Hold BOOTSEL while plugging in the Pico W → the RPI-RP2 drive appears
 - Copy the UF2 to the drive → the board reboots automatically
 - The Pico W onboard LED blinks “inki” in Morse
