@@ -1630,7 +1630,94 @@ void render_temperature_graph(UBYTE* image_buffer, int x, int y, int width, int 
 }
 #endif // USE_CASE_HISTORIAN
 
-// Render the default page with room-specific information and QR codes if enabled. This is the page without any user interaction
+typedef void (*page_renderer_t)(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
+
+static void render_page_fallback(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
+void render_page_wifi_setup(UBYTE* image);
+
+#ifdef USE_CASE_HISTORIAN
+static void render_page_0_historian(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)clock;
+    (void)battery_voltage;
+
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        render_temperature_graph(image_buffer, 20, 20, 760, 400);
+
+        char info[128];
+        snprintf(info, sizeof(info), "%d data points", historian_data.count);
+        Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
+
+        draw_flash_logo(image_buffer, 700, 10);
+
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        render_temperature_graph(image_buffer, 10, 10, 380, 250);
+
+        char info[64];
+        snprintf(info, sizeof(info), "%d points", historian_data.count);
+        Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
+    } else {
+        render_page_fallback(0, clock, image_buffer, battery_voltage);
+    }
+}
+
+static void render_page_placeholder_historian(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)clock;
+    (void)battery_voltage;
+
+    Paint_Clear(WHITE);
+
+    const sFONT* font = &font_ubuntu_mono_14pt_bold;
+
+    ds3231_data_t ds3231_data;
+    ds3231_read_current_time(clock, &ds3231_data);
+
+    char datetime_buf[64];
+    format_rtc_time(&ds3231_data, datetime_buf, sizeof(datetime_buf));
+
+    const char* title = "inki-historian";
+
+    char page_line[32];
+    snprintf(page_line, sizeof(page_line), "Page %d", pushbutton);
+
+    const char* msg = "Not assigned";
+
+    const int center_x_75 = 400;
+    const int center_y_75 = 200;
+    const int center_x_42 = 200;
+    const int center_y_42 = 150;
+
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        Paint_DrawString_EN(center_x_75 - 100, center_y_75 - 40, title, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_75 - 60, center_y_75 + 10, page_line, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_75 - 90, center_y_75 + 60, msg, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_75 - 120, center_y_75 + 110, datetime_buf, (sFONT*)&font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+        int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) logo_x = 0;
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 15);
+    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
+        int logo_x = EPD_4IN2_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) logo_x = 0;
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 15);
+        Paint_DrawString_EN(center_x_42 - 80, center_y_42 - 40, title, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_42 - 40, center_y_42 + 0, page_line, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_42 - 60, center_y_42 + 40, msg, (sFONT*)font, WHITE, BLACK);
+        Paint_DrawString_EN(center_x_42 - 90, center_y_42 + 80, datetime_buf, (sFONT*)&font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+    } else {
+        render_page_fallback(pushbutton, clock, image_buffer, battery_voltage);
+    }
+}
+
+static void render_page_wifisetup_historian(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)clock;
+    (void)battery_voltage;
+    render_page_wifi_setup(image_buffer);
+}
+#endif
+
+// Render the default page with usecase-specific information and QR codes if enabled. This is the page without any user interaction
 void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     
 #ifdef USE_CASE_SEATSURFING
@@ -1687,29 +1774,6 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     Paint_DrawString_EN(40, 150, linebuf, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
         }
 
-#elif defined(USE_CASE_HISTORIAN)
-   // Historian use case - render temperature graph
-    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-        // Large temperature graph for 7.5" display
-        render_temperature_graph(image_buffer, 20, 20, 760, 400);
-
-        // Additional info below graph
-        char info[128];
-        snprintf(info, sizeof(info), "%d data points", historian_data.count);
-        Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-
-        draw_flash_logo(image_buffer, 700, 10);
-
-    } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        // Smaller graph for 4.2" display
-        render_temperature_graph(image_buffer, 10, 10, 380, 250);
-
-        // Info below graph
-        char info[64];
-        snprintf(info, sizeof(info), "%d points", historian_data.count);
-        Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-    }
-    
 #elif defined(USE_CASE_HOMEMATIC)
     // Simple list of Homematic values (page 0)
     Paint_DrawString_EN(20, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
@@ -2209,37 +2273,97 @@ void render_page_7(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     }
 }
 
+static void render_page_fallback(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+    (void)clock;
+    (void)battery_voltage;
+    debug_log("Invalid pushbutton state: %d\n", pushbutton);
+    DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
+}
+
 // Render the appropriate page based on the RoomConfig and user-selected pushbutton state
 void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
-    switch (pushbutton) {
-        case 0:
-            render_page_0(clock, image_buffer, battery_voltage);  // default page, typial: Display room state or occupation details
-            break;
-        case 1:
-            render_page_1(clock, image_buffer, battery_voltage);   // typical: Display "Do Not Disturb" message with time
-            break;
-        case 2:
-            render_page_2(clock, image_buffer, battery_voltage);    // typical: Display a random number generator or utility
-            break;
-        case 3:
-            render_page_3(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
-            break;
-        case 4:
-            render_page_4(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
-            break;
-        case 5:
-            render_page_5(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
-            break;
-        case 6:
-            render_page_6(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
-            break;
-        case 7:
-            render_page_7(clock, image_buffer, battery_voltage);    // typical: Display current device configuration
-            break;
-        default:
-            debug_log("Invalid pushbutton state: %d\n", pushbutton);
-            DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
-            break;
+    const page_renderer_t* table = NULL;
+    size_t table_len = 0;
+
+#if defined(USE_CASE_SEATSURFING)
+    static const page_renderer_t seatsurfing_pages[8] = {
+        render_page_0,
+        render_page_1,
+        render_page_2,
+        render_page_3,
+        render_page_4,
+        render_page_5,
+        render_page_6,
+        render_page_7,
+    };
+    table = seatsurfing_pages;
+    table_len = sizeof(seatsurfing_pages) / sizeof(seatsurfing_pages[0]);
+#elif defined(USE_CASE_HISTORIAN)
+    static const page_renderer_t historian_pages[8] = {
+        render_page_0_historian,
+        render_page_2,
+        render_page_placeholder_historian,
+        render_page_placeholder_historian,
+        render_page_wifisetup_historian,
+        render_page_placeholder_historian,
+        render_page_placeholder_historian,
+        render_page_placeholder_historian,
+    };
+    table = historian_pages;
+    table_len = sizeof(historian_pages) / sizeof(historian_pages[0]);
+#elif defined(USE_CASE_HOMEMATIC)
+    static const page_renderer_t homematic_pages[8] = {
+        render_page_0,
+        render_page_1,
+        render_page_2,
+        render_page_3,
+        render_page_4,
+        render_page_5,
+        render_page_6,
+        render_page_7,
+    };
+    table = homematic_pages;
+    table_len = sizeof(homematic_pages) / sizeof(homematic_pages[0]);
+#elif defined(USE_CASE_WEATHERMAP)
+    static const page_renderer_t weathermap_pages[8] = {
+        render_page_0,
+        render_page_1,
+        render_page_2,
+        render_page_3,
+        render_page_4,
+        render_page_5,
+        render_page_6,
+        render_page_7,
+    };
+    table = weathermap_pages;
+    table_len = sizeof(weathermap_pages) / sizeof(weathermap_pages[0]);
+#else
+    static const page_renderer_t default_pages[8] = {
+        render_page_0,
+        render_page_1,
+        render_page_2,
+        render_page_3,
+        render_page_4,
+        render_page_5,
+        render_page_6,
+        render_page_7,
+    };
+    table = default_pages;
+    table_len = sizeof(default_pages) / sizeof(default_pages[0]);
+#endif
+
+    page_renderer_t handler = NULL;
+    if (table && table_len > 0 && pushbutton >= 0) {
+        unsigned idx = (unsigned)pushbutton;
+        if (idx < table_len) {
+            handler = table[idx];
+        }
+    }
+
+    if (handler) {
+        handler(clock, image_buffer, battery_voltage);
+    } else {
+        render_page_fallback(pushbutton, clock, image_buffer, battery_voltage);
     }
 }
 /**
@@ -2871,12 +2995,12 @@ int main(void)
 
     // Initialize HTTP client + TLS trust store (for WEATHERMAP TLS)
     http_client_init();
-/*
+
     if (wait_for_usb_connection(2500)) { // only used for debugging
         printf("USB connected\n");
     } else {
         printf("USB timeout\n");
-    }*/
+    }
 
     debug_log_with_color(COLOR_BOLD_GREEN, "System initializing - inki-"
 #ifdef USE_CASE_SEATSURFING
@@ -2911,14 +3035,6 @@ int main(void)
     setup_and_read_pushbuttons();     // Initialize pushbuttons and read their state
 
     // pushbutton = 7; // use for debugging
-
-#ifdef USE_CASE_HISTORIAN
-    // Historian: pressing button combo for page 4 should start web interface
-    if (pushbutton == 4) {
-        debug_log_with_color(COLOR_BOLD_YELLOW, "Historian: launching web interface (page 4)\n");
-        enter_wifi_setup_mode(&ds3231);  // Starts AP + webserver; handles shutdown internally
-    }
-#endif
 
     // Enter WiFi setup mode if all three buttons are held
     if (pushbutton == 7) {
