@@ -1669,6 +1669,7 @@ static void render_page_placeholder_historian(ds3231_t* clock, UBYTE* image_buff
     Paint_Clear(WHITE);
 
     const sFONT* font = &font_ubuntu_mono_14pt_bold;
+    const sFONT* datetime_font = &font_ubuntu_mono_10pt;
 
     ds3231_data_t ds3231_data;
     ds3231_read_current_time(clock, &ds3231_data);
@@ -1692,10 +1693,13 @@ static void render_page_placeholder_historian(ds3231_t* clock, UBYTE* image_buff
         Paint_DrawString_EN(center_x_75 - 100, center_y_75 - 40, title, (sFONT*)font, WHITE, BLACK);
         Paint_DrawString_EN(center_x_75 - 60, center_y_75 + 10, page_line, (sFONT*)font, WHITE, BLACK);
         Paint_DrawString_EN(center_x_75 - 90, center_y_75 + 60, msg, (sFONT*)font, WHITE, BLACK);
-        Paint_DrawString_EN(center_x_75 - 120, center_y_75 + 110, datetime_buf, (sFONT*)&font_ubuntu_mono_12pt_bold, WHITE, BLACK);
         int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
         if (logo_x < 0) logo_x = 0;
         DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 15);
+
+        int datetime_y = EPD_7IN5_V2_HEIGHT - datetime_font->Height - 20;
+        if (datetime_y < 0) datetime_y = 0;
+        Paint_DrawString_EN(30, datetime_y, datetime_buf, (sFONT*)datetime_font, WHITE, BLACK);
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         int logo_x = EPD_4IN2_V2_WIDTH - inki_octopus_100_95.width - 10;
         if (logo_x < 0) logo_x = 0;
@@ -1703,7 +1707,9 @@ static void render_page_placeholder_historian(ds3231_t* clock, UBYTE* image_buff
         Paint_DrawString_EN(center_x_42 - 80, center_y_42 - 40, title, (sFONT*)font, WHITE, BLACK);
         Paint_DrawString_EN(center_x_42 - 40, center_y_42 + 0, page_line, (sFONT*)font, WHITE, BLACK);
         Paint_DrawString_EN(center_x_42 - 60, center_y_42 + 40, msg, (sFONT*)font, WHITE, BLACK);
-        Paint_DrawString_EN(center_x_42 - 90, center_y_42 + 80, datetime_buf, (sFONT*)&font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+        int datetime_y = EPD_4IN2_V2_HEIGHT - datetime_font->Height - 15;
+        if (datetime_y < 0) datetime_y = 0;
+        Paint_DrawString_EN(20, datetime_y, datetime_buf, (sFONT*)datetime_font, WHITE, BLACK);
     } else {
         render_page_fallback(pushbutton, clock, image_buffer, battery_voltage);
     }
@@ -1962,10 +1968,7 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
-
-        if (!draw_flash_logo(image_buffer, 285, 10)) {
-            DrawSubImage(image_buffer, &inki_octopus_100_95, 280, 15);
-        }
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 30, 15);
 
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
@@ -1989,9 +1992,7 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         // Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
-        }
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 20, 15);
 
         sprintf(buffer, "Universal ");
         Paint_DrawString_EN(25, 40, buffer, &font_ubuntu_mono_11pt, WHITE, BLACK);
@@ -2896,7 +2897,7 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
     // Start Morse engine with default message
     morse_set_unit_ms(LED_MORSE_UNIT_MS);
     morse_set_message("INKI");
-    morse_set_enabled(true);
+    morse_set_enabled(false);
 #else
     // Morse disabled: keep LEDs ON solid during setup
 #if LED_USE_EXT
@@ -2907,13 +2908,20 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
     absolute_time_t last_watchdog_feed = get_absolute_time();
 
     while (true) {
-        cyw43_arch_poll();
-        sleep_ms(50);
+        bool firmware_upload = webserver_firmware_upload_active();
 
-        // Drive Morse engine (non-blocking)
+        cyw43_arch_poll();
+
+        if (firmware_upload) {
+            watchdog_update();
+        } else {
+            sleep_ms(50);
+
+            // Drive Morse engine (non-blocking)
 #if LED_MORSE_ENABLED
-        morse_tick();
+            morse_tick();
 #endif
+        }
 
         if (absolute_time_diff_us(get_absolute_time(), last_watchdog_feed) < -2000000) {
             watchdog_update();
@@ -2995,7 +3003,6 @@ int main(void)
 
     // Initialize HTTP client + TLS trust store (for WEATHERMAP TLS)
     http_client_init();
-
     if (wait_for_usb_connection(2500)) { // only used for debugging
         printf("USB connected\n");
     } else {
@@ -3035,6 +3042,13 @@ int main(void)
     setup_and_read_pushbuttons();     // Initialize pushbuttons and read their state
 
     // pushbutton = 7; // use for debugging
+
+#ifdef USE_CASE_HISTORIAN
+    if (pushbutton == 4) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "Historian: launching web interface (page 4)\n");
+        enter_wifi_setup_mode(&ds3231);
+    }
+#endif
 
     // Enter WiFi setup mode if all three buttons are held
     if (pushbutton == 7) {
