@@ -1647,8 +1647,13 @@ static void render_page_0_historian(ds3231_t* clock, UBYTE* image_buffer, float 
         char info[128];
         snprintf(info, sizeof(info), "%d data points", historian_data.count);
         Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-
-        draw_flash_logo(image_buffer, 700, 10);
+        int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) {
+            logo_x = 0;
+        }
+        if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+            DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+        }
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         render_temperature_graph(image_buffer, 10, 10, 380, 250);
@@ -1656,6 +1661,13 @@ static void render_page_0_historian(ds3231_t* clock, UBYTE* image_buffer, float 
         char info[64];
         snprintf(info, sizeof(info), "%d points", historian_data.count);
         Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
+        int logo_x = EPD_4IN2_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) {
+            logo_x = 0;
+        }
+        if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+            DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+        }
     } else {
         render_page_fallback(0, clock, image_buffer, battery_voltage);
     }
@@ -1906,10 +1918,14 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-        DrawSubImage(image_buffer, &inki_octopus_100_95 , 270, 5);
+        int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) {
+            logo_x = 0;
+        }
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
 
-        // Display room name
-        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
+        // Display room name with slightly smaller font
+        Paint_DrawString_EN(30, 50, device_config_flash.data.roomname, &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
 
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
@@ -1967,10 +1983,15 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) {
+            logo_x = 0;
+        }
+        if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+            DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+        }
 
-        DrawSubImage(image_buffer, &inki_octopus_100_95, 30, 15);
-
-        Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
+        Paint_DrawString_EN(70, 50, device_config_flash.data.roomname, &font_ubuntu_mono_20pt_bold,  WHITE, BLACK); // Display room name
 
         // Rendering logic for the 7.5-inch ePaper
         sprintf(buffer, "Universal Decision Maker says:");
@@ -1992,7 +2013,13 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         // Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
-        DrawSubImage(image_buffer, &inki_octopus_100_95, 20, 15);
+        int logo_x = EPD_4IN2_V2_WIDTH - inki_octopus_100_95.width - 10;
+        if (logo_x < 0) {
+            logo_x = 0;
+        }
+        if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+            DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+        }
 
         sprintf(buffer, "Universal ");
         Paint_DrawString_EN(25, 40, buffer, &font_ubuntu_mono_11pt, WHITE, BLACK);
@@ -2302,8 +2329,8 @@ void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float bat
 #elif defined(USE_CASE_HISTORIAN)
     static const page_renderer_t historian_pages[8] = {
         render_page_0_historian,
-        render_page_2,
         render_page_placeholder_historian,
+        render_page_2,
         render_page_placeholder_historian,
         render_page_wifisetup_historian,
         render_page_placeholder_historian,
