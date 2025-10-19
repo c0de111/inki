@@ -2897,7 +2897,7 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
     // Start Morse engine with default message
     morse_set_unit_ms(LED_MORSE_UNIT_MS);
     morse_set_message("INKI");
-    morse_set_enabled(false);
+    morse_set_enabled(true);
 #else
     // Morse disabled: keep LEDs ON solid during setup
 #if LED_USE_EXT
@@ -2916,12 +2916,14 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
             watchdog_update();
         } else {
             sleep_ms(50);
-
-            // Drive Morse engine (non-blocking)
-#if LED_MORSE_ENABLED
-            morse_tick();
-#endif
         }
+
+        // Drive Morse engine (non-blocking)
+#if LED_MORSE_ENABLED
+        if (!firmware_upload) {
+            morse_tick();
+        }
+#endif
 
         if (absolute_time_diff_us(get_absolute_time(), last_watchdog_feed) < -2000000) {
             watchdog_update();
