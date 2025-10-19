@@ -707,7 +707,6 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
         char timeout_info[64];
         add_timeout_info(timeout_info, sizeof(timeout_info));
         const int max_size = FIRMWARE_FLASH_SIZE;
-        const int duration = upload_session.flash_estimated_duration > 0 ? upload_session.flash_estimated_duration : 15000;
 
         snprintf(page, sizeof(page),
                  "<!DOCTYPE html><html><head>"
@@ -719,7 +718,9 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                  "input[type='file'] { font-size: 1em; padding: 0.5em; margin: 0.5em auto; display: block; width: 80%%; max-width: 300px; }"
                  "button { font-size: 1em; padding: 0.5em; margin: 0.5em auto; display: block; width: 80%%; max-width: 300px; }"
                  "#status { margin-top: 1em; font-weight: bold; color: red; }"
-                 "progress { width: 80%%; max-width: 300px; height: 2em; margin-top: 1em; }"
+                 ".spinner { width: 48px; height: 48px; border: 6px solid #ccc; border-top-color: #4CAF50; border-radius: 50%%; margin: 1.5em auto; display: none; animation: spin 1s linear infinite; }"
+                 ".spinner.active { display: block; }"
+                 "@keyframes spin { to { transform: rotate(360deg); } }"
                  "a { display: inline-block; margin-top: 2em; }"
                  "</style></head><body>\n");
 
@@ -739,7 +740,7 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
         strcat(page,
                "<input type='file' id='fileInput'><br>"
                "<button onclick='upload()'>Upload</button><br>"
-               "<progress id='progressBar' max='100' value='0'></progress>"
+               "<div id='spinner' class='spinner'></div>"
                "<p id='status'></p>"
                "<div id='uploadResult'></div>"
                "<a href='/'>Back</a>\n");
@@ -747,22 +748,6 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
                  "<script>"
                  "const MAX_SIZE = %d;"
-                 "let interval = null;"
-                 "function simulateFlashingProgress(durationMs = %d) {"
-                 "  let startTime = Date.now();"
-                 "  interval = setInterval(() => {"
-                 "    const elapsed = Date.now() - startTime;"
-                 "    let percent = Math.min(100, Math.round(elapsed / durationMs * 100));"
-                 "    document.getElementById('progressBar').value = percent;"
-                 "    document.getElementById('status').innerText = 'Flashen: ' + percent + '%%';"
-                 "    if (percent >= 100) {"
-                 "      clearInterval(interval);"
-                 "      document.getElementById('progressBar').value = 100;"
-                 "      document.getElementById('status').innerText = '❌ timeout';"
-                 "    }"
-                 "  }, 300);"
-                 "}"
-
                  "function upload() {"
                  "  const file = document.getElementById('fileInput').files[0];"
                  "  if (!file) return;"
@@ -774,21 +759,22 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
                  "  xhr.open('POST', '/firmware_update', true);"
                  "  xhr.setRequestHeader('Content-Type', 'application/octet-stream');"
                  "  xhr.responseType = 'text';"
+                 "  document.getElementById('spinner').classList.add('active');"
+                 "  document.getElementById('status').innerText = 'Uploading image… please wait and leave the device untouched (this may take a couple of minutes).';"
+                 "  document.getElementById('uploadResult').innerHTML = '';"
                  "  xhr.onerror = function() {"
-                 "    clearInterval(interval);"
-                 "    document.getElementById('status').innerText = '❌ Fehler beim Upload';"
+                 "    document.getElementById('spinner').classList.remove('active');"
+                 "    document.getElementById('status').innerText = '❌ Upload error';"
                  "  };"
                  "  xhr.onload = function() {"
-                 "    clearInterval(interval);"
-                 "    document.getElementById('progressBar').value = 100;"
+                 "    document.getElementById('spinner').classList.remove('active');"
                  "    document.getElementById('status').innerText = '';"
                  "    document.getElementById('uploadResult').innerHTML = xhr.responseText;"
                  "  };"
                  "  xhr.send(file);"
-                 "  simulateFlashingProgress();"
                  "}"
                  "</script></body></html>",
-                 max_size, duration);
+                 max_size);
 
         // Firmware Slot Info
         char build0[16] = {0}, version0[32] = {0};
