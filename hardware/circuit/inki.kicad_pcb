@@ -6712,7 +6712,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "B.Fab")
 			(uuid "feacd529-fea0-4661-a878-241be5aecd41")
 			(effects
@@ -6871,7 +6871,7 @@
 			(uuid "4f4d56e7-b8af-4f07-b128-6abc3ff3ce29")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "B.Fab")
 			(uuid "959c318d-48b5-4a0c-8314-4a87ba98c955")
 			(effects
@@ -6932,7 +6932,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "B.Fab")
 			(hide yes)
 			(uuid "d7b3d4e3-023f-4f71-9325-71ea3925c4ee")
@@ -7092,7 +7092,7 @@
 			(uuid "223c9f54-bf5d-4dc8-84b3-f3fb3ddf194b")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "B.Fab")
 			(uuid "56dc3b06-d69b-42ff-8e94-5c45fa2ebd33")
 			(effects
@@ -7633,7 +7633,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D7"
-			(at 1.8 -1.1 360)
+			(at 1.8 -1.1 0)
 			(layer "B.SilkS")
 			(uuid "6ac4dd04-66f5-47dc-a6f3-b0f76ef9bab4")
 			(effects
@@ -7646,7 +7646,7 @@
 			)
 		)
 		(property "Value" "BAT54J"
-			(at 0.1 -1.9 360)
+			(at 0.1 -1.9 0)
 			(layer "B.Fab")
 			(uuid "137e954c-6322-474a-8e6c-0591cdd09a9c")
 			(effects
@@ -7875,7 +7875,7 @@
 			(uuid "d7b0458e-f63c-4e0c-9433-7d35b2d91fc4")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 1.85 360)
+			(at 0 1.85 0)
 			(layer "B.Fab")
 			(uuid "9a64f9bf-3773-4b7c-8449-85e24d14c1c5")
 			(effects
@@ -8379,7 +8379,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "B.Fab")
 			(uuid "1cb3058d-7d43-4f2e-b4d3-4fc53d1529ee")
 			(effects
@@ -8538,7 +8538,7 @@
 			(uuid "0114ed2c-55cc-4777-88c9-17092462a39b")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "B.Fab")
 			(uuid "da840c3f-1231-42d0-a621-910c13504ebd")
 			(effects
@@ -8599,7 +8599,7 @@
 			)
 		)
 		(property "Value" "BAT54J"
-			(at 0.1 -1.9 360)
+			(at 0.1 -1.9 0)
 			(layer "B.Fab")
 			(uuid "aafc372c-63ef-4539-a5cc-ff2049ac7349")
 			(effects
@@ -8828,7 +8828,7 @@
 			(uuid "0bcad9ee-502e-4762-ad63-000d9e6c9212")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 1.85 360)
+			(at 0 1.85 0)
 			(layer "B.Fab")
 			(uuid "02d4ec16-e617-48db-ba29-0e29bbc20062")
 			(effects
@@ -9620,7 +9620,7 @@
 			)
 		)
 		(property "Value" "BAT54J"
-			(at 0.1 -1.9 360)
+			(at 0.1 -1.9 0)
 			(layer "B.Fab")
 			(uuid "c6f1dbd9-adeb-4b2f-ac56-cf91655bfc4a")
 			(effects
@@ -9849,7 +9849,7 @@
 			(uuid "58697bc2-52e2-4271-beed-cdb217d9fb81")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 1.85 360)
+			(at 0 1.85 0)
 			(layer "B.Fab")
 			(uuid "4249fbe0-5ea3-421e-ab64-f838e68dd7ba")
 			(effects
@@ -10557,7 +10557,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R11"
-			(at 2.4 0.7 360)
+			(at 2.4 0.7 0)
 			(layer "B.SilkS")
 			(uuid "cdeed71c-c56a-46f5-8fcf-1cf15c06aa37")
 			(effects
@@ -10570,7 +10570,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "B.Fab")
 			(hide yes)
 			(uuid "072e903a-036d-4196-85de-217789812c0a")
@@ -10730,7 +10730,7 @@
 			(uuid "8e511234-7ddd-45cd-9e86-bd616fba231d")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "B.Fab")
 			(uuid "46ebcb3a-6913-4bdd-a258-a02417f2fe0c")
 			(effects
@@ -10778,7 +10778,7 @@
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C1"
-			(at 0 1.68 270)
+			(at 0 1.68 -90)
 			(layer "B.SilkS")
 			(uuid "ccb6a1bf-1cae-491a-84b6-6c3a31154790")
 			(effects
@@ -11538,7 +11538,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D8"
-			(at 2.1 1.1 360)
+			(at 2.1 1.1 0)
 			(layer "B.SilkS")
 			(uuid "a22f2f7f-6879-4748-85f9-e37bd2bffa40")
 			(effects
@@ -11551,7 +11551,7 @@
 			)
 		)
 		(property "Value" "BAT54J"
-			(at 0.1 -1.9 360)
+			(at 0.1 -1.9 0)
 			(layer "B.Fab")
 			(uuid "7c26cb6f-3cb1-41bd-ad39-822ed69e4579")
 			(effects
@@ -11780,7 +11780,7 @@
 			(uuid "f6e5c974-0d82-44e1-9c88-a56f4225264c")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 1.85 360)
+			(at 0 1.85 0)
 			(layer "B.Fab")
 			(uuid "1574ce15-bb31-4b15-8d3d-f8960ce5543f")
 			(effects
@@ -12788,7 +12788,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "B.Fab")
 			(uuid "4d19a576-9f1c-458a-888a-1ae571b18c81")
 			(effects
@@ -12947,7 +12947,7 @@
 			(uuid "e1f4eec8-396a-42ad-bc75-63108c0b0a2c")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "B.Fab")
 			(uuid "cb707862-141e-4c87-8fba-978898ded611")
 			(effects

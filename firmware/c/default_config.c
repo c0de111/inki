@@ -9,6 +9,18 @@
 #include "homematic_config.h"
 #endif
 
+#if defined(USE_CASE_HISTORIAN)
+#define DEFAULT_ROOMNAME "inki-historian"
+#elif defined(USE_CASE_SEATSURFING)
+#define DEFAULT_ROOMNAME "inki-seatsurfing"
+#elif defined(USE_CASE_HOMEMATIC)
+#define DEFAULT_ROOMNAME "inki-homematic"
+#elif defined(USE_CASE_WEATHERMAP)
+#define DEFAULT_ROOMNAME "inki-weathermap"
+#else
+#define DEFAULT_ROOMNAME "inki"
+#endif
+
 __attribute__((section(".wifi_config")))
 __attribute__((used))
 const wifi_config_t default_wifi_config = {
@@ -74,7 +86,7 @@ __attribute__((section(".device_config")))
 __attribute__((used))
 const device_config_t default_device_config = {
     .data = {
-        .roomname = "Room 204",
+        .roomname = DEFAULT_ROOMNAME,
         .type = ROOM_TYPE_OFFICE,
         .epapertype = EPAPER_NONE, // Default to no ePaper for safe first boot
         .refresh_minutes_by_pushbutton = {30, 30, 30, 30, 30, 30, 30, 30},

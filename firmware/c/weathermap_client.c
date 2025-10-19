@@ -41,9 +41,9 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-#define WMAP_CENTER_LAT   (52.505373)   // Center
-#define WMAP_CENTER_LON   (11.1921966)
-#define WMAP_HALF_WIDTH_M   (40000.0)   // Base: 40 km total horizontal span (adjust height by aspect)
+#define WMAP_CENTER_LAT   (53.373)   // Center
+#define WMAP_CENTER_LON   (8.34921966)
+#define WMAP_HALF_WIDTH_M   (20000.0)   // Base: 40 km total horizontal span (adjust height by aspect)
 
 // Resolve target PNG size from configured ePaper type
 static inline void wmap_get_target_size(int* out_w, int* out_h) {

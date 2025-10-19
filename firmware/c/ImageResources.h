@@ -43,18 +43,15 @@ extern const unsigned char gImage_battery_level_8[];
 extern const unsigned char gImage_battery_level_9[];
 extern const unsigned char gImage_battery_level_10[];
 
-extern const unsigned char gImage_qr_Seminarraum[];
+// extern const unsigned char gImage_qr_Seminarraum[];
 
 extern const unsigned char gImage_github_link[];
-extern const unsigned char gImage_eSign_128x128_white_background[];
-extern const unsigned char gImage_eSign_128x128_white_background3[];
-extern const unsigned char gImage_eSign_100x100_3[];
+extern const unsigned char gImage_inki_octopus_100_95[];
 
 // Image assets declared externally
 extern const SubImage battery_levels_64x97[];
-extern const SubImage eSign_128x128_white_background3;
-extern const SubImage eSign_100x100_3;
-extern const SubImage qr_Seminarraum;
+extern const SubImage inki_octopus_100_95;
+// extern const SubImage qr_Seminarraum;
 extern const SubImage qr_github_link;
 
 #endif
