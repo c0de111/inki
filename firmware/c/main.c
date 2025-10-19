@@ -3184,6 +3184,11 @@ int main(void)
         debug_log_with_color(COLOR_BOLD_YELLOW, "Historian: launching web interface (page 4)\n");
         enter_wifi_setup_mode(&ds3231);
     }
+#elif defined(USE_CASE_HOMEMATIC)
+    if (pushbutton == 4) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "Homematic: launching web interface (page 4)\n");
+        enter_wifi_setup_mode(&ds3231);
+    }
 #endif
 
     // Enter WiFi setup mode if all three buttons are held
