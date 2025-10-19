@@ -1630,10 +1630,213 @@ void render_temperature_graph(UBYTE* image_buffer, int x, int y, int width, int 
 }
 #endif // USE_CASE_HISTORIAN
 
-typedef void (*page_renderer_t)(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
-
 static void render_page_fallback(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
 void render_page_wifi_setup(UBYTE* image);
+
+#ifdef USE_CASE_HOMEMATIC
+static void render_page_0_homematic(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)battery_voltage;
+
+    const bool is_epaper_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
+    const bool is_epaper_42 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2);
+
+    if (!is_epaper_75 && !is_epaper_42) {
+        render_page_fallback(pushbutton, clock, image_buffer, battery_voltage);
+        return;
+    }
+
+    // Prepare clean background for the Homematic overview
+    Paint_Clear(WHITE);
+
+    int logo_x = (is_epaper_75 ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH) - inki_octopus_100_95.width - 10;
+    if (logo_x < 0) {
+        logo_x = 0;
+    }
+    if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+    }
+
+    const sFONT* title_font = is_epaper_75 ? (const sFONT*)&font_ubuntu_mono_18pt_bold
+                                           : (const sFONT*)&font_ubuntu_mono_14pt_bold;
+
+    Paint_DrawString_EN(20, is_epaper_75 ? 40 : 20, device_config_flash.data.roomname,
+                        (sFONT*)title_font, WHITE, BLACK);
+
+    int y = is_epaper_75 ? 90 : 65;
+    const sFONT* f_top = &font_ubuntu_mono_10pt;
+    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
+        if (i >= ((int)homematic_config_flash.data.count)) {
+            break;
+        }
+
+        char label[48];
+        const char* flab = homematic_config_flash.data.items[i].fallback_label;
+        if (flab && *flab) {
+            snprintf(label, sizeof(label), "%s:", flab);
+        } else {
+            snprintf(label, sizeof(label), "%s:", homematic_config_flash.data.items[i].address);
+        }
+
+        char val[64] = "—";
+        if (homematic_values[i].valid && !homematic_values[i].fault) {
+            switch (homematic_values[i].type) {
+                case HM_TYPE_DOUBLE:
+                    snprintf(val, sizeof(val), "%.1f", homematic_values[i].dval);
+                    break;
+                case HM_TYPE_I4:
+                    snprintf(val, sizeof(val), "%d", homematic_values[i].ival);
+                    break;
+                case HM_TYPE_BOOL:
+                    val[0] = '\0';
+                    break;
+                case HM_TYPE_STRING:
+                    snprintf(val, sizeof(val), "%s", homematic_values[i].sval);
+                    break;
+                default:
+                    break;
+            }
+        } else if (homematic_values[i].fault) {
+            snprintf(val, sizeof(val), "fault");
+        }
+
+        const int line_start_x = is_epaper_75 ? 40 : 20;
+        int x = line_start_x;
+        Paint_DrawString_EN(x, y, label, (sFONT*)f_top, WHITE, BLACK);
+        x += (int)strlen(label) * f_top->Width + f_top->Width;
+
+        if (homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL) {
+            draw_toggle_control(x, y, f_top, homematic_values[i].bval);
+            x += (f_top->Height - 6) * 2 + f_top->Width;
+        } else {
+            Paint_DrawString_EN(x, y, val, (sFONT*)f_top, WHITE, BLACK);
+            x += (int)strlen(val) * f_top->Width;
+        }
+
+        const char* unit = homematic_values[i].unit[0] ? homematic_values[i].unit
+                              : derive_unit_for_key(homematic_config_flash.data.items[i].key);
+        if (unit && unit[0] && !(homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL)) {
+            if (strcmp(unit, "degC") == 0 || strcmp(unit, "°C") == 0) {
+                int r = (f_top->Width >= 12) ? 3 : 2;
+                int cx = x + r + 1;
+                int cy = y + r + 1;
+                Paint_DrawCircle(cx, cy, r, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+                char cstr[2] = {'C', '\0'};
+                Paint_DrawString_EN(cx + r + 1, y, cstr, (sFONT*)f_top, WHITE, BLACK);
+            } else {
+                char space_unit[16];
+                snprintf(space_unit, sizeof(space_unit), " %s", unit);
+                Paint_DrawString_EN(x, y, space_unit, (sFONT*)f_top, WHITE, BLACK);
+            }
+        }
+
+        y += is_epaper_75 ? 34 : 30;
+    }
+
+    if (homematic_service_count > 0) {
+        const sFONT* small = &font_ubuntu_mono_6pt;
+        int display_count = homematic_service_count;
+        int by = Paint.Height - 10 - (display_count * (small->Height + 2));
+        by -= 10;
+        if (by < y + 10) {
+            by = y + 10;
+        }
+        Paint_DrawString_EN(40, by - (small->Height + 4), "Servicemeldungen:", (sFONT*)small, WHITE, BLACK);
+        for (int i = 0; i < display_count; i++) {
+            char short_addr[16];
+            summarize_addr(homematic_service_addr[i], short_addr, sizeof(short_addr));
+
+            char line[160];
+            snprintf(line, sizeof(line), "%s - %s", short_addr[0] ? short_addr : homematic_service_addr[i], homematic_service_msgs[i]);
+
+            int max_cols = (Paint.Width - 80) / small->Width;
+            int len = (int)strlen(line);
+            if (len > max_cols && max_cols > 3) {
+                char tmp[160];
+                int cut = max_cols - 3;
+                if (cut > (int)sizeof(tmp) - 1) {
+                    cut = (int)sizeof(tmp) - 1;
+                }
+                memcpy(tmp, line, cut);
+                memcpy(tmp + cut, "...", 3);
+                tmp[cut + 3] = 0;
+                strcpy(line, tmp);
+            }
+
+            Paint_DrawString_EN(40, by + i * (small->Height + 2), line, (sFONT*)small, WHITE, BLACK);
+        }
+    }
+}
+
+static void render_page_placeholder_homematic(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)battery_voltage;
+
+    Paint_Clear(WHITE);
+
+    ds3231_data_t ds3231_data;
+    ds3231_read_current_time(clock, &ds3231_data);
+
+    char datetime_buf[64];
+    format_rtc_time(&ds3231_data, datetime_buf, sizeof(datetime_buf));
+
+    const char* title = "inki-homematic";
+    char page_line[32];
+    snprintf(page_line, sizeof(page_line), "Page %d", pushbutton);
+    const char* msg = "Not assigned";
+
+    const sFONT* title_font = &font_ubuntu_mono_14pt_bold;
+    const sFONT* info_font = &font_ubuntu_mono_12pt;
+    const sFONT* datetime_font = &font_ubuntu_mono_10pt;
+
+    const bool is_epaper_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
+    const bool is_epaper_42 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2);
+
+    if (!is_epaper_75 && !is_epaper_42) {
+        render_page_fallback(pushbutton, clock, image_buffer, battery_voltage);
+        return;
+    }
+
+    const int epd_width = is_epaper_75 ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH;
+    const int epd_height = is_epaper_75 ? EPD_7IN5_V2_HEIGHT : EPD_4IN2_V2_HEIGHT;
+
+    int logo_x = epd_width - inki_octopus_100_95.width - 10;
+    if (logo_x < 0) {
+        logo_x = 0;
+    }
+    if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+    }
+
+    int center_x = epd_width / 2;
+    int center_y = is_epaper_75 ? (epd_height / 2) : (epd_height / 2);
+
+    int title_x = center_x - (int)strlen(title) * title_font->Width / 2;
+    int title_y = center_y - 40;
+    Paint_DrawString_EN(title_x, title_y, title, (sFONT*)title_font, WHITE, BLACK);
+
+    int page_x = center_x - (int)strlen(page_line) * info_font->Width / 2;
+    Paint_DrawString_EN(page_x, title_y + title_font->Height + 8, page_line, (sFONT*)info_font, WHITE, BLACK);
+
+    int msg_x = center_x - (int)strlen(msg) * info_font->Width / 2;
+    Paint_DrawString_EN(msg_x, title_y + title_font->Height + info_font->Height + 16, msg, (sFONT*)info_font, WHITE, BLACK);
+
+    int datetime_y = epd_height - datetime_font->Height - 20;
+    if (datetime_y < 0) {
+        datetime_y = 0;
+    }
+    Paint_DrawString_EN(30, datetime_y, datetime_buf, (sFONT*)datetime_font, WHITE, BLACK);
+}
+
+static void render_page_wifisetup_homematic(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
+{
+    (void)clock;
+    (void)battery_voltage;
+    render_page_wifi_setup(image_buffer);
+}
+#endif // USE_CASE_HOMEMATIC
+
+typedef void (*page_renderer_t)(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
 
 #ifdef USE_CASE_HISTORIAN
 static void render_page_0_historian(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
@@ -1793,104 +1996,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         }
 
 #elif defined(USE_CASE_HOMEMATIC)
-    // Simple list of Homematic values (page 0)
-    Paint_DrawString_EN(20, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
-    // Start a bit lower to add more distance from title
-    // Shift query section down by 5 px (not the title)
-    int y = 65;
-    const sFONT* f_top = &font_ubuntu_mono_10pt;
-    for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
-        if (i >= ((int)homematic_config_flash.data.count)) break;
-        char label[48];
-        const char* flab = homematic_config_flash.data.items[i].fallback_label;
-        if (flab && *flab) snprintf(label, sizeof(label), "%s:", flab);
-        else snprintf(label, sizeof(label), "%s:", homematic_config_flash.data.items[i].address);
-
-        char val[64] = "—";
-        if (homematic_values[i].valid && !homematic_values[i].fault) {
-            switch (homematic_values[i].type) {
-                case HM_TYPE_DOUBLE: snprintf(val, sizeof(val), "%.1f", homematic_values[i].dval); break;
-                case HM_TYPE_I4:     snprintf(val, sizeof(val), "%d", homematic_values[i].ival); break;
-                case HM_TYPE_BOOL:   val[0] = '\0'; break; // handled as toggle below
-                case HM_TYPE_STRING: snprintf(val, sizeof(val), "%s", homematic_values[i].sval); break;
-                default: break;
-            }
-        } else if (homematic_values[i].fault) {
-            snprintf(val, sizeof(val), "fault");
-        }
-
-        // Render label, value and unit, drawing degree symbol manually if needed
-        const sFONT* f = f_top;
-        int x = 20;
-        Paint_DrawString_EN(x, y, label, (sFONT*)f, WHITE, BLACK);
-        x += (int)strlen(label) * f->Width + f->Width; // 1 space
-
-        if (homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL) {
-            // Draw high-contrast toggle for booleans
-            draw_toggle_control(x, y, f, homematic_values[i].bval);
-            x += (f->Height - 6) * 2 + f->Width; // advance by toggle width + space
-        } else {
-            Paint_DrawString_EN(x, y, val, (sFONT*)f, WHITE, BLACK);
-            x += (int)strlen(val) * f->Width;
-        }
-
-        const char* unit = homematic_values[i].unit[0] ? homematic_values[i].unit
-                              : derive_unit_for_key(homematic_config_flash.data.items[i].key);
-        if (unit && unit[0] && !(homematic_values[i].valid && homematic_values[i].type == HM_TYPE_BOOL)) {
-            if (strcmp(unit, "degC") == 0 || strcmp(unit, "°C") == 0) {
-                // Draw small degree circle and then 'C'
-                int r = (f->Width >= 12) ? 3 : 2;
-                int cx = x + r + 1;                 // slight spacing after value
-                int cy = y + r + 1;                 // lifted above baseline
-                Paint_DrawCircle(cx, cy, r, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-                // Draw 'C' next to it with a small gap
-                char cstr[2] = {'C', '\0'};
-                Paint_DrawString_EN(cx + r + 1, y, cstr, (sFONT*)f, WHITE, BLACK);
-            } else {
-                char space_unit[16];
-                snprintf(space_unit, sizeof(space_unit), " %s", unit);
-                Paint_DrawString_EN(x, y, space_unit, (sFONT*)f, WHITE, BLACK);
-            }
-        }
-        y += 30; // +2 px more spacing for readability
-    }
-
-    // Draw service messages at the bottom area
-    if (homematic_service_count > 0) {
-        // Use smaller font to fit more content per line
-        const sFONT* small = &font_ubuntu_mono_6pt;
-        int display_count = homematic_service_count;
-        int by = Paint.Height - 10 - (display_count * (small->Height + 2));
-        // Shift the service block up by 10 px
-        by -= 10;
-        if (by < y + 10) by = y + 10;
-        Paint_DrawString_EN(20, by - (small->Height + 4), "Servicemeldungen:", (sFONT*)small, WHITE, BLACK);
-        for (int i = 0; i < display_count; i++) {
-            char short_addr[16];
-            summarize_addr(homematic_service_addr[i], short_addr, sizeof(short_addr));
-
-            // Compose line with ASCII dash (avoid UTF-8 em dash not in font)
-            char line[160];
-            snprintf(line, sizeof(line), "%s - %s", short_addr[0] ? short_addr : homematic_service_addr[i], homematic_service_msgs[i]);
-
-            // Truncate to fit display width
-            int max_cols = (Paint.Width - 40) / small->Width; // 20px margins left/right
-            int len = (int)strlen(line);
-            if (len > max_cols && max_cols > 3) {
-                char tmp[160];
-                int cut = max_cols - 3;
-                if (cut > (int)sizeof(tmp) - 1) cut = (int)sizeof(tmp) - 1;
-                memcpy(tmp, line, cut);
-                memcpy(tmp + cut, "...", 3);
-                tmp[cut + 3] = 0;
-                strcpy(line, tmp);
-            }
-
-            debug_log("[HOMEMATIC] Render service: %s\n", line);
-            Paint_DrawString_EN(20, by + i * (small->Height + 2), line, (sFONT*)small, WHITE, BLACK);
-        }
-    }
-
+    render_page_0_homematic(clock, image_buffer, battery_voltage);
 #elif defined(USE_CASE_WEATHERMAP)
     // WEATHERMAP: try to render stored 2-bit image from flash; fallback to test pattern
     extern bool weathermap_render_from_flash(void);
@@ -2341,14 +2447,14 @@ void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float bat
     table_len = sizeof(historian_pages) / sizeof(historian_pages[0]);
 #elif defined(USE_CASE_HOMEMATIC)
     static const page_renderer_t homematic_pages[8] = {
-        render_page_0,
-        render_page_1,
+        render_page_0_homematic,
+        render_page_placeholder_homematic,
         render_page_2,
-        render_page_3,
-        render_page_4,
-        render_page_5,
-        render_page_6,
-        render_page_7,
+        render_page_placeholder_homematic,
+        render_page_wifisetup_homematic,
+        render_page_placeholder_homematic,
+        render_page_placeholder_homematic,
+        render_page_placeholder_homematic,
     };
     table = homematic_pages;
     table_len = sizeof(homematic_pages) / sizeof(homematic_pages[0]);
