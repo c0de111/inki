@@ -3005,11 +3005,12 @@ int main(void)
 
     // Initialize HTTP client + TLS trust store (for WEATHERMAP TLS)
     http_client_init();
-    if (wait_for_usb_connection(2500)) { // only used for debugging
-        printf("USB connected\n");
-    } else {
-        printf("USB timeout\n");
-    }
+
+    // if (wait_for_usb_connection(2500)) { // only used for debugging
+    //     printf("USB connected\n");
+    // } else {
+    //     printf("USB timeout\n");
+    // }
 
     debug_log_with_color(COLOR_BOLD_GREEN, "System initializing - inki-"
 #ifdef USE_CASE_SEATSURFING
