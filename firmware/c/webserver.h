@@ -90,6 +90,8 @@ extern "C" {
     // Utility functions for HTML page generation
     void add_timeout_info(char *buf, size_t buf_size);
     void send_response(struct tcp_pcb* tpcb, const char* body);
+    bool webserver_upload_in_progress(void);
+    bool webserver_firmware_upload_active(void);
 
     #ifdef __cplusplus
 }

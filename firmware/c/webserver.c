@@ -97,6 +97,15 @@ void send_weathermap_page(struct tcp_pcb* tpcb, const char* message);
 
 // Global upload session instance
 upload_session_t upload_session = {0};
+static int g_firmware_progress_logged = -10;
+
+bool webserver_upload_in_progress(void) {
+    return upload_session.active;
+}
+
+bool webserver_firmware_upload_active(void) {
+    return upload_session.active && upload_session.type == UPLOAD_FIRMWARE;
+}
 
 // =============================================================================
 // ROUTE TABLE STRUCTURES & TYPES
@@ -563,8 +572,12 @@ static err_t send_next_chunk(void* arg, struct tcp_pcb* tpcb, u16_t len) {
 
     if (state->remaining <= 0) {
         debug_log("send_next_chunk: transfer completed.\n");
+        tcp_output(tpcb);
+        tcp_sent(tpcb, NULL);
+        tcp_arg(tpcb, NULL);
         free(state->body_copy);
         free(state);
+        tcp_close(tpcb);
         return ERR_OK;
     }
 
@@ -996,6 +1009,7 @@ static void handle_post_firmware_update(struct tcp_pcb* tpcb, struct pbuf* p, co
     int estimated_write_time_ms = write_blocks * 1;
 
     upload_session.flash_estimated_duration = estimated_erase_time_ms + estimated_write_time_ms;
+    g_firmware_progress_logged = -10;
 
     debug_log("UPLOAD FIRMWARE: estimate erase=%d ms, write=%d ms → total %d ms\n",
               estimated_erase_time_ms, estimated_write_time_ms, upload_session.flash_estimated_duration);
@@ -1330,10 +1344,9 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         tcp_recved(tpcb, copied);
         
         // Progress logging for firmware updates
-        static int last_logged_percent = -10;
         int percent = (int)((100ULL * upload_session.total_received) / upload_session.expected_length);
-        if (percent >= last_logged_percent + 10) {
-            last_logged_percent = percent;
+        if (percent >= g_firmware_progress_logged + 10) {
+            g_firmware_progress_logged = percent;
             debug_log("UPLOAD FIRMWARE: Progress = %d%%\n", percent);
         }
     } else if (upload_session.active && 
