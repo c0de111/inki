@@ -1668,7 +1668,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
 
     if (!draw_flash_logo(image_buffer, 290, 10)) {
-        DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
     }
 
     // Use parsed data from callback (data processing already done)
@@ -1836,7 +1836,7 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3 , 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95 , 270, 5);
 
         // Display room name
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
@@ -1847,7 +1847,7 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
 
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
 
         sprintf(buffer, "Please,");
@@ -1872,7 +1872,7 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         debug_log("render_page_1 is not supported for the configured ePaper type.\n");
 
         if (!draw_flash_logo(image_buffer, 285, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 280, 15);
         }
 
     }
@@ -1900,7 +1900,7 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
 
         if (!draw_flash_logo(image_buffer, 285, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 280, 15);
         }
 
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
@@ -1926,7 +1926,7 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
 
         sprintf(buffer, "Universal ");
@@ -1956,7 +1956,7 @@ void render_page_2(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         debug_log("render_page_2 is not supported for the configured ePaper type.\n");
 
         if (!draw_flash_logo(image_buffer, 285, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 280, 15);
         }
 
     }
@@ -1985,14 +1985,14 @@ void render_page_3(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         // Display device information and RTC time
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         // Display device information and RTC time
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
 
         Paint_DrawString_EN(10, 20, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold,  WHITE, BLACK);
@@ -2054,7 +2054,7 @@ void render_page_3(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_3 is not supported for the configured ePaper type.\n");
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
     }
 }
 
@@ -2064,7 +2064,7 @@ void render_page_4(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         // Display device information and RTC time
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK); // Display room name
 
       } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
@@ -2117,7 +2117,7 @@ void render_page_4(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     } else {
         // Unsupported ePaper type, use default fallback
         debug_log("render_page_3 is not supported for the configured ePaper type.\n");
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
     }
 }
 
@@ -2130,7 +2130,7 @@ void render_page_5(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
         rtc_data_line = 6;
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
         rtc_data_line = 4;
     }
@@ -2184,7 +2184,7 @@ void render_page_6(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
         Paint_DrawString_EN(330, 230, "more at", &font_ubuntu_mono_6pt, WHITE, BLACK);
         DrawSubImage(image_buffer, &qr_github_link, 340, 250);
@@ -2198,7 +2198,7 @@ void render_page_7(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         if (!draw_flash_logo(image_buffer, 290, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 290, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
         }
 
         Paint_DrawString_EN(130, 30, "Server Mode", &font_ubuntu_mono_11pt, WHITE, BLACK);
@@ -2238,7 +2238,7 @@ void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float bat
             break;
         default:
             debug_log("Invalid pushbutton state: %d\n", pushbutton);
-            DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
             break;
     }
 }
@@ -2450,7 +2450,7 @@ void render_page_server_error(ds3231_t* clock, UBYTE* image_buffer) {
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
         // Display the default logo
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
 
         // Display the room name
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
@@ -2476,7 +2476,7 @@ void render_page_server_error(ds3231_t* clock, UBYTE* image_buffer) {
         // Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
 
         if (!draw_flash_logo(image_buffer, 285, 10)) {
-            DrawSubImage(image_buffer, &eSign_100x100_3, 280, 15);
+            DrawSubImage(image_buffer, &inki_octopus_100_95, 280, 15);
         }
 
         // Render error message
@@ -2514,22 +2514,22 @@ void render_page_wifi_error(ds3231_t* clock, UBYTE* image_buffer) {
 
     // Clear the ePaper display
     Paint_Clear(WHITE);
-    const char* wifi_error_msg = "Unable to connect to Wi-Fi";
+    const char* wifi_error_msg = "Unable to connect to WiFi";
 
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
         // Display the default logo
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 680, 25);
 
         // Display the room name
         Paint_DrawString_EN(70, 60, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
 
         // Render error message
-        Paint_DrawString_EN(50, 200, "Wi-Fi Error!", &font_ubuntu_mono_22pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(50, 200, "WiFi Error!", &font_ubuntu_mono_22pt_bold, WHITE, BLACK);
         Paint_DrawString_EN(50, 280, wifi_error_msg, &font_ubuntu_mono_16pt, WHITE, BLACK);
 
         // Display a tip or diagnostic message
-        Paint_DrawString_EN(50, 350, "Please check the Wi-Fi settings.", &font_ubuntu_mono_12pt, WHITE, BLACK);
+        Paint_DrawString_EN(50, 350, "Please check the WiFi settings.", &font_ubuntu_mono_12pt, WHITE, BLACK);
 
         format_rtc_time(&ds3231_data, buffer, sizeof(buffer));
         Paint_DrawString_EN(40, 420, buffer, &font_ubuntu_mono_10pt, WHITE, BLACK);
@@ -2538,10 +2538,10 @@ void render_page_wifi_error(ds3231_t* clock, UBYTE* image_buffer) {
 
         // Display room name & logo
         Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
-        DrawSubImage(image_buffer, &eSign_128x128_white_background3, 270, 5);
+        DrawSubImage(image_buffer, &inki_octopus_100_95, 270, 5);
 
         // Render error message
-        Paint_DrawString_EN(20, 120, "Wi-Fi Error!", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(20, 120, "WiFi Error!", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
         Paint_DrawString_EN(20, 180, wifi_error_msg, &font_ubuntu_mono_8pt, WHITE, BLACK);
 
         // Display a tip or diagnostic message
@@ -2558,23 +2558,32 @@ void render_page_wifi_error(ds3231_t* clock, UBYTE* image_buffer) {
 }
 
 void render_page_wifi_setup(UBYTE* image) {
-    if (!draw_flash_logo(image, 290, 10)) {
-        DrawSubImage(image, &eSign_100x100_3, 290, 15);
+    int x_offset = 0;
+    int y_offset = 0;
+#ifdef USE_CASE_HISTORIAN
+    if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        x_offset = (EPD_7IN5_V2_WIDTH - EPD_4IN2_V2_WIDTH) / 2;
+        y_offset = (EPD_7IN5_V2_HEIGHT - EPD_4IN2_V2_HEIGHT) / 2;
+    }
+#endif
+
+    if (!draw_flash_logo(image, 290 + x_offset, 10 + y_offset)) {
+        DrawSubImage(image, &inki_octopus_100_95, 290 + x_offset, 15 + y_offset);
     }
 
-    Paint_DrawString_EN(20, 20, "WIFI Setup Mode", &font_ubuntu_mono_11pt, WHITE, BLACK);
-    Paint_DrawString_EN(20, 80, "Connect to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
-    Paint_DrawString_EN(60, 130, "inki-setup", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+    Paint_DrawString_EN(20 + x_offset, 20 + y_offset, "WIFI Setup Mode", &font_ubuntu_mono_11pt, WHITE, BLACK);
+    Paint_DrawString_EN(20 + x_offset, 80 + y_offset, "Connect to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
+    Paint_DrawString_EN(60 + x_offset, 130 + y_offset, "inki-setup", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
 
-    Paint_DrawString_EN(20, 180, "Go to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
-    Paint_DrawString_EN(30, 230, "http://192.168.4.1 ", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
+    Paint_DrawString_EN(20 + x_offset, 180 + y_offset, "Go to ", &font_ubuntu_mono_10pt, WHITE, BLACK);
+    Paint_DrawString_EN(30 + x_offset, 230 + y_offset, "http://192.168.4.1 ", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
 
     // char line1[64];
     // char line2[64];
     // snprintf(line1, sizeof(line1), "SSID: %s", wifi_config_flash.ssid);
     // snprintf(line2, sizeof(line2), "PWD:  %s", wifi_config_flash.password);
-    // Paint_DrawString_EN(20, 240, line1, &font_ubuntu_mono_8pt, WHITE, BLACK);
-    // Paint_DrawString_EN(20, 250, line2, &font_ubuntu_mono_8pt, WHITE, BLACK);
+    // Paint_DrawString_EN(20 + x_offset, 240 + y_offset, line1, &font_ubuntu_mono_8pt, WHITE, BLACK);
+    // Paint_DrawString_EN(20 + x_offset, 250 + y_offset, line2, &font_ubuntu_mono_8pt, WHITE, BLACK);
 }
 
 static const uint8_t dhcp_offer_template[] = {
@@ -2862,12 +2871,12 @@ int main(void)
 
     // Initialize HTTP client + TLS trust store (for WEATHERMAP TLS)
     http_client_init();
-
+/*
     if (wait_for_usb_connection(2500)) { // only used for debugging
         printf("USB connected\n");
     } else {
         printf("USB timeout\n");
-    }
+    }*/
 
     debug_log_with_color(COLOR_BOLD_GREEN, "System initializing - inki-"
 #ifdef USE_CASE_SEATSURFING

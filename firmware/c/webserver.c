@@ -457,7 +457,6 @@ static void handle_weathermap_clear_route(struct tcp_pcb *tpcb, struct pbuf *p, 
 
 
 static absolute_time_t shutdown_time = {0};
-extern const unsigned char gImage_eSign_100x100_3[];
 
 // Shutdown callback
 static int64_t shutdown_callback(alarm_id_t id, void *user_data) {
