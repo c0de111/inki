@@ -5465,7 +5465,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D1"
-			(at -0.1 1.6 180)
+			(at 2.6 0 -90)
 			(layer "B.SilkS")
 			(uuid "76c2cae1-b78d-46cf-8bb5-e0cd678ba839")
 			(effects
@@ -5756,8 +5756,8 @@
 		(at 57.1 62.4 -90)
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
-		(property "Reference" "C3"
-			(at -2 0 0)
+		(property "Reference" "100n"
+			(at -2.1 0 0)
 			(layer "B.SilkS")
 			(uuid "c7af232d-41cf-4dc9-8553-8c150dfaab09")
 			(effects
@@ -5973,7 +5973,7 @@
 		(at 30 22.9 90)
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
-		(property "Reference" "100n2"
+		(property "Reference" "100n"
 			(at 0 1.5 90)
 			(layer "B.SilkS")
 			(uuid "8b41df2b-edb4-46cd-8b7f-092e4a4427c7")
@@ -6194,7 +6194,7 @@
 		(at 30 38.35)
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
-		(property "Reference" "100n3"
+		(property "Reference" "100n"
 			(at 0 1.25 0)
 			(layer "B.SilkS")
 			(uuid "19d4447f-fe5c-43c5-ad62-02e04bf93003")
@@ -8144,7 +8144,7 @@
 		(at 25.4 48.9 -90)
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
-		(property "Reference" "100n4"
+		(property "Reference" "100n"
 			(at 0.05 -1.3 90)
 			(layer "B.SilkS")
 			(uuid "64476bdb-222a-490c-b070-e64b1db8f0b6")
@@ -8878,7 +8878,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R1"
-			(at 0 1.4 0)
+			(at -2.6 0 0)
 			(layer "B.SilkS")
 			(uuid "845ccd62-d954-41fe-a06e-145b216b46b1")
 			(effects
@@ -9315,7 +9315,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D5"
-			(at 2.05 -1.2 90)
+			(at -2.55 0 180)
 			(layer "B.SilkS")
 			(uuid "59210922-ca50-48c0-b8f5-6b91a364f37a")
 			(effects
@@ -10557,7 +10557,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R11"
-			(at 2.4 0.7 0)
+			(at -2 1.5 0)
 			(layer "B.SilkS")
 			(uuid "cdeed71c-c56a-46f5-8fcf-1cf15c06aa37")
 			(effects
@@ -10998,7 +10998,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D2"
-			(at 0 1.4 0)
+			(at -2.6 0.1 90)
 			(layer "B.SilkS")
 			(uuid "0b9d53e0-9068-4334-8108-2b7e76596301")
 			(effects
@@ -12263,7 +12263,7 @@
 		(descr "SOD-323")
 		(tags "SOD-323")
 		(property "Reference" "D6"
-			(at 2.05 1.1 -90)
+			(at -2.55 0 0)
 			(layer "B.SilkS")
 			(uuid "598568b6-1e6b-40e5-b709-19b31f744985")
 			(effects
@@ -12555,7 +12555,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R14"
-			(at 0 -1.4 0)
+			(at -2.8 0.1 0)
 			(layer "B.SilkS")
 			(uuid "2858d5f9-d26f-4388-9ce8-ca8c27499fcd")
 			(effects
@@ -12775,7 +12775,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R17"
-			(at -2.8 0.4 0)
+			(at -2.9 0.1 0)
 			(layer "B.SilkS")
 			(uuid "e1d1119c-1684-4f78-a301-997b59b7a652")
 			(effects
@@ -13924,7 +13924,7 @@
 		(at 30.3 62.9 -90)
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
-		(property "Reference" "100n1"
+		(property "Reference" "100n"
 			(at 0.1 -1.3 90)
 			(layer "B.SilkS")
 			(uuid "801d275c-45c1-4e05-9882-27587b5fd3e5")
@@ -17292,6 +17292,45 @@
 		(layer "Edge.Cuts")
 		(uuid "f6cbe8f6-8cf3-49bc-a883-3c180744f709")
 	)
+	(gr_text "200k"
+		(at 60.5 36.4 90)
+		(layer "B.SilkS")
+		(uuid "090b5cb2-9939-4ee4-a3c1-d184a450e03f")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1k"
+		(at 27.5 60.4 0)
+		(layer "B.SilkS")
+		(uuid "0ce3989d-bc45-4a1c-b4da-ea374727389d")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1M"
+		(at 30.4 69.2 0)
+		(layer "B.SilkS")
+		(uuid "139e9bca-a8b7-442d-8e9a-db57fb23e5be")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
 	(gr_text "RTC DS3231"
 		(at 49.9 69 -0)
 		(layer "B.SilkS")
@@ -17300,6 +17339,305 @@
 			(font
 				(size 1 1)
 				(thickness 0.15)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "6344"
+		(at 26.6 69.3 0)
+		(layer "B.SilkS")
+		(uuid "45be1c18-8822-4811-b03f-b32cb43082aa")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1k"
+		(at 25.4 42.7 0)
+		(layer "B.SilkS")
+		(uuid "4f567597-b174-4de7-ba0d-01314a82b8e4")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "3904"
+		(at 27.5 42.6 90)
+		(layer "B.SilkS")
+		(uuid "55b093b7-9694-4dcd-984e-9964a2274738")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "BAT54"
+		(at 58.1 53.4 0)
+		(layer "B.SilkS")
+		(uuid "57ce474a-ba3c-47e9-bb6f-d37901b957ed")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "200k"
+		(at 35.6 64.1 0)
+		(layer "B.SilkS")
+		(uuid "66279c82-b484-4194-acea-9030171510e7")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "10k"
+		(at 34.8 30.1 90)
+		(layer "B.SilkS")
+		(uuid "6946728d-53ab-4e21-b742-db2010724725")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "10k"
+		(at 34.8 32.1 90)
+		(layer "B.SilkS")
+		(uuid "69711438-5aa7-48a0-8d1f-7032e39709a8")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "22"
+		(at 55.9 45.3 90)
+		(layer "B.SilkS")
+		(uuid "7076b90c-545a-42c7-9d80-28a45c92e196")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1M"
+		(at 27.2 33.5 0)
+		(layer "B.SilkS")
+		(uuid "8f034d5a-a490-46e0-b673-176d08ff19c1")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "N4148"
+		(at 57.5 48.3 0)
+		(layer "B.SilkS")
+		(uuid "a84a94fe-a67b-4e38-acd2-cc68b00d43d7")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "2602"
+		(at 25.1 30 90)
+		(layer "B.SilkS")
+		(uuid "a98e0b6d-8c56-4e5e-9f76-17135c25e87d")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "220"
+		(at 59.6 64.6 0)
+		(layer "B.SilkS")
+		(uuid "abceec96-46ce-4338-84a6-5f059ea338dd")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "4k7"
+		(at 45 52.5 90)
+		(layer "B.SilkS")
+		(uuid "b054efd0-4577-49b0-920d-0382e179447c")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "10k"
+		(at 24.4 15.9 90)
+		(layer "B.SilkS")
+		(uuid "c5d54e52-5c0b-4e83-9bb3-08ee9ae0dd6d")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "200k"
+		(at 35.4 69.3 0)
+		(layer "B.SilkS")
+		(uuid "c700cb91-ad58-47cc-84f1-bb0970330d66")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "4k7"
+		(at 50.2 52.7 90)
+		(layer "B.SilkS")
+		(uuid "c86c3d90-e28b-47f0-bfce-2b5c0fcb946c")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "200k"
+		(at 60.6 31.8 90)
+		(layer "B.SilkS")
+		(uuid "ca68b9b5-5a1f-480c-a4d2-0e72f06685eb")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "100n"
+		(at 34.3 58.3 90)
+		(layer "B.SilkS")
+		(uuid "d051058a-f995-4e23-b12a-8c87061c351c")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "10k"
+		(at 24.4 18.2 90)
+		(layer "B.SilkS")
+		(uuid "d6e6d00c-a1e7-4d6c-bede-b55dd88963b0")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1k"
+		(at 28.5 26 90)
+		(layer "B.SilkS")
+		(uuid "d7b05a84-914a-4136-a145-2e6fa80f8c62")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1k"
+		(at 25.9 41.2 0)
+		(layer "B.SilkS")
+		(uuid "eae770c0-5ff0-4ad7-9ccd-8e3c036dad26")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "50k"
+		(at 29 45.2 0)
+		(layer "B.SilkS")
+		(uuid "fbd4657b-123e-41a2-8322-d66a859580ab")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
+			)
+			(justify mirror)
+		)
+	)
+	(gr_text "1k"
+		(at 33.9 45.2 0)
+		(layer "B.SilkS")
+		(uuid "fcb321e6-32f9-42e3-b406-572a7dd6a0a5")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.1)
+				(bold yes)
 			)
 			(justify mirror)
 		)
