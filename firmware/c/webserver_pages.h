@@ -44,6 +44,8 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
 void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len);
 #elif defined(USE_CASE_HOMEMATIC)
 void handle_form_homematic(struct tcp_pcb *tpcb, const char *body, size_t len);
+#elif defined(USE_CASE_WEATHERMAP)
+void handle_form_weathermap(struct tcp_pcb *tpcb, const char *body, size_t len);
 #endif
 void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t len);
 void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len);

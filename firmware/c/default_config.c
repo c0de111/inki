@@ -7,6 +7,8 @@
 #include "historian_config.h"
 #elif defined(USE_CASE_HOMEMATIC)
 #include "homematic_config.h"
+#elif defined(USE_CASE_WEATHERMAP)
+#include "weathermap_config.h"
 #endif
 
 #if defined(USE_CASE_HISTORIAN)
@@ -78,6 +80,20 @@ const homematic_config_t default_homematic_config = {
         }
     },
     .crc32 = 0
+};
+#elif defined(USE_CASE_WEATHERMAP)
+// Weathermap configuration (center and span defaults)
+__attribute__((section(".weathermap_config")))
+__attribute__((used))
+const weathermap_config_t default_weathermap_config = {
+    .data = {
+        .center_lat = WEATHERMAP_DEFAULT_CENTER_LAT,
+        .center_lon = WEATHERMAP_DEFAULT_CENTER_LON,
+        .half_width_m = WEATHERMAP_DEFAULT_HALF_WIDTH_M,
+        .flags = 0,
+        .reserved = {0},
+    },
+    .crc32 = 0,
 };
 #endif
 

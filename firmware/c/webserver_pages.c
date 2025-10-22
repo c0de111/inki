@@ -21,6 +21,7 @@
 #include "lwip/tcp.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include "pico/time.h"
 #include "debug.h"
@@ -96,22 +97,81 @@ void send_landing_page(struct tcp_pcb *tpcb) {
 
 #ifdef USE_CASE_WEATHERMAP
 void send_weathermap_page(struct tcp_pcb* tpcb, const char* message) {
-    char page[2048];
+    char page[4096];
     const char* info = (message && *message) ? message : "";
+
+    weathermap_config_t cfg;
+    if (!load_weathermap_config(&cfg)) {
+        init_weathermap_config(&cfg);
+    }
+
+    double lat = cfg.data.center_lat;
+    double lon = cfg.data.center_lon;
+    double half_m = cfg.data.half_width_m;
+
+    if (!isfinite(lat) || fabs(lat) > 90.0) lat = WEATHERMAP_DEFAULT_CENTER_LAT;
+    if (!isfinite(lon) || fabs(lon) > 180.0) lon = WEATHERMAP_DEFAULT_CENTER_LON;
+    if (!isfinite(half_m) || half_m <= 0.0) half_m = WEATHERMAP_DEFAULT_HALF_WIDTH_M;
+
+    double half_km = half_m / 1000.0;
+    double span_km = half_km * 2.0;
+
+    char lat_buf[32];
+    char lon_buf[32];
+    char half_buf[32];
+
+#if defined(_GNU_SOURCE) || defined(__GLIBC__)
+    struct lconv* lc = localeconv();
+    char decimal = lc && lc->decimal_point && lc->decimal_point[0] ? lc->decimal_point[0] : '.';
+#else
+    char decimal = '.';
+#endif
+
+    snprintf(lat_buf, sizeof(lat_buf), "%.6f", lat);
+    snprintf(lon_buf, sizeof(lon_buf), "%.6f", lon);
+    snprintf(half_buf, sizeof(half_buf), "%.2f", half_km);
+
+    if (decimal != '.') {
+        for (char* p = lat_buf; *p; ++p) if (*p == decimal) *p = '.';
+        for (char* p = lon_buf; *p; ++p) if (*p == decimal) *p = '.';
+        for (char* p = half_buf; *p; ++p) if (*p == decimal) *p = '.';
+    }
+
     snprintf(page, sizeof(page),
              "<!DOCTYPE html><html><head>"
              "<meta charset=\"UTF-8\">"
              "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
              "<title>Weathermap</title>"
              "<style>body{font-family:sans-serif;max-width:720px;margin:auto;padding:1em;}"
+             "form{background:#f7f7f7;padding:1em;border:1px solid #ccc;border-radius:6px;margin-bottom:1.2em;max-width:24em;}"
+             "label{display:block;margin-top:.6em;font-weight:bold;}"
+             "input[type=text]{width:14em;max-width:100%%;padding:.5em;font-size:1em;margin-top:.2em;}"
+             "button{margin-top:1em;padding:.6em 1em;font-size:1em;border:1px solid #444;border-radius:6px;background:#fff;}"
              "a.btn{display:inline-block;padding:.6em 1em;background:#eee;border:1px solid #ccc;border-radius:6px;text-decoration:none;color:#000;margin:.4em 0;}"
-             "small.note{color:#555;}"
+             "p.note{color:#555;font-size:.9em;max-width:24em;}"
+             "p.flash-ok{color:green;}"
+             "p.flash-error{color:#b00;}"
              "</style></head><body>\n"
              "<h2>Weathermap</h2>");
     if (*info) {
+        const char* flash_cls = (strncmp(info, "⚠", 3) == 0) ? "flash-error" : "flash-ok";
         snprintf(page + strlen(page), sizeof(page) - strlen(page),
-                 "<p style='color:green'>%s</p>", info);
+                 "<p class='%s'>%s</p>", flash_cls, info);
     }
+
+    snprintf(page + strlen(page), sizeof(page) - strlen(page),
+             "<form method=\"POST\" action=\"/weathermap\">"
+             "<label for=lat>Center latitude (°)</label>"
+             "<input id=lat type=\"text\" inputmode=\"decimal\" pattern=\"-?[0-9]+(\\.[0-9]+)?\" name=\"text1\" value=\"%s\" required>"
+             "<label for=lon>Center longitude (°)</label>"
+             "<input id=lon type=\"text\" inputmode=\"decimal\" pattern=\"-?[0-9]+(\\.[0-9]+)?\" name=\"text2\" value=\"%s\" required>"
+             "<label for=span>Half width (km)</label>"
+             "<input id=span type=\"text\" inputmode=\"decimal\" pattern=\"[0-9]+(\\.[0-9]+)?\" name=\"text3\" value=\"%s\" required>"
+             "<p class=\"note\">Span on ground: %.1f km (width = 2 × half width).<br>Use '.' as decimal separator.</p>"
+             "<p class=\"note\">Saving clears the cached PNG; the device refetches the map on the next weather update.</p>"
+             "<button type=\"submit\">Save settings</button>"
+             "</form>",
+             lat_buf, lon_buf, half_buf, span_km);
     // Check if a cached PNG exists in flash
     uint32_t staged_bytes = 0;
     bool has_png = get_weathermap_meta(&staged_bytes) && staged_bytes >= 8;
@@ -123,11 +183,25 @@ void send_weathermap_page(struct tcp_pcb* tpcb, const char* message) {
         }
     }
 
+    uint16_t cached_w = 0, cached_h = 0;
+    uint32_t cached_len = 0;
+    bool has_2bpp = weathermap_flash_info(&cached_w, &cached_h, &cached_len);
+
     if (has_png) {
+        snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                 "<p class=\"note\">Cached PNG in slot1: %u bytes.</p>\n" , staged_bytes);
         strcat(page, "<p><img src=\"/weathermap.png\" alt=\"cached map\" style=\"max-width:100%;height:auto;border:1px solid #ccc\"></p>\n");
         strcat(page, "<p><a class=\"btn\" href=\"/weathermap_clear\">Clear cached image</a></p>\n");
     } else {
         strcat(page, "<p><i>No cached map stored in device.</i></p>\n");
+    }
+
+    if (has_2bpp) {
+        snprintf(page + strlen(page), sizeof(page) - strlen(page),
+                 "<p class=\"note\">Rendered 2-bit image: %ux%u, %u bytes.</p>\n",
+                 cached_w, cached_h, cached_len);
+    } else {
+        strcat(page, "<p class=\"note\"><i>No compressed 2-bit image stored.</i></p>\n");
     }
 
     strcat(page, "<p><a href=\"/\">Back</a></p></body></html>");
@@ -1533,6 +1607,81 @@ void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len) {
         debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Historian-Konfiguration.\n");
     }
     send_historian_config_page(tpcb, "✔ historian settings stored");
+}
+#elif defined(USE_CASE_WEATHERMAP)
+void handle_form_weathermap(struct tcp_pcb *tpcb, const char *body, size_t len) {
+    webserver_set_shutdown_time(make_timeout_time_ms(USER_INTERACTION_TIMEOUT_MS));
+
+    web_submission_t result = {0};
+    parse_form_fields(body, len, &result);
+
+    const char* lat_str = result.text[0];
+    const char* lon_str = result.text[1];
+    const char* span_str = result.text[2];
+
+    bool valid = true;
+    double lat = WEATHERMAP_DEFAULT_CENTER_LAT;
+    double lon = WEATHERMAP_DEFAULT_CENTER_LON;
+    double half_km = WEATHERMAP_DEFAULT_HALF_WIDTH_M / 1000.0;
+
+    if (lat_str && lat_str[0]) {
+        char* endp = NULL;
+        lat = strtod(lat_str, &endp);
+        if (endp == lat_str || !isfinite(lat)) valid = false;
+    } else {
+        valid = false;
+    }
+
+    if (lon_str && lon_str[0]) {
+        char* endp = NULL;
+        lon = strtod(lon_str, &endp);
+        if (endp == lon_str || !isfinite(lon)) valid = false;
+    } else {
+        valid = false;
+    }
+
+    if (span_str && span_str[0]) {
+        char* endp = NULL;
+        half_km = strtod(span_str, &endp);
+        if (endp == span_str || !isfinite(half_km)) valid = false;
+    } else {
+        valid = false;
+    }
+
+    if (!valid) {
+        send_weathermap_page(tpcb, "⚠ Invalid input – please use decimal numbers with '.' as separator.");
+        return;
+    }
+
+    if (lat < -90.0) lat = -90.0;
+    if (lat > 90.0) lat = 90.0;
+    if (lon < -180.0) lon = -180.0;
+    if (lon > 180.0) lon = 180.0;
+    if (half_km < 1.0 || half_km > 500.0) {
+        send_weathermap_page(tpcb, "⚠ Half width must be between 1 and 500 km.");
+        return;
+    }
+
+    double half_m = half_km * 1000.0;
+
+    weathermap_config_t cfg;
+    if (!load_weathermap_config(&cfg)) {
+        cfg = weathermap_config_flash;
+    }
+
+    cfg.data.center_lat = lat;
+    cfg.data.center_lon = lon;
+    cfg.data.half_width_m = half_m;
+
+    bool ok = save_weathermap_config(&cfg);
+    if (ok) {
+        clear_weathermap_meta();
+        debug_log_with_color(COLOR_YELLOW, "[WEATHERMAP] Config saved: lat=%.6f lon=%.6f half_width=%.1fm\n", lat, lon, half_m);
+        send_weathermap_page(tpcb, "✔ settings saved. Cached map cleared.");
+    } else {
+        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Failed to save config\n");
+        send_weathermap_page(tpcb, "⚠ Failed to save settings.");
+    }
 }
 #elif defined(USE_CASE_HOMEMATIC)
 void handle_form_homematic(struct tcp_pcb *tpcb, const char *body, size_t len) {

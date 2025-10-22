@@ -264,6 +264,10 @@ static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp
             case UPLOAD_FORM_HOMEMATIC:
                 handle_form_homematic(tpcb, upload_session.form_buffer, upload_session.expected_length);
                 break;
+#elif defined(USE_CASE_WEATHERMAP)
+            case UPLOAD_FORM_WEATHERMAP:
+                handle_form_weathermap(tpcb, upload_session.form_buffer, upload_session.expected_length);
+                break;
 #endif
             case UPLOAD_FORM_DEVICE:
                 handle_form_device_config(tpcb, upload_session.form_buffer, upload_session.expected_length);
@@ -749,6 +753,51 @@ static void handle_post_historian(struct tcp_pcb* tpcb, struct pbuf* p, const ch
         tcp_close(tpcb);
     }
 }
+#elif defined(USE_CASE_WEATHERMAP)
+static void handle_post_weathermap(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
+    const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
+    if (!cl) {
+        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: Content-Length missing\n");
+        send_weathermap_page(tpcb, "Missing Content-Length");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.expected_length = atoi(cl + 15);
+    if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
+        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: form body too large\n");
+        send_weathermap_page(tpcb, "Form data too large");
+        tcp_close(tpcb);
+        return;
+    }
+
+    upload_session.active = true;
+    upload_session.total_received = 0;
+    upload_session.type = UPLOAD_FORM_WEATHERMAP;
+
+    const char* body = strstr(upload_session.header_buffer, "\r\n\r\n");
+    if (body) {
+        body += 4;
+        size_t body_len = upload_session.header_length - (body - upload_session.header_buffer);
+        memcpy(upload_session.form_buffer, body, body_len);
+        upload_session.total_received = body_len;
+        tcp_recved(tpcb, copied);
+
+        debug_log("UPLOAD WEATHERMAP CONFIG: First POST /weathermap body chunk (%d bytes)\n", (int)body_len);
+
+        if (upload_session.total_received >= upload_session.expected_length) {
+            upload_session.form_buffer[upload_session.expected_length] = '\0';
+            handle_form_weathermap(tpcb, upload_session.form_buffer, upload_session.expected_length);
+            upload_session.active = false;
+            upload_session.header_complete = false;
+            upload_session.header_length = 0;
+        }
+    } else {
+        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: Header body split error\n");
+        send_weathermap_page(tpcb, "Form parse error");
+        tcp_close(tpcb);
+    }
+}
 #endif
 
 #ifdef USE_CASE_HOMEMATIC
@@ -1180,6 +1229,8 @@ static const route_t routes[] = {
     {"/seatsurfing", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_seatsurfing}},
 #elif defined(USE_CASE_HISTORIAN)
     {"/historian", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_historian}},
+#elif defined(USE_CASE_WEATHERMAP)
+    {"/weathermap", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_weathermap}},
 #elif defined(USE_CASE_HOMEMATIC)
     {"/homematic", HTTP_POST, ROUTE_FORM, {.binary_handler = handle_post_homematic}},
 #endif
@@ -1359,6 +1410,9 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 #endif
 #ifdef USE_CASE_HOMEMATIC
                 upload_session.type == UPLOAD_FORM_HOMEMATIC ||
+#endif
+#ifdef USE_CASE_WEATHERMAP
+                upload_session.type == UPLOAD_FORM_WEATHERMAP ||
 #endif
                 upload_session.type == UPLOAD_FORM_DEVICE ||
                 upload_session.type == UPLOAD_FORM_CLOCK ||
