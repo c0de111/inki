@@ -4,6 +4,7 @@ MEMORY
     SEATSURFING_FLASH (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
     HISTORIAN_FLASH   (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
     HOMEMATIC_FLASH   (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
+    WEATHERMAP_FLASH  (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
     DEVICE_FLASH      (rx) : ORIGIN = 0x101E9000, LENGTH = 4K
 }
 
@@ -26,6 +27,11 @@ SECTIONS
     .homematic_config 0x101E8000 : ALIGN(4096) {
         KEEP(*(.homematic_config))
     } > HOMEMATIC_FLASH
+
+    /* Weathermap config occupies the same flash window when built with USE_CASE_WEATHERMAP */
+    .weathermap_config 0x101E8000 : ALIGN(4096) {
+        KEEP(*(.weathermap_config))
+    } > WEATHERMAP_FLASH
 
     .device_config 0x101E9000 : ALIGN(4096) {
         KEEP(*(.device_config))
