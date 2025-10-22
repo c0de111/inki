@@ -53,6 +53,8 @@ extern "C" {
         UPLOAD_FORM_HISTORIAN,
 #elif defined(USE_CASE_HOMEMATIC)
         UPLOAD_FORM_HOMEMATIC,
+#elif defined(USE_CASE_WEATHERMAP)
+        UPLOAD_FORM_WEATHERMAP,
 #endif
         UPLOAD_FORM_DEVICE,
         UPLOAD_FORM_CLOCK,

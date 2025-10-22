@@ -9,6 +9,8 @@
 #include "historian_config.h"
 #elif defined(USE_CASE_HOMEMATIC)
 #include "homematic_config.h"
+#elif defined(USE_CASE_WEATHERMAP)
+#include "weathermap_config.h"
 #endif
 
 // #include "pico/flash.h"
@@ -62,6 +64,9 @@ _Static_assert(FIRMWARE_MAGIC_LEN == 13, "FIRMWARE_MAGIC_LEN mismatch");
 #elif defined(USE_CASE_HOMEMATIC)
 #define HOMEMATIC_CONFIG_FLASH_OFFSET     (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Homematic settings
 #define homematic_config_flash (*(const homematic_config_t*)FLASH_PTR(HOMEMATIC_CONFIG_FLASH_OFFSET))
+#elif defined(USE_CASE_WEATHERMAP)
+#define WEATHERMAP_CONFIG_FLASH_OFFSET     (CONFIG_FLASH_OFFSET + 0x1000)  // 0x1E8000 - Weathermap settings
+#define weathermap_config_flash (*(const weathermap_config_t*)FLASH_PTR(WEATHERMAP_CONFIG_FLASH_OFFSET))
 #endif
 
 #define DEVICE_CONFIG_FLASH_OFFSET        (CONFIG_FLASH_OFFSET + 0x2000)  // 0x1E9000 - Device and UI configuration
@@ -186,6 +191,10 @@ void init_historian_config(historian_config_t* out);
 bool load_homematic_config(homematic_config_t* out);
 bool save_homematic_config(const homematic_config_t* in);
 void init_homematic_config(homematic_config_t* out);
+#elif defined(USE_CASE_WEATHERMAP)
+bool load_weathermap_config(weathermap_config_t* out);
+bool save_weathermap_config(const weathermap_config_t* in);
+void init_weathermap_config(weathermap_config_t* out);
 #endif
 
 /* Device config */

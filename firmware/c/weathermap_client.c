@@ -41,9 +41,52 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-#define WMAP_CENTER_LAT   (53.373)   // Center
-#define WMAP_CENTER_LON   (8.34921966)
-#define WMAP_HALF_WIDTH_M   (20000.0)   // Base: 40 km total horizontal span (adjust height by aspect)
+#define WMAP_DEFAULT_CENTER_LAT   WEATHERMAP_DEFAULT_CENTER_LAT
+#define WMAP_DEFAULT_CENTER_LON   WEATHERMAP_DEFAULT_CENTER_LON
+#define WMAP_DEFAULT_HALF_WIDTH_M   WEATHERMAP_DEFAULT_HALF_WIDTH_M   // Base: 40 km total horizontal span (adjust height by aspect)
+
+typedef struct {
+    bool valid;
+    bool success;
+    size_t bytes;
+    char reason[48];
+} geodata_status_t;
+
+static geodata_status_t s_geodata_status = {0};
+
+static void geodata_status_set(bool success, const char* reason, size_t bytes) {
+    s_geodata_status.valid = true;
+    s_geodata_status.success = success;
+    s_geodata_status.bytes = bytes;
+    if (reason && *reason) {
+        snprintf(s_geodata_status.reason, sizeof(s_geodata_status.reason), "%s", reason);
+    } else {
+        s_geodata_status.reason[0] = '\0';
+    }
+}
+
+static void wmap_get_config(double* lat, double* lon, double* half_width_m) {
+    double cfg_lat = WMAP_DEFAULT_CENTER_LAT;
+    double cfg_lon = WMAP_DEFAULT_CENTER_LON;
+    double cfg_half = WMAP_DEFAULT_HALF_WIDTH_M;
+
+    weathermap_config_t cfg;
+    if (load_weathermap_config(&cfg)) {
+        if (isfinite(cfg.data.center_lat) && fabs(cfg.data.center_lat) <= 90.0) {
+            cfg_lat = cfg.data.center_lat;
+        }
+        if (isfinite(cfg.data.center_lon) && fabs(cfg.data.center_lon) <= 180.0) {
+            cfg_lon = cfg.data.center_lon;
+        }
+        if (isfinite(cfg.data.half_width_m) && cfg.data.half_width_m > 0.0) {
+            cfg_half = cfg.data.half_width_m;
+        }
+    }
+
+    if (lat) *lat = cfg_lat;
+    if (lon) *lon = cfg_lon;
+    if (half_width_m) *half_width_m = cfg_half;
+}
 
 // Resolve target PNG size from configured ePaper type
 static inline void wmap_get_target_size(int* out_w, int* out_h) {
@@ -73,10 +116,12 @@ static void wmap_center_to_bbox(double lat_deg, double lon_deg,
 static int bkg_build_http_get(char* dst, size_t dst_len) {
     double xmin, ymin, xmax, ymax;
     int tw, th; wmap_get_target_size(&tw, &th);
+    double lat, lon, half_w_m;
+    wmap_get_config(&lat, &lon, &half_w_m);
     // Adjust vertical half-size to match target aspect
-    double half_h_m = WMAP_HALF_WIDTH_M * ((double)th / (double)tw);
-    wmap_center_to_bbox(WMAP_CENTER_LAT, WMAP_CENTER_LON,
-                        WMAP_HALF_WIDTH_M, half_h_m,
+    double half_h_m = half_w_m * ((double)th / (double)tw);
+    wmap_center_to_bbox(lat, lon,
+                        half_w_m, half_h_m,
                         &xmin, &ymin, &xmax, &ymax);
     char path[512];
     int pn = snprintf(path, sizeof(path),
@@ -96,9 +141,11 @@ static int bkg_build_http_get(char* dst, size_t dst_len) {
 static int dwd_build_http_get(char* dst, size_t dst_len) {
     double xmin, ymin, xmax, ymax;
     int tw, th; wmap_get_target_size(&tw, &th);
-    double half_h_m = WMAP_HALF_WIDTH_M * ((double)th / (double)tw);
-    wmap_center_to_bbox(WMAP_CENTER_LAT, WMAP_CENTER_LON,
-                        WMAP_HALF_WIDTH_M, half_h_m,
+    double lat, lon, half_w_m;
+    wmap_get_config(&lat, &lon, &half_w_m);
+    double half_h_m = half_w_m * ((double)th / (double)tw);
+    wmap_center_to_bbox(lat, lon,
+                        half_w_m, half_h_m,
                         &xmin, &ymin, &xmax, &ymax);
     char path[512];
     // Transparent PNG, WMS 1.1.1, SRS EPSG:3857
@@ -266,16 +313,62 @@ static void stream_complete_cb(bool success, void* arg) {
 static bool geodata_fetch_and_store_inline(const ip_addr_t* ip, uint16_t port,
                                            const char* req, size_t* out_len) {
     stage_ctx_t sctx = { .complete = false, .success = false, .total = 0, .is_bmp = false };
+    s_geodata_status.valid = false;
     http_result_t r = http_request_async_stream(ip, port, req,
                                                 stream_header_cb,
                                                 stream_data_cb,
                                                 stream_complete_cb,
                                                 &sctx);
-    if (r != HTTP_SUCCESS) return false;
-    int waits = 0; const int max_waits = 1000; // up to 10s
-    while (!sctx.complete && waits < max_waits) { sleep_ms(10); watchdog_update(); waits++; }
+    if (r != HTTP_SUCCESS) {
+        geodata_status_set(false, "connect error", 0);
+        clear_weathermap_meta();
+        return false;
+    }
+    const uint32_t idle_abort_ms = 10000; // abort if no progress for 10 s
+    const uint32_t hard_abort_ms = 60000; // fail-safe max duration
+    absolute_time_t start = get_absolute_time();
+    absolute_time_t last_progress = start;
+    size_t last_total = 0;
+    const char* failure_reason = NULL;
+
+    while (!sctx.complete) {
+        sleep_ms(10);
+        watchdog_update();
+
+        if (sctx.total != last_total) {
+            last_total = sctx.total;
+            last_progress = get_absolute_time();
+        }
+
+        if (absolute_time_diff_us(last_progress, get_absolute_time()) / 1000 > idle_abort_ms) {
+            debug_log_with_color(COLOR_RED,
+                                 "[GEODATA] Fetch stalled: %u bytes, no progress for %u ms\n",
+                                 (unsigned)sctx.total, idle_abort_ms);
+            failure_reason = "stalled";
+            break;
+        }
+
+        if (absolute_time_diff_us(start, get_absolute_time()) / 1000 > hard_abort_ms) {
+            debug_log_with_color(COLOR_RED,
+                                 "[GEODATA] Fetch timed out after %u ms (received %u bytes)\n",
+                                 hard_abort_ms, (unsigned)sctx.total);
+            failure_reason = "timeout";
+            break;
+        }
+    }
     if (out_len) *out_len = sctx.total;
-    return sctx.complete && sctx.success;
+
+    if (sctx.complete && sctx.success) {
+        geodata_status_set(true, NULL, sctx.total);
+        return true;
+    }
+
+    if (!failure_reason) {
+        failure_reason = sctx.success ? "aborted" : "transfer error";
+    }
+    geodata_status_set(false, failure_reason, sctx.total);
+    clear_weathermap_meta();
+    return false;
 }
 
 typedef struct {
@@ -324,10 +417,42 @@ bool weathermap_process_png_and_store(const uint8_t* png_data, size_t png_len) {
     return png_stream_decode_to_flash_from_xip(png_data, png_len);
 }
 
+static void weathermap_draw_error_page(void) {
+    Paint_SelectImage(Paint.Image);
+    Paint_Clear(GRAY4);
+
+    const sFONT* title_font = &Font16;
+    const sFONT* body_font = &Font12;
+
+    Paint_DrawString_EN(20, 20, "Weather map unavailable",
+                        (sFONT*)title_font, GRAY4, GRAY1);
+
+    if (s_geodata_status.valid && !s_geodata_status.success) {
+        char detail[64];
+        double kib = s_geodata_status.bytes / 1024.0;
+        const char* reason = s_geodata_status.reason[0] ? s_geodata_status.reason : "fetch error";
+        snprintf(detail, sizeof(detail), "%s after %.1f KiB", reason, kib);
+        Paint_DrawString_EN(20, 48, detail, (sFONT*)body_font, GRAY4, GRAY1);
+        Paint_DrawString_EN(20, 66, "Map will be retried next wake.",
+                            (sFONT*)body_font, GRAY4, GRAY1);
+    } else {
+        Paint_DrawString_EN(20, 48, "No cached data available.",
+                            (sFONT*)body_font, GRAY4, GRAY1);
+    }
+}
+
 bool weathermap_render_from_flash(void) {
     // Decode staged PNG in slot1 and draw directly into Paint at (10,10)
     uint32_t staged_bytes = 0;
     if (!get_weathermap_meta(&staged_bytes) || staged_bytes < 64) {
+        if (s_geodata_status.valid && !s_geodata_status.success) {
+            debug_log_with_color(COLOR_YELLOW,
+                                 "[WEATHERMAP] Rendering fallback: %s after %u bytes\n",
+                                 s_geodata_status.reason[0] ? s_geodata_status.reason : "error",
+                                 (unsigned)s_geodata_status.bytes);
+            weathermap_draw_error_page();
+            return true;
+        }
         debug_log_with_color(COLOR_YELLOW, "[WEATHERMAP] No staged PNG marker; cannot draw.\n");
         return false;
     }
@@ -350,7 +475,9 @@ bool weathermap_render_from_flash(void) {
 
         // Build label text for physical length (meters or km)
         char label[32];
-        double meters = (2.0 * WMAP_HALF_WIDTH_M) / 10.0;
+        double half_w_m = WMAP_DEFAULT_HALF_WIDTH_M;
+        wmap_get_config(NULL, NULL, &half_w_m);
+        double meters = (2.0 * half_w_m) / 10.0;
         if (meters >= 1000.0) {
             double km = meters / 1000.0;
             // Use 0 decimals if close to integer, else 1 decimal
