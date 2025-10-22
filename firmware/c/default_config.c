@@ -87,10 +87,10 @@ __attribute__((section(".weathermap_config")))
 __attribute__((used))
 const weathermap_config_t default_weathermap_config = {
     .data = {
-        .center_lat = WEATHERMAP_DEFAULT_CENTER_LAT,
-        .center_lon = WEATHERMAP_DEFAULT_CENTER_LON,
-        .half_width_m = WEATHERMAP_DEFAULT_HALF_WIDTH_M,
-        .flags = 0,
+        .center_lat = 53.326,
+        .center_lon = 8.532,
+        .half_width_m = 6000.0,
+        .flags = WEATHERMAP_CONFIG_VERSION,
         .reserved = {0},
     },
     .crc32 = 0,

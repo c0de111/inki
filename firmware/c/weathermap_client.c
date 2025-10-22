@@ -527,6 +527,12 @@ void geodata_fetch(void) {
     extern bool http_client_init(void);
     http_client_init();
 
+    // Ensure config exists with sane defaults before fetching
+    weathermap_config_t cfg_init;
+    if (!load_weathermap_config(&cfg_init)) {
+        init_weathermap_config(&cfg_init);
+    }
+
     // Always refetch on boot for now (later: schedule basemap vs radar differently)
     debug_log_with_color(COLOR_BOLD_YELLOW, "[GEODATA] Boot fetch enabled — fetching now.\n");
 

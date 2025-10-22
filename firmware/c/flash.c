@@ -5,6 +5,7 @@
 #include "webserver.h"
 #include "lwip/tcp.h"
 #include <string.h>
+#include <math.h>
 #include <stdio.h>
 #include "pico/time.h"
 #include "debug.h"
@@ -23,6 +24,19 @@
 #include "ds3231.h"
 #include "hardware/watchdog.h"
 #include "pico/cyw43_arch.h"
+
+#ifdef USE_CASE_WEATHERMAP
+static const weathermap_config_t s_weathermap_defaults = {
+    .data = {
+        .center_lat = WEATHERMAP_DEFAULT_CENTER_LAT,
+        .center_lon = WEATHERMAP_DEFAULT_CENTER_LON,
+        .half_width_m = WEATHERMAP_DEFAULT_HALF_WIDTH_M,
+        .flags = WEATHERMAP_CONFIG_VERSION,
+        .reserved = {0},
+    },
+    .crc32 = 0,
+};
+#endif
 
 // ------------------------------
 // CRC32 implementation
@@ -733,11 +747,33 @@ bool load_weathermap_config(weathermap_config_t* out_config) {
     memcpy(out_config, flash_config, sizeof(weathermap_config_t));
 
     uint32_t expected_crc = calc_crc32(&out_config->data, sizeof(weathermap_config_data_t));
-    return (expected_crc == out_config->crc32);
+    if (expected_crc != out_config->crc32) {
+        debug_log_with_color(COLOR_YELLOW, "[WMAP CONFIG] CRC mismatch\n");
+        return false;
+    }
+    if (out_config->data.flags != WEATHERMAP_CONFIG_VERSION) {
+        debug_log_with_color(COLOR_YELLOW, "[WMAP CONFIG] Version mismatch (0x%08X)\n", out_config->data.flags);
+        return false;
+    }
+    if ((out_config->data.center_lat == 0.0 && out_config->data.center_lon == 0.0) ||
+        !isfinite(out_config->data.center_lat) || !isfinite(out_config->data.center_lon) ||
+        out_config->data.half_width_m <= 0.0 || !isfinite(out_config->data.half_width_m)) {
+        debug_log_with_color(COLOR_YELLOW, "[WMAP CONFIG] Invalid values (lat=%.6f lon=%.6f half=%.2f)\n",
+                             out_config->data.center_lat,
+                             out_config->data.center_lon,
+                             out_config->data.half_width_m);
+        return false;
+    }
+    debug_log("[WMAP CONFIG] Loaded lat=%.6f lon=%.6f half=%.2f\n",
+              out_config->data.center_lat,
+              out_config->data.center_lon,
+              out_config->data.half_width_m);
+    return true;
 }
 
 bool save_weathermap_config(const weathermap_config_t* in_config) {
     weathermap_config_t temp = *in_config;
+    temp.data.flags = WEATHERMAP_CONFIG_VERSION;
     temp.crc32 = calc_crc32(&temp.data, sizeof(weathermap_config_data_t));
 
     const uint32_t sector_offset = WEATHERMAP_CONFIG_FLASH_OFFSET & ~(FLASH_SECTOR_SIZE - 1);
@@ -752,8 +788,9 @@ bool save_weathermap_config(const weathermap_config_t* in_config) {
 
 void init_weathermap_config(weathermap_config_t* out_config) {
     if (!load_weathermap_config(out_config)) {
-        save_weathermap_config(&weathermap_config_flash);
-        *out_config = weathermap_config_flash;
+        weathermap_config_t tmp = s_weathermap_defaults;
+        save_weathermap_config(&tmp);
+        *out_config = tmp;
     }
 }
 #endif
