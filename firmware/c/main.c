@@ -1973,7 +1973,7 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     else if ((device_config_flash.data.type == ROOM_TYPE_OFFICE || device_config_flash.data.number_of_seats >= 1) &&
         device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
-        Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold,  WHITE, BLACK);
+        Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_14pt_bold,  WHITE, BLACK);
 
     if (!draw_flash_logo(image_buffer, 290, 10)) {
         DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
