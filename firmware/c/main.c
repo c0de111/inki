@@ -1658,7 +1658,7 @@ static void render_page_0_homematic(ds3231_t* clock, UBYTE* image_buffer, float 
     }
 
     const sFONT* title_font = is_epaper_75 ? (const sFONT*)&font_ubuntu_mono_18pt_bold
-                                           : (const sFONT*)&font_ubuntu_mono_14pt_bold;
+                                           : (const sFONT*)&font_ubuntu_mono_12pt_bold;
 
     Paint_DrawString_EN(20, is_epaper_75 ? 40 : 20, device_config_flash.data.roomname,
                         (sFONT*)title_font, WHITE, BLACK);
