@@ -5028,7 +5028,7 @@
 		(descr "LGA-8, https://ae-bst.resource.bosch.com/media/_tech/media/datasheets/BST-BMP280-DS001-18.pdf")
 		(tags "lga land grid array")
 		(property "Reference" "U2"
-			(at 0.2 -2.2375 180)
+			(at 1.7 -2.1125 180)
 			(layer "B.SilkS")
 			(uuid "1ae3dd52-9e5d-4746-940d-f5084b6bef60")
 			(effects
