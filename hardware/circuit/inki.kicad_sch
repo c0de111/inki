@@ -4033,6 +4033,12 @@
 		(uuid "a31a9f57-661c-4f33-a6d9-152a881ff9d8")
 	)
 	(junction
+		(at 57.15 72.39)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "a358ffe5-55b0-4fe8-abf5-65e88f380640")
+	)
+	(junction
 		(at 26.67 109.22)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4069,6 +4075,12 @@
 		(uuid "bc1063e5-f187-4e97-8c5f-a58a9ee9ed5f")
 	)
 	(junction
+		(at 17.78 66.04)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "be5db886-2423-4fd5-9b17-72e6f92e0947")
+	)
+	(junction
 		(at 238.76 160.02)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4085,6 +4097,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c694c924-fdfd-4ed3-9b04-8e273fe882ca")
+	)
+	(junction
+		(at 17.78 72.39)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "c70e8648-d15b-490d-bdc0-25468b235a5b")
 	)
 	(junction
 		(at 120.65 149.86)
@@ -4306,6 +4324,16 @@
 	)
 	(wire
 		(pts
+			(xy 17.78 72.39) (xy 17.78 177.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "05fb95ff-7261-47b1-99f9-4207c14d4a63")
+	)
+	(wire
+		(pts
 			(xy 120.65 31.75) (xy 120.65 36.83)
 		)
 		(stroke
@@ -4446,6 +4474,16 @@
 	)
 	(wire
 		(pts
+			(xy 27.94 30.48) (xy 27.94 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "107d068c-1d79-4ee8-aece-d797892083df")
+	)
+	(wire
+		(pts
 			(xy 40.64 105.41) (xy 40.64 139.7)
 		)
 		(stroke
@@ -4466,6 +4504,16 @@
 	)
 	(wire
 		(pts
+			(xy 20.32 60.96) (xy 21.59 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "11d16808-562c-4e83-b5c2-257f6be19295")
+	)
+	(wire
+		(pts
 			(xy 238.76 149.86) (xy 238.76 152.4)
 		)
 		(stroke
@@ -4476,7 +4524,7 @@
 	)
 	(wire
 		(pts
-			(xy 54.61 134.62) (xy 127 134.62)
+			(xy 57.15 134.62) (xy 127 134.62)
 		)
 		(stroke
 			(width 0)
@@ -4566,16 +4614,6 @@
 	)
 	(wire
 		(pts
-			(xy 60.96 58.42) (xy 34.29 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1b45333e-4f3f-4286-8d2c-3c63eea8c2a0")
-	)
-	(wire
-		(pts
 			(xy 96.52 17.78) (xy 96.52 30.48)
 		)
 		(stroke
@@ -4616,6 +4654,16 @@
 	)
 	(wire
 		(pts
+			(xy 29.21 72.39) (xy 57.15 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1d5cf549-ba66-498e-9eb5-3aeda9233df5")
+	)
+	(wire
+		(pts
 			(xy 119.38 34.29) (xy 119.38 59.69)
 		)
 		(stroke
@@ -4636,7 +4684,7 @@
 	)
 	(wire
 		(pts
-			(xy 29.21 54.61) (xy 29.21 49.53)
+			(xy 48.26 54.61) (xy 48.26 49.53)
 		)
 		(stroke
 			(width 0)
@@ -4683,16 +4731,6 @@
 			(type default)
 		)
 		(uuid "25c06cec-a5cd-4c25-a270-b74b83a00d0c")
-	)
-	(wire
-		(pts
-			(xy 27.94 68.58) (xy 54.61 68.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "26195ba2-13c0-429f-8f7a-b7a4d94a08bd")
 	)
 	(wire
 		(pts
@@ -4753,6 +4791,16 @@
 			(type default)
 		)
 		(uuid "282abded-623e-4046-97f8-fd35d62466b8")
+	)
+	(wire
+		(pts
+			(xy 17.78 66.04) (xy 17.78 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "29419760-34c9-4d19-abb7-5fd14ed36e8b")
 	)
 	(wire
 		(pts
@@ -5096,6 +5144,16 @@
 	)
 	(wire
 		(pts
+			(xy 17.78 66.04) (xy 29.21 66.04)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3edf9117-c001-40ac-8529-39ad301bb90a")
+	)
+	(wire
+		(pts
 			(xy 180.34 41.91) (xy 180.34 44.45)
 		)
 		(stroke
@@ -5226,6 +5284,16 @@
 	)
 	(wire
 		(pts
+			(xy 34.29 58.42) (xy 60.96 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "49c65aa0-6ef2-47a0-98ad-65b86611867f")
+	)
+	(wire
+		(pts
 			(xy 74.93 45.72) (xy 74.93 175.26)
 		)
 		(stroke
@@ -5243,6 +5311,16 @@
 			(type default)
 		)
 		(uuid "4b180602-65fd-43e0-b6fe-40c2c8527b24")
+	)
+	(wire
+		(pts
+			(xy 27.94 52.07) (xy 29.21 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b4eb785-ca2c-4c98-ba42-7c33cf9ee6fb")
 	)
 	(wire
 		(pts
@@ -5346,6 +5424,16 @@
 	)
 	(wire
 		(pts
+			(xy 17.78 72.39) (xy 21.59 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "51543153-cc79-4be1-b0a3-414e80be833d")
+	)
+	(wire
+		(pts
 			(xy 88.9 33.02) (xy 88.9 35.56)
 		)
 		(stroke
@@ -5406,17 +5494,7 @@
 	)
 	(wire
 		(pts
-			(xy 27.94 41.91) (xy 27.94 68.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "55d0a172-2327-490d-9643-3783e52c8f1c")
-	)
-	(wire
-		(pts
-			(xy 54.61 68.58) (xy 54.61 134.62)
+			(xy 57.15 68.58) (xy 57.15 72.39)
 		)
 		(stroke
 			(width 0)
@@ -5676,6 +5754,16 @@
 	)
 	(wire
 		(pts
+			(xy 57.15 72.39) (xy 57.15 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6b7ff296-4750-4f3d-b88d-3083b457f94b")
+	)
+	(wire
+		(pts
 			(xy 26.67 109.22) (xy 29.21 109.22)
 		)
 		(stroke
@@ -5696,7 +5784,7 @@
 	)
 	(wire
 		(pts
-			(xy 29.21 54.61) (xy 181.61 54.61)
+			(xy 48.26 54.61) (xy 181.61 54.61)
 		)
 		(stroke
 			(width 0)
@@ -6146,7 +6234,7 @@
 	)
 	(wire
 		(pts
-			(xy 29.21 49.53) (xy 17.78 49.53)
+			(xy 48.26 49.53) (xy 17.78 49.53)
 		)
 		(stroke
 			(width 0)
@@ -6353,6 +6441,16 @@
 			(type default)
 		)
 		(uuid "a2ff5db3-e499-476e-be24-5c3196f0f8d1")
+	)
+	(wire
+		(pts
+			(xy 20.32 68.58) (xy 20.32 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a3263020-807c-4a6f-baa6-a7aa119083e9")
 	)
 	(wire
 		(pts
@@ -6653,6 +6751,16 @@
 			(type default)
 		)
 		(uuid "b7a8db81-4bc3-4a73-b56a-92748f3e8593")
+	)
+	(wire
+		(pts
+			(xy 48.26 68.58) (xy 57.15 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b7f1d22b-11c5-49dd-853e-ebcff8b125f7")
 	)
 	(wire
 		(pts
@@ -7126,6 +7234,16 @@
 	)
 	(wire
 		(pts
+			(xy 29.21 52.07) (xy 29.21 55.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d33aa2a2-ed43-4921-b3fc-3a4518ff522c")
+	)
+	(wire
+		(pts
 			(xy 128.27 53.34) (xy 148.59 53.34)
 		)
 		(stroke
@@ -7356,16 +7474,6 @@
 	)
 	(wire
 		(pts
-			(xy 27.94 30.48) (xy 27.94 34.29)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e4f532cb-66d1-4662-b7c4-d90fa24b220b")
-	)
-	(wire
-		(pts
 			(xy 53.34 142.24) (xy 53.34 138.43)
 		)
 		(stroke
@@ -7526,6 +7634,16 @@
 	)
 	(wire
 		(pts
+			(xy 20.32 68.58) (xy 40.64 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f3d52704-83f0-4952-b245-62c71a569b74")
+	)
+	(wire
+		(pts
 			(xy 21.59 77.47) (xy 21.59 81.28)
 		)
 		(stroke
@@ -7536,7 +7654,7 @@
 	)
 	(wire
 		(pts
-			(xy 17.78 60.96) (xy 17.78 177.8)
+			(xy 17.78 60.96) (xy 17.78 66.04)
 		)
 		(stroke
 			(width 0)
@@ -7968,76 +8086,6 @@
 			(justify left bottom)
 		)
 		(uuid "f336d02b-040c-4dcc-8de2-02d61bf6c233")
-	)
-	(symbol
-		(lib_id "Device:R_US")
-		(at 27.94 38.1 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "073ea5c5-93b8-43fa-851e-79ef8480b834")
-		(property "Reference" "R21"
-			(at 30.48 36.8299 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "100k"
-			(at 30.48 39.3699 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
-			(at 28.956 38.354 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 27.94 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 27.94 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "46503522-6da1-4d89-80fe-69b2f9f72f72")
-		)
-		(pin "2"
-			(uuid "5401aa20-bdb8-4d34-8d08-313f233c0223")
-		)
-		(instances
-			(project "inki"
-				(path "/240a819b-80d5-474c-958b-cef4297f8f8c"
-					(reference "R21")
-					(unit 1)
-				)
-			)
-		)
 	)
 	(symbol
 		(lib_id "Device:R_US")
@@ -9119,7 +9167,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1M"
+		(property "Value" "2.2M"
 			(at 30.48 25.3999 0)
 			(effects
 				(font
@@ -9887,6 +9935,81 @@
 		)
 	)
 	(symbol
+		(lib_id "Transistor_BJT:MMBT3904")
+		(at 26.67 60.96 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "978fa8d7-0723-4a0f-b55b-cf08750a72e7")
+		(property "Reference" "Q4"
+			(at 31.75 59.6899 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MMBT3904"
+			(at 29.718 62.738 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-23"
+			(at 31.75 62.865 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.onsemi.com/pdf/datasheet/pzt3904-d.pdf"
+			(at 26.67 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 26.67 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "a235c07a-7661-4909-a60e-9dbb3c8e2644")
+		)
+		(pin "2"
+			(uuid "b89aa927-763d-4c0d-900b-985df9fe74e5")
+		)
+		(pin "3"
+			(uuid "67aa8233-d071-4ce6-99b0-dd3519f61a34")
+		)
+		(instances
+			(project "inki"
+				(path "/240a819b-80d5-474c-958b-cef4297f8f8c"
+					(reference "Q4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector:Conn_01x02_Socket")
 		(at 264.16 109.22 270)
 		(unit 1)
@@ -10545,6 +10668,74 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_US")
+		(at 44.45 68.58 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "c1999671-d01f-4cb3-9d86-53e0326681cc")
+		(property "Reference" "R21"
+			(at 44.45 62.23 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "1k"
+			(at 44.45 64.77 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 44.196 69.596 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 44.45 68.58 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 44.45 68.58 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ab7f02f1-dede-4948-8452-48ecd579c562")
+		)
+		(pin "2"
+			(uuid "756155db-96e8-491b-bad9-62a5a00d72e9")
+		)
+		(instances
+			(project "inki"
+				(path "/240a819b-80d5-474c-958b-cef4297f8f8c"
+					(reference "R21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Diode:BAT54J")
 		(at 34.29 44.45 270)
 		(unit 1)
@@ -10745,6 +10936,73 @@
 			(project "inki"
 				(path "/240a819b-80d5-474c-958b-cef4297f8f8c"
 					(reference "D8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 25.4 72.39 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "cca8e551-5ebb-47d2-93e8-1519d12b4c28")
+		(property "Reference" "R22"
+			(at 22.352 74.676 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "50k"
+			(at 29.718 70.358 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 25.654 71.374 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 25.4 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 25.4 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ac972f51-1882-4435-9e08-040843889d71")
+		)
+		(pin "2"
+			(uuid "43d06f12-f95c-428b-8fef-4fc984a167ba")
+		)
+		(instances
+			(project "inki"
+				(path "/240a819b-80d5-474c-958b-cef4297f8f8c"
+					(reference "R22")
 					(unit 1)
 				)
 			)
@@ -11249,10 +11507,9 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "ee2679dc-91e5-4486-9e29-8d55b77fa0e9")
 		(property "Reference" "R14"
-			(at 20.32 55.8799 0)
+			(at 11.43 56.134 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11261,7 +11518,7 @@
 			)
 		)
 		(property "Value" "200k"
-			(at 20.32 58.4199 0)
+			(at 11.43 58.674 0)
 			(effects
 				(font
 					(size 1.27 1.27)
