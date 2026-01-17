@@ -671,6 +671,10 @@
     [
       "240a819b-80d5-474c-958b-cef4297f8f8c",
       "Root"
+    ],
+    [
+      "8aac0e89-39a1-4909-a5ea-b7760d4f132b",
+      "optional i2c device"
     ]
   ],
   "text_variables": {}
