@@ -1,0 +1,15 @@
+### Footprint positions - created on 2026-01-20T19:39:20+0100 ###
+### Printed by KiCad version 9.0.3+dfsg-1
+## Unit = mm, Angle = deg.
+## Side : top
+# Ref         Val                Package                                                 PosX       PosY       Rot  Side
+J1            ePaper_Connector   PinHeader_1x08_P2.54mm_Vertical                      18.0000   -33.7700    0.0000  top
+J2            Conn_01x02_Socket  PinHeader_1x02_P2.54mm_Vertical                      18.0000   -61.4750    0.0000  top
+J3            Conn_01x02_Socket  PinHeader_1x02_P2.54mm_Vertical                      59.3500   -26.6500  180.0000  top
+J4            Conn_01x02_Socket  PinHeader_1x02_P2.54mm_Vertical                      18.0000   -23.3750    0.0000  top
+J5            Conn_01x02_Socket  PinHeader_1x02_P2.54mm_Vertical                      18.0000   -55.2750    0.0000  top
+J7            Conn_01x02_Socket  PinHeader_1x02_P2.54mm_Vertical                      57.8500   -66.4000   90.0000  top
+SW1           SW_DIP_x04         SW_DIP_SPSTx04_Slide_9.78x12.34mm_W8.61mm_P2.54mm    51.0000   -26.1000   90.0000  top
+battery_RTC1  Battery_3.7V       BatteryHolder_LINX_BAT-HLD-012-SMT                   52.1000   -43.4000  -90.0000  top
+pico1         SC0918             MODULE_SC0918                                        31.7800   -42.7800    0.0000  top
+## End

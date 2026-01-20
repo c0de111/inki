@@ -1,0 +1,51 @@
+### Footprint positions - created on 2026-01-20T19:39:20+0100 ###
+### Printed by KiCad version 9.0.3+dfsg-1
+## Unit = mm, Angle = deg.
+## Side : bottom
+# Ref     Val          Package                                           PosX       PosY       Rot  Side
+C1        100nF        C_0805_2012Metric                              35.8500   -58.4000   90.0000  bottom
+C2        100nF        C_0805_2012Metric                              30.1000   -59.6000   90.0000  bottom
+C3        100nF        C_0805_2012Metric                              57.1000   -62.4000  -90.0000  bottom
+C4        100nF        C_0805_2012Metric                              30.0000   -22.9000   90.0000  bottom
+C5        100nF        C_0805_2012Metric                              30.0000   -38.3500    0.0000  bottom
+C6        100nF        C_0805_2012Metric                              52.0000   -38.5000  180.0000  bottom
+C7        100nF        C_0805_2012Metric                              25.4000   -48.9000  -90.0000  bottom
+C8        100nF        C_0805_2012Metric                              44.0800   -47.5300    0.0000  bottom
+D1        BAT54J       D_SOD-323_HandSoldering                        57.3000   -51.9000    0.0000  bottom
+D2        1N4148WS     D_SOD-323_HandSoldering                        57.3000   -49.8000  180.0000  bottom
+D3        BAT54J       D_SOD-323_HandSoldering                        29.2000   -50.0000  180.0000  bottom
+D4        BAT54J       D_SOD-323_HandSoldering                        33.9000   -50.0000    0.0000  bottom
+D5        BAT54J       D_SOD-323_HandSoldering                        19.2000   -30.0500  -90.0000  bottom
+D6        BAT54J       D_SOD-323_HandSoldering                        17.1000   -30.0500  -90.0000  bottom
+D7        BAT54J       D_SOD-323_HandSoldering                        26.3000   -21.7000    0.0000  bottom
+D8        BAT54J       D_SOD-323_HandSoldering                        26.3000   -23.7000    0.0000  bottom
+Q1        TSM260P02CX  SOT-23_Handsoldering                           27.3000   -29.8000   90.0000  bottom
+Q2        MMBT3904     SOT-23                                         29.8750   -42.7800   90.0000  bottom
+Q3        TSM260P02CX  SOT-23_Handsoldering                           30.7000   -65.9000    0.0000  bottom
+Q4        MMBT3904     SOT-23                                         26.2000   -66.2000  -90.0000  bottom
+R1        200k         R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    35.4000   -65.6000    0.0000  bottom
+R2        1M           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    27.2000   -34.9000    0.0000  bottom
+R3        4k7          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    48.7000   -52.4000  -90.0000  bottom
+R4        4k7          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    46.4000   -52.4000  -90.0000  bottom
+R5        1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    34.0400   -46.5900  180.0000  bottom
+R6        220R         R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    60.3500   -63.1500  180.0000  bottom
+R7        200k         R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    59.1000   -31.7000  -90.0000  bottom
+R8        200k         R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    59.0000   -36.4000  -90.0000  bottom
+R9        50k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    28.9700   -46.5900  180.0000  bottom
+R10       1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    27.3000   -59.5000   90.0000  bottom
+R11       1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    26.2000   -25.9000    0.0000  bottom
+R12       1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    26.0000   -39.7000    0.0000  bottom
+R13       1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    25.4000   -45.1000  -90.0000  bottom
+R14       200k         R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    35.4000   -67.7000  180.0000  bottom
+R15       2M2          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    39.9000   -69.0000  180.0000  bottom
+R16       22R          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    57.6000   -45.3000   90.0000  bottom
+R17       10k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    27.0000   -15.9000  180.0000  bottom
+R18       10k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    27.0000   -18.3000  180.0000  bottom
+R19       10k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    32.4000   -30.1000  180.0000  bottom
+R20       10k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    32.4000   -32.1000  180.0000  bottom
+R21       1k           R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    26.7000   -62.6000    0.0000  bottom
+R22       50k          R_0805_2012Metric_Pad1.20x1.40mm_HandSolder    20.5000   -65.4000   90.0000  bottom
+U1        DS3231M      SOIC-16W_7.5x10.3mm_P1.27mm                    50.1000   -61.8300  -90.0000  bottom
+U2        BMP581       BMP581                                         52.0000   -41.3625  180.0000  bottom
+U3        RV-3028-C7   MicroCrystal_C7_SON-8_1.5x3.2mm_P0.9mm         45.7300   -44.0200  -90.0000  bottom
+## End

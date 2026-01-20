@@ -501,8 +501,8 @@
       "gencad": "",
       "idf": "",
       "netlist": "../../../",
-      "plot": "",
-      "pos_files": "",
+      "plot": "gerber/",
+      "pos_files": "gerber/",
       "specctra_dsn": "",
       "step": "esign_simple.step",
       "svg": "/home/nicolas/esign-circuit/board_250405.svg",
@@ -674,7 +674,7 @@
     ],
     [
       "8aac0e89-39a1-4909-a5ea-b7760d4f132b",
-      "optional i2c device"
+      "optional i2c devices"
     ]
   ],
   "text_variables": {}
