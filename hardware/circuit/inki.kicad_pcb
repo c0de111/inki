@@ -18534,8 +18534,8 @@
 			)
 		)
 	)
-	(gr_text "23. September 2025"
-		(at 60.85 43.65 90)
+	(gr_text "20. Januar 2026, 2536c649"
+		(at 61.19 41.64 90)
 		(layer "F.SilkS")
 		(uuid "7ca68f12-9dcf-4c0d-856a-f942f963afde")
 		(effects
