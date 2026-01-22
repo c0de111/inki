@@ -83,9 +83,7 @@ ds3231_clock_setup/
 *.bak
 **/fp-info-cache
 
-CLAUDE.md
 .claude/
-AGENTS.md
 # External UF2 tools (auto-downloaded by create_uf2.sh)
 firmware/c/uf2conv.py
 firmware/c/uf2families.json
@@ -103,3 +101,6 @@ firmware/c/certs/*.pem
 firmware/c/certs/*.p7c
 firmware/c/certs/trust_store.pem
 firmware/c/certs/trust_store_pem.h
+
+# Public export output
+out/

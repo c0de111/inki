@@ -235,19 +235,6 @@ Useful as an on-device quick reference.
 
 ---
 
-### Page 5: *(Currently unused)*  
-Reserved for future features. 
-<!--<p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_5.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_5.JPG" alt="page 5 eSign Device" width="400" style="border-radius: 8px;">
-  </a>
-</p>-->
-
----
-
-### Page 6–7: *(Currently unused)*  
-Reserved for future features. 
-
 ## Configuration via Web Interface
 
 Should be self-explanatory.
