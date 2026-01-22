@@ -224,14 +224,7 @@ Shows technical details such as Wi-Fi settings, update intervals, battery voltag
 ---
 
 ### Page 4: **How to Show Pages**  
-Explains the startup page selection mechanism using button combinations.  
-Useful as an on-device quick reference.
 
-<p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_4.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_4.JPG" alt="page 4 eSign Device" width="400" style="border-radius: 8px;">
-  </a>
-</p>
 
 ---
 
