@@ -27,6 +27,27 @@ export PICO_SDK_PATH="${PICO_SDK_PATH:-$HOME/pico/pico-sdk}"
 USB_BOOTLOADER_ENABLE=0
 USE_CASE="SEATSURFING"  # Default use case
 
+# ----------------------------------------------------------------------------- 
+# Work around pico-sdk 2.1.0 + GCC 15 host build failure (pioasm lacks <cstdint>)
+# This patches the SDK headers in place, idempotently, so fresh clones/build dirs work.
+patch_pioasm_headers() {
+  local sdk="$PICO_SDK_PATH"
+  local files=(
+    "$sdk/tools/pioasm/pio_types.h"
+    "$sdk/tools/pioasm/output_format.h"
+  )
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || continue
+    if ! grep -q '<cstdint>' "$f"; then
+      echo "Patching $f to include <cstdint> (fixes GCC 15 build of pioasm)..."
+      # Insert after the last existing std/SDK include to keep ordering stable
+      perl -0777 -i -pe 's/(#include[^\n]*\n)(?=(\n|struct))/\1#include <cstdint>\n/ if ! /<cstdint>/' "$f"
+    fi
+  done
+}
+
+patch_pioasm_headers
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
