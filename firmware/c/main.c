@@ -708,7 +708,7 @@ typedef struct {
 } seat_info_t;
 
 // Forward declaration
-seat_info_t parse_seat_info(const char* json);
+seat_info_t parse_seat_info(const char* json, const char* target_space_id);
 
 // Global variable to store SeatSurfing data (accessible to display functions)
 static seat_info_t seatsurfing_data = {0};
@@ -723,23 +723,47 @@ void seatsurfing_data_received(const char* response_data, size_t length, void* a
     debug_log_with_color(COLOR_GREEN,
                          "[SEATSURFING] Received %d bytes of response data\n", (int)length);
 
-    // Parse JSON into seat_info_t using existing parse_seat_info function
-    seatsurfing_data = parse_seat_info(response_data);
+    const char* target = NULL;
+    if (seatsurfing_config_flash.data.seat_count > 0 &&
+        seatsurfing_config_flash.data.space_ids[0][0]) {
+        target = seatsurfing_config_flash.data.space_ids[0];
+    }
+
+    // Parse JSON into seat_info_t using existing parse function
+    seatsurfing_data = parse_seat_info(response_data, target);
     
     debug_log("[SEATSURFING] Parsed seat info - Available: %s, Occupant: %s\n",
               seatsurfing_data.is_available ? "YES" : "NO",
               seatsurfing_data.user_email[0] ? seatsurfing_data.user_email : "None");
 }
 
-seat_info_t parse_seat_info(const char* json) {
+seat_info_t parse_seat_info(const char* json, const char* target_space_id) {
     seat_info_t info = {
         .is_available = true,
         .user_email = {0},
         .desk_name = {0}
     };
 
+    const char* search_start = json;
+    if (target_space_id && *target_space_id) {
+        const char* idpos = strstr(json, "\"id\":\"");
+        while (idpos) {
+            idpos += strlen("\"id\":\"");
+            const char* endq = strchr(idpos, '"');
+            if (endq) {
+                size_t idlen = endq - idpos;
+                if (idlen == strlen(target_space_id) &&
+                    strncmp(idpos, target_space_id, idlen) == 0) {
+                    search_start = idpos;
+                    break;
+                }
+            }
+            idpos = strstr(endq ? endq : idpos + 1, "\"id\":\"");
+        }
+    }
+
     // Parse "available"
-    const char* avail = strstr(json, "\"available\":");
+    const char* avail = strstr(search_start, "\"available\":");
     if (avail) {
         avail += strlen("\"available\":");
         info.is_available = (strncmp(avail, "true", 4) == 0);
@@ -747,7 +771,7 @@ seat_info_t parse_seat_info(const char* json) {
 
     // Parse "userEmail" if not available
     if (!info.is_available) {
-        const char* email = strstr(json, "\"userEmail\":\"");
+        const char* email = strstr(search_start, "\"userEmail\":\"");
         if (email) {
             email += strlen("\"userEmail\":\"");
             const char* end = strchr(email, '"');

@@ -1186,7 +1186,6 @@ static bool seatsurfing_make_request(void) {
         header, sizeof(header),
         seatsurfing_config_flash.data.host,
         seatsurfing_config_flash.data.location_id,
-        seatsurfing_config_flash.data.space_id,
         auth_b64);
     if (hlen < 0) {
         debug_log_with_color(COLOR_RED, "[SEATSURFING] Failed to build HTTP request\n");

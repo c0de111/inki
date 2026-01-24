@@ -42,8 +42,13 @@ const seatsurfing_config_t default_seatsurfing_config = {
         .port = 8080,
         .username = "default_esign@seatsurfing.local",
         .password = "default_password",
-        .space_id = "default_space_id",
-        .location_id = "default_location_id"
+        .location_id = "default_location_id",
+        .seat_count = 1,
+        .space_ids = {
+            "default_space_id",
+            "",
+            ""
+        }
     },
     .crc32 = 0
 };

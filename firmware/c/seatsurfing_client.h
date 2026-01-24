@@ -10,10 +10,8 @@
 int seatsurfing_build_http_request(char* buffer, size_t buffer_size,
                                    const char* host,
                                    const char* location_id,
-                                   const char* space_id,
                                    const char* auth_b64);
 
 #endif // USE_CASE_SEATSURFING
 
 #endif // SEATSURFING_CLIENT_H
-

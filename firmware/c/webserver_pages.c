@@ -1004,7 +1004,7 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
              seatsurfing_config_flash.data.password,
              ip_string,
              seatsurfing_config_flash.data.port,
-             seatsurfing_config_flash.data.space_id,
+             seatsurfing_config_flash.data.space_ids[0],
              seatsurfing_config_flash.data.location_id,
              timeout_info);
 
@@ -1548,8 +1548,11 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
 
     new_cfg.data.port = (uint16_t)atoi(result.text[4]);
 
-    strncpy(new_cfg.data.space_id,    result.text[5], sizeof(new_cfg.data.space_id)    - 1);
-    strncpy(new_cfg.data.location_id, result.text[6], sizeof(new_cfg.data.location_id) - 1);
+    // For now, support single seat via space_ids[0]; will expand to multi-seat later.
+    new_cfg.data.seat_count = 1;
+    memset(new_cfg.data.space_ids, 0, sizeof(new_cfg.data.space_ids));
+    strncpy(new_cfg.data.space_ids[0], result.text[5], sizeof(new_cfg.data.space_ids[0]) - 1);
+    strncpy(new_cfg.data.location_id,  result.text[6], sizeof(new_cfg.data.location_id)  - 1);
 
     bool ok = save_seatsurfing_config(&new_cfg);
     if (ok) {
