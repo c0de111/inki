@@ -6,7 +6,7 @@
 #define SEATSURFING_PWD_MAX_LEN      64
 #define SEATSURFING_SPACE_ID_LEN     64
 #define SEATSURFING_LOCATION_ID_LEN  64
-#define SEATSURFING_MAX_SEATS        3
+#define SEATSURFING_MAX_SEATS        4
 
 typedef struct {
     char host[SEATSURFING_HOST_MAX_LEN];

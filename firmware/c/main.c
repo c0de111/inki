@@ -22,6 +22,7 @@
 #include "main.h"
 #include "http_client.h"
 #include "base64.h"
+#include "seatsurfing_client.h"
 #include "historian_config.h"
 #include "led.h"
 #include "morse.h"
@@ -701,17 +702,8 @@ void read_mac_address() {
 
 //  ---------------------start functions for data from server --------------------------------
 
-typedef struct {
-    bool is_available;
-    char user_email[64];  // empty if available
-    char desk_name[32];   // "Desk 3", "Platz 1", etc.
-} seat_info_t;
-
-// Forward declaration
-seat_info_t parse_seat_info(const char* json, const char* target_space_id);
-
-// Global variable to store SeatSurfing data (accessible to display functions)
-static seat_info_t seatsurfing_data = {0};
+// Global array to store SeatSurfing data per configured seat (display uses first seat on 4.2")
+static seat_info_t seatsurfing_data[SEATSURFING_MAX_SEATS] = {0};
 
 // Callback for SeatSurfing data (unified callback architecture)
 void seatsurfing_data_received(const char* response_data, size_t length, void* arg) {
@@ -723,81 +715,21 @@ void seatsurfing_data_received(const char* response_data, size_t length, void* a
     debug_log_with_color(COLOR_GREEN,
                          "[SEATSURFING] Received %d bytes of response data\n", (int)length);
 
-    const char* target = NULL;
-    if (seatsurfing_config_flash.data.seat_count > 0 &&
-        seatsurfing_config_flash.data.space_ids[0][0]) {
-        target = seatsurfing_config_flash.data.space_ids[0];
+    // Clamp seat count (currently render supports up to 3 on 7.5")
+    uint8_t seat_count = seatsurfing_config_flash.data.seat_count;
+    if (seat_count == 0) seat_count = 1;
+    if (seat_count > 3) seat_count = 3;
+
+    // Parse JSON for each configured seat (by name or ID)
+    for (uint8_t i = 0; i < seat_count; i++) {
+        const char* target = seatsurfing_config_flash.data.space_ids[i];
+        seatsurfing_data[i] = seatsurfing_parse_seat_info(response_data, target);
     }
 
-    // Parse JSON into seat_info_t using existing parse function
-    seatsurfing_data = parse_seat_info(response_data, target);
-    
-    debug_log("[SEATSURFING] Parsed seat info - Available: %s, Occupant: %s\n",
-              seatsurfing_data.is_available ? "YES" : "NO",
-              seatsurfing_data.user_email[0] ? seatsurfing_data.user_email : "None");
-}
-
-seat_info_t parse_seat_info(const char* json, const char* target_space_id) {
-    seat_info_t info = {
-        .is_available = true,
-        .user_email = {0},
-        .desk_name = {0}
-    };
-
-    const char* search_start = json;
-    if (target_space_id && *target_space_id) {
-        const char* idpos = strstr(json, "\"id\":\"");
-        while (idpos) {
-            idpos += strlen("\"id\":\"");
-            const char* endq = strchr(idpos, '"');
-            if (endq) {
-                size_t idlen = endq - idpos;
-                if (idlen == strlen(target_space_id) &&
-                    strncmp(idpos, target_space_id, idlen) == 0) {
-                    search_start = idpos;
-                    break;
-                }
-            }
-            idpos = strstr(endq ? endq : idpos + 1, "\"id\":\"");
-        }
-    }
-
-    // Parse "available"
-    const char* avail = strstr(search_start, "\"available\":");
-    if (avail) {
-        avail += strlen("\"available\":");
-        info.is_available = (strncmp(avail, "true", 4) == 0);
-    }
-
-    // Parse "userEmail" if not available
-    if (!info.is_available) {
-        const char* email = strstr(search_start, "\"userEmail\":\"");
-        if (email) {
-            email += strlen("\"userEmail\":\"");
-            const char* end = strchr(email, '"');
-            if (end) {
-                size_t len = end - email;
-                if (len >= sizeof(info.user_email)) len = sizeof(info.user_email) - 1;
-                strncpy(info.user_email, email, len);
-                info.user_email[len] = 0;
-            }
-        }
-    }
-
-    // Parse "name"
-    const char* name = strstr(json, "\"name\":\"");
-    if (name) {
-        name += strlen("\"name\":\"");
-        const char* end = strchr(name, '"');
-        if (end) {
-            size_t len = end - name;
-            if (len >= sizeof(info.desk_name)) len = sizeof(info.desk_name) - 1;
-            strncpy(info.desk_name, name, len);
-            info.desk_name[len] = 0;
-        }
-    }
-
-    return info;
+    debug_log("[SEATSURFING] Parsed %u seats (first avail=%s, user=%s)\n",
+              seat_count,
+              seatsurfing_data[0].is_available ? "YES" : "NO",
+              seatsurfing_data[0].user_email[0] ? seatsurfing_data[0].user_email : "None");
 }
 
 
@@ -1969,24 +1901,49 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
     if (device_config_flash.data.type == ROOM_TYPE_OFFICE && device_config_flash.data.number_of_seats == 3 &&
         device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
-    // Display room name & logo
-    Paint_DrawString_EN(40, 50, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
+        // Header: room name + logo
+        Paint_DrawString_EN(40, 50, device_config_flash.data.roomname, &font_ubuntu_mono_28pt_bold,  WHITE, BLACK);
+        if (!draw_flash_logo(image_buffer, EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 20, 20)) {
+            DrawSubImage(image_buffer, &inki_octopus_100_95, EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 20, 20);
+        }
 
-    // Use parsed data from callback (data processing already done)
-    seat_info_t seat = seatsurfing_data;
+        // Clamp seats to 3 (current layout)
+        uint8_t seat_count = device_config_flash.data.number_of_seats;
+        if (seat_count == 0) seat_count = 1;
+        if (seat_count > 3) seat_count = 3;
 
-    char linebuf[64];
-    if (seat.is_available) {
-        strncpy(linebuf, "frei", sizeof(linebuf));
-    } else {
-        format_name_from_email(seat.user_email, linebuf, sizeof(linebuf));
-    }
+        // Vertical separator (between left/right blocks)
+        Paint_DrawLine(380, 170, 380, 300, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
-    Paint_DrawString_EN(400, 320, linebuf, &font_ubuntu_mono_14pt_bold, WHITE, BLACK);
+        // Helper macro to draw one seat block with name/status
+        #define DRAW_SEAT(xpos, ypos, seat_ref, name_font, status_font)              \
+            do {                                                                     \
+                char status[64];                                                     \
+                if ((seat_ref).is_available) {                                       \
+                    strncpy(status, "frei", sizeof(status));                         \
+                } else {                                                             \
+                    format_name_from_email((seat_ref).user_email, status, sizeof(status)); \
+                }                                                                    \
+                Paint_DrawString_EN((xpos), (ypos), status, (status_font), WHITE, BLACK); \
+                Paint_DrawString_EN((xpos), (ypos) + 70, (seat_ref).desk_name, (name_font), WHITE, BLACK); \
+            } while (0)
 
-    // Draw a vertical separator line
-    Paint_DrawLine(380, 170, 380, 300, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+        /* Layout mapping to match the original design:
+         *  - space_ids[2] at top-left
+         *  - space_ids[1] at top-right
+         *  - space_ids[0] centered lower
+         */
+        if (seat_count >= 3) {
+            DRAW_SEAT(40, 190, seatsurfing_data[2], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+        }
+        if (seat_count >= 2) {
+            DRAW_SEAT(400, 190, seatsurfing_data[1], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+        }
+        if (seat_count >= 1) {
+            DRAW_SEAT(400, 320, seatsurfing_data[0], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+        }
 
+        #undef DRAW_SEAT
     }
     else if ((device_config_flash.data.type == ROOM_TYPE_CONFERENCE ) &&
         device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
@@ -2003,8 +1960,8 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
     }
 
-    // Use parsed data from callback (data processing already done)
-    seat_info_t seat = seatsurfing_data;
+    // Use first seat only on 4.2"
+    seat_info_t seat = seatsurfing_data[0];
 
     // Top line: desk name (e.g. "Desk 3")
     Paint_DrawString_EN(40, 220, seat.desk_name, &font_ubuntu_mono_14pt, WHITE, BLACK);
