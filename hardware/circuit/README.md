@@ -1,11 +1,11 @@
-# eSign Circuit
+# inki Circuit
 
-This repository contains the electronic schematic and hardware documentation for the **eSign** project — a battery-powered, low-power circuit employing  a Raspberry Pi Pico W and a DS3231 RTC module for wireless ePaper display - as for instance for room signage.
+This repository contains the electronic schematic and hardware documentation for the **inki** project — a battery-powered, low-power circuit employing  a Raspberry Pi Pico W and a DS3231 RTC module for wireless ePaper display - as for instance for room signage.
 
 ---
 
 ## Overview
-The eSign circuit is designed for long-term operation (years) using 3×AAA or 3×AA batteries. It uses a DS3231 real-time clock for accurate timekeeping and wake-up scheduling, combined with MOSFET-based power switching to fully disconnect the controller to minimize power consumption between wake cycles. During wake cycles information is fetched via WIFI and displayed on an epaper which retains its display without power consumption.
+The inki circuit is designed for long-term operation (years) using 3×AAA or 3×AA batteries. It uses a DS3231 real-time clock for accurate timekeeping and wake-up scheduling, combined with MOSFET-based power switching to fully disconnect the controller to minimize power consumption between wake cycles. During wake cycles information is fetched via WIFI and displayed on an epaper which retains its display without power consumption.
 
 ![pcb](pcb.jpg)
 
