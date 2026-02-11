@@ -993,12 +993,11 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
              "<label>IP-Adresse:<br><input type=\"text\" name=\"text4\" value=\"%s\"></label>"
              "<label>Port:<br><input type=\"text\" name=\"text5\" value=\"%d\"></label>"
              "<label>Location ID:<br><input type=\"text\" name=\"text6\" value=\"%s\"></label>"
-             "<label>Sitze anzeigen (1-4):<br><input type=\"number\" min=\"1\" max=\"4\" name=\"number_of_seats\" value=\"%d\"></label>"
              "<label>Space Name 1:<br><input type=\"text\" name=\"text7\" value=\"%s\"></label>"
              "<label>Space Name 2:<br><input type=\"text\" name=\"text8\" value=\"%s\"></label>"
              "<label>Space Name 3:<br><input type=\"text\" name=\"text9\" value=\"%s\"></label>"
              "<label>Space Name 4:<br><input type=\"text\" name=\"text10\" value=\"%s\"></label>"
-             "<small>Nur die ersten N Einträge werden genutzt. Name darf auch die Space-ID sein.</small><br>"
+             "<small>Seats used = number of filled names above. Name may also be the Space ID.</small><br>"
              "<input type=\"submit\" value=\"store\">"
              "</form>"
              "<a href=\"/\">Back to Start</a>"
@@ -1010,7 +1009,6 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
              ip_string,
              seatsurfing_config_flash.data.port,
              seatsurfing_config_flash.data.location_id,
-             seatsurfing_config_flash.data.seat_count == 0 ? 1 : seatsurfing_config_flash.data.seat_count,
              seatsurfing_config_flash.data.space_ids[0],
              seatsurfing_config_flash.data.space_ids[1],
              seatsurfing_config_flash.data.space_ids[2],
@@ -1560,26 +1558,25 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
     // Location ID now at text6
     strncpy(new_cfg.data.location_id,  result.text[5], sizeof(new_cfg.data.location_id)  - 1);
 
-    // Seat count from dedicated field; clamp 1..SEATSURFING_MAX_SEATS
-    uint8_t seat_count = (uint8_t)result.number_of_seats;
-    if (seat_count < 1) seat_count = 1;
-    if (seat_count > SEATSURFING_MAX_SEATS) seat_count = SEATSURFING_MAX_SEATS;
-
-    // Auto-bump seat_count if additional names are filled
+    // Derive seat count from non-empty space names (text7..text10)
+    memset(new_cfg.data.space_ids, 0, sizeof(new_cfg.data.space_ids));
+    uint8_t seat_count = 0;
     for (uint8_t i = 0; i < SEATSURFING_MAX_SEATS; i++) {
-        if (result.text[6 + i][0] && seat_count < (uint8_t)(i + 1)) {
+        if (result.text[6 + i][0]) {
+            strncpy(new_cfg.data.space_ids[i],
+                    result.text[6 + i],
+                    sizeof(new_cfg.data.space_ids[i]) - 1);
             seat_count = (uint8_t)(i + 1);
         }
     }
-    new_cfg.data.seat_count = seat_count;
-
-    // Space names (or IDs) in text7..text10
-    memset(new_cfg.data.space_ids, 0, sizeof(new_cfg.data.space_ids));
-    for (uint8_t i = 0; i < seat_count; i++) {
-        strncpy(new_cfg.data.space_ids[i],
-                result.text[6 + i],
-                sizeof(new_cfg.data.space_ids[i]) - 1);
+    if (seat_count == 0) {
+        // Fallback: keep at least one seat, reuse previous first ID if available
+        seat_count = 1;
+        strncpy(new_cfg.data.space_ids[0],
+                seatsurfing_config_flash.data.space_ids[0],
+                sizeof(new_cfg.data.space_ids[0]) - 1);
     }
+    new_cfg.data.seat_count = seat_count;
 
     bool ok = save_seatsurfing_config(&new_cfg);
     if (ok) {

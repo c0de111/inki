@@ -102,7 +102,7 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
   Periodically fetches content via HTTP, refresh time freely programmable.
 
 - **Multi-Page Display**
-  Up to 8 user-selectable display pages via pushbuttons. [See „User-selectable pages“](#user-selectable-pages)
+  Up to 8 user-selectable display pages via pushbuttons (pages 4–7 mirror pages 0–3 for legacy combos). [See „User-selectable pages“](#user-selectable-pages)
 
 - **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
@@ -156,13 +156,11 @@ This animation shows the step-by-step assembly of the 4.2" enclosure.
 
 ## User-selectable pages
 
-Eight user-definable pages can be selected during startup by holding combinations of buttons 1–3 and pressing *Start*.
+Eight combinations are available by holding buttons 1–3 while pressing *Start*. New hardware diode-ORs the buttons so **any button wakes the device**; older boards still only wake on Button 1, but page selection works the same once awake.
 
 > **Page selection logic:**  
-> The active page number is determined by summing the values of the pressed buttons:  
-> **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**  
-> This allows selecting pages 1–7. Page 0 is the default.  
-> For details, see the **“How to Show Pages”** screen (Page 4 below).
+> Active page = sum of pressed buttons: **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**  
+> Pages 0–3 are primary; pages 4–7 mirror 0–3 (legacy combos).
 
 ---
 
@@ -177,8 +175,8 @@ Displays current room occupancy fetched from the seatsurfing server. The room na
 
 ---
 
-### Page 1: **Do Not Disturb**  
-Indicates that the room should not be entered. No network connection required.
+### Page 1: **Videokonferenz**  
+Static “videoconference in progress” view. No network connection required.
 
 <p align="center">
   <a href="images/4_2_white_pages/esign_4_2_page_1.JPG" target="_blank">
@@ -212,8 +210,8 @@ A playful feature for indecisive moments. Randomly displays either “Yes!” or
 
 ---
 
-### Page 3: **Display Settings**  
-Shows technical details such as Wi-Fi settings, update intervals, battery voltage (Vcc and Vbat), raw and DST-corrected RTC time, MAC address, and ADC scaling constant.
+### Page 3: **Web Interface Info**  
+Shows Wi-Fi setup info so you can connect to the device’s web UI. No network connection required.
 
 <p align="center">
   <a href="images/4_2_white_pages/esign_4_2_page_3.JPG" target="_blank">
@@ -223,10 +221,7 @@ Shows technical details such as Wi-Fi settings, update intervals, battery voltag
 
 ---
 
-### Page 4: **How to Show Pages**  
-
-
----
+Pages 4–7 mirror pages 0–3 (legacy button combos).
 
 ## Configuration via Web Interface
 

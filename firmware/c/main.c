@@ -1588,6 +1588,7 @@ void render_temperature_graph(UBYTE* image_buffer, int x, int y, int width, int 
 
 static void render_page_fallback(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
 void render_page_wifi_setup(UBYTE* image);
+static void render_page_wifisetup_seatsurfing(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage);
 
 #ifdef USE_CASE_HOMEMATIC
 static void render_page_0_homematic(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage)
@@ -1898,7 +1899,7 @@ static void render_page_wifisetup_historian(ds3231_t* clock, UBYTE* image_buffer
 void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
     
 #ifdef USE_CASE_SEATSURFING
-    if (device_config_flash.data.type == ROOM_TYPE_OFFICE && device_config_flash.data.number_of_seats == 3 &&
+    if (device_config_flash.data.type == ROOM_TYPE_OFFICE && device_config_flash.data.number_of_seats >= 1 &&
         device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
 
         // Header: room name + logo
@@ -1928,19 +1929,23 @@ void render_page_0(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
                 Paint_DrawString_EN((xpos), (ypos) + 70, (seat_ref).desk_name, (name_font), WHITE, BLACK); \
             } while (0)
 
-        /* Layout mapping to match the original design:
-         *  - space_ids[2] at top-left
-         *  - space_ids[1] at top-right
-         *  - space_ids[0] centered lower
+        /* Layout mapping:
+         *  - space_ids[2] top-left
+         *  - space_ids[1] top-right
+         *  - space_ids[0] bottom-center
+         * For fewer seats, only the available blocks are drawn.
          */
-        if (seat_count >= 3) {
+        if (seat_count == 1) {
+            // single seat: center-ish
+            DRAW_SEAT(220, 260, seatsurfing_data[0], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+        } else if (seat_count == 2) {
+            // two seats: left/top and right/top
+            DRAW_SEAT(40, 190, seatsurfing_data[1], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+            DRAW_SEAT(400, 190, seatsurfing_data[0], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+        } else { // seat_count >= 3
             DRAW_SEAT(40, 190, seatsurfing_data[2], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
-        }
-        if (seat_count >= 2) {
             DRAW_SEAT(400, 190, seatsurfing_data[1], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
-        }
-        if (seat_count >= 1) {
-            DRAW_SEAT(400, 320, seatsurfing_data[0], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
+            DRAW_SEAT(220, 320, seatsurfing_data[0], &font_ubuntu_mono_14pt, &font_ubuntu_mono_20pt_bold);
         }
 
         #undef DRAW_SEAT
@@ -2005,14 +2010,28 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
     // Check the ePaper type and render accordingly
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
+        Paint_Clear(WHITE);
+
         int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
         if (logo_x < 0) {
             logo_x = 0;
         }
         DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
 
-        // Display room name with slightly smaller font
-        Paint_DrawString_EN(30, 50, device_config_flash.data.roomname, &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
+        // Room name
+        Paint_DrawString_EN(50, 60, device_config_flash.data.roomname, &font_ubuntu_mono_24pt_bold, WHITE, BLACK);
+
+        // Main message
+        Paint_DrawString_EN(80, 180, "Videoconference", &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(80, 240, "Please do not disturb", &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
+
+        // Timestamp (start time)
+        ds3231_data_t ds3231_data;
+        ds3231_read_current_time(clock, &ds3231_data);
+        char time_string[8];
+        format_short_time(&ds3231_data, time_string, sizeof(time_string));
+        snprintf(buffer, sizeof(buffer), "Start: %s", time_string);
+        Paint_DrawString_EN(80, 300, buffer, &font_ubuntu_mono_14pt, WHITE, BLACK);
 
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
@@ -2301,12 +2320,12 @@ void render_page_4(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
 }
 
 void render_page_5(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
-    const char* page_label = "Page 5: Setting RTC via WIFI to server time";
+    const char* page_label = "Page 5";
     int rtc_data_line = -1;
 
     // Determine which line to use based on display type
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
-        rtc_data_line = 6;
+
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
         if (!draw_flash_logo(image_buffer, 290, 10)) {
             DrawSubImage(image_buffer, &inki_octopus_100_95, 290, 15);
@@ -2315,46 +2334,6 @@ void render_page_5(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
     }
 
     // Only proceed if a known display type is used
-    if (rtc_data_line >= 0) {
-        // Paint_DrawString_EN(20, 40, device_config_flash.data.roomname, &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
-
-        // Paint_DrawString_EN(5, 200, page_label, &font_ubuntu_mono_6pt, WHITE, BLACK);
-
-        // const char *line = retrieveline(server_response_buf, rtc_data_line);
-        // Paint_DrawString_EN(20, 270, line, &font_ubuntu_mono_6pt, WHITE, BLACK);
-        //
-        // set_rtc_from_display_string(clock, line);
-        //
-        // // Read current RTC time and format
-        // ds3231_data_t ds3231_data;
-        // ds3231_read_current_time(clock, &ds3231_data);
-        //
-        // char buffer[256];
-        // char buffer2[256];
-        //
-        // Paint_DrawString_EN(5, 20, "Set RTC via server", &font_ubuntu_mono_12pt_bold, WHITE, BLACK);
-        //
-        // Paint_DrawString_EN(5, 60, "Current time fetched from the server ", &font_ubuntu_mono_6pt, WHITE, BLACK);
-        // Paint_DrawString_EN(5, 80, "is written to the DS3231 real time clock", &font_ubuntu_mono_6pt,WHITE, BLACK);
-        //
-        // Paint_DrawString_EN(15, 140, "RTC (raw) set to: ", &font_ubuntu_mono_6pt, WHITE, BLACK);
-        // snprintf(buffer, sizeof(buffer), "%02i:%02i, %s, %02i. %s %04i",
-        //          ds3231_data.hours,
-        //          ds3231_data.minutes,
-        //          get_day_of_week(ds3231_data.day),
-        //          ds3231_data.date,
-        //          get_month_name(ds3231_data.month),
-        //          2000 + ds3231_data.year);
-        // snprintf(buffer2, sizeof(buffer2), "%s", buffer);
-        // Paint_DrawString_EN(15, 160, buffer2, &font_ubuntu_mono_6pt, WHITE, BLACK);
-        //
-        // Paint_DrawString_EN(15, 200, "RTC (DST) set to: ", &font_ubuntu_mono_6pt, WHITE, BLACK);
-        // format_rtc_time(&ds3231_data, buffer, sizeof(buffer));
-        // snprintf(buffer2, sizeof(buffer2), "%s", buffer);
-        // Paint_DrawString_EN(15, 220, buffer2, &font_ubuntu_mono_6pt, WHITE, BLACK);
-        //
-        // Paint_DrawString_EN(8, 292, "5", &Font8, WHITE, BLACK);
-    }
 }
 
 void render_page_6(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage){
@@ -2403,13 +2382,14 @@ void render_page(int pushbutton, ds3231_t* clock, UBYTE* image_buffer, float bat
 #if defined(USE_CASE_SEATSURFING)
     static const page_renderer_t seatsurfing_pages[8] = {
         render_page_0,
+        render_page_1,  // Videokonferenz (static)
+        render_page_2,  // Universal Decision Maker
+        render_page_wifisetup_seatsurfing, // Web interface / Wi-Fi info
+        // Legacy combos mirror primary pages
+        render_page_0,
         render_page_1,
         render_page_2,
-        render_page_3,
-        render_page_4,
-        render_page_5,
-        render_page_6,
-        render_page_7,
+        render_page_wifisetup_seatsurfing,
     };
     table = seatsurfing_pages;
     table_len = sizeof(seatsurfing_pages) / sizeof(seatsurfing_pages[0]);
@@ -2825,6 +2805,44 @@ void render_page_wifi_setup(UBYTE* image) {
     // Paint_DrawString_EN(20 + x_offset, 250 + y_offset, line2, &font_ubuntu_mono_8pt, WHITE, BLACK);
 }
 
+// Seatsurfing-specific Wi-Fi/web UI info page (sizes for both 7.5\" and 4.2\")
+static void render_page_wifisetup_seatsurfing(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) {
+    (void)clock;
+    (void)battery_voltage;
+
+    const bool is_epaper_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
+    const bool is_epaper_42 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2);
+
+    Paint_Clear(WHITE);
+
+    int x_offset = 0;
+    int y_offset = 0;
+    int center_x = EPD_4IN2_V2_WIDTH / 2;
+    if (is_epaper_75) {
+        x_offset = 40;
+        y_offset = 0;
+        center_x = EPD_7IN5_V2_WIDTH / 2;
+    }
+
+    int logo_x = (is_epaper_75 ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH) - inki_octopus_100_95.width - 20;
+    if (logo_x < 0) logo_x = 0;
+    if (!draw_flash_logo(image_buffer, logo_x, 10)) {
+        DrawSubImage(image_buffer, &inki_octopus_100_95, logo_x, 10);
+    }
+
+    Paint_DrawString_EN(center_x - 140 + x_offset, 40 + y_offset, "Wi-Fi Setup / Web UI", &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
+    Paint_DrawString_EN(center_x - 110 + x_offset, 90 + y_offset, "Connect to AP:", &font_ubuntu_mono_14pt, WHITE, BLACK);
+    Paint_DrawString_EN(center_x - 80 + x_offset, 120 + y_offset, "inki-setup", &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
+
+    Paint_DrawString_EN(center_x - 110 + x_offset, 170 + y_offset, "Open:", &font_ubuntu_mono_14pt, WHITE, BLACK);
+    Paint_DrawString_EN(center_x - 140 + x_offset, 200 + y_offset, "http://192.168.4.1", &font_ubuntu_mono_18pt_bold, WHITE, BLACK);
+
+    // Slot hint
+    Paint_DrawString_EN(center_x - 150 + x_offset, 250 + y_offset, "Upload opposite slot image:", &font_ubuntu_mono_12pt, WHITE, BLACK);
+    Paint_DrawString_EN(center_x - 150 + x_offset, 280 + y_offset, "active slot 0 -> upload inki_slot1.bin", &font_ubuntu_mono_10pt, WHITE, BLACK);
+    Paint_DrawString_EN(center_x - 150 + x_offset, 300 + y_offset, "active slot 1 -> upload inki_slot0.bin", &font_ubuntu_mono_10pt, WHITE, BLACK);
+}
+
 static const uint8_t dhcp_offer_template[] = {
     0x02, 0x01, 0x06, 0x00,                  // BOOTP: op, htype, hlen, hops
     0x00, 0x00, 0x00, 0x00,                  // XID (Transaction ID)
@@ -3020,6 +3038,7 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
 #endif
 
     absolute_time_t last_watchdog_feed = get_absolute_time();
+    bool led_upload_active = false;
 
     while (true) {
         bool firmware_upload = webserver_firmware_upload_active();
@@ -3031,6 +3050,31 @@ void enter_wifi_setup_mode(ds3231_t* clock) {
         } else {
             sleep_ms(50);
         }
+
+        // LED behavior: during firmware upload keep LEDs solid ON (no Morse) to avoid timing side-effects and signal activity
+#if LED_MORSE_ENABLED
+        if (firmware_upload && !led_upload_active) {
+            morse_set_enabled(false);
+            board_led_on();
+#if LED_USE_EXT
+            ext_led_on();
+#endif
+            led_upload_active = true;
+        } else if (!firmware_upload && led_upload_active) {
+            board_led_off();
+            morse_set_enabled(true);
+            led_upload_active = false;
+        }
+#else
+        // Morse disabled: ensure board LED on during upload for visibility
+        if (firmware_upload && !led_upload_active) {
+            board_led_on();
+            led_upload_active = true;
+        } else if (!firmware_upload && led_upload_active) {
+            board_led_off();
+            led_upload_active = false;
+        }
+#endif
 
         // Drive Morse engine (non-blocking)
 #if LED_MORSE_ENABLED
@@ -3168,6 +3212,12 @@ int main(void)
 #elif defined(USE_CASE_HOMEMATIC)
     if (pushbutton == 4) {
         debug_log_with_color(COLOR_BOLD_YELLOW, "Homematic: launching web interface (page 4)\n");
+        enter_wifi_setup_mode(&ds3231);
+    }
+#elif defined(USE_CASE_SEATSURFING)
+    // Seatsurfing: right-most button (value 4) starts Wi-Fi/AP setup
+    if (pushbutton == 4) {
+        debug_log_with_color(COLOR_BOLD_YELLOW, "Seatsurfing: launching web interface (pushbutton 4)\n");
         enter_wifi_setup_mode(&ds3231);
     }
 #endif
