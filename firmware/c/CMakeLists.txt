@@ -47,6 +47,7 @@ add_executable(inki_slot0
     webserver.c
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
+    i2c_probe.c         # Read-only I2C diagnostics for expected devices
     base64.c        # Base64 encoding for HTTP auth
     tls_trust_store.c  # TLS trust store (HARICA root embedding)
     third_party/cjson/cJSON.c  # JSON parsing library for historian functionality (vendored)
@@ -72,6 +73,7 @@ add_executable(inki_slot1
     webserver.c
     webserver_utils.c   # Utility functions extracted from webserver
     webserver_pages.c   # HTML page generation functions
+    i2c_probe.c         # Read-only I2C diagnostics for expected devices
     base64.c        # Base64 encoding for HTTP auth
     tls_trust_store.c  # TLS trust store (HARICA root embedding)
     third_party/cjson/cJSON.c  # JSON parsing library for historian functionality (vendored)

@@ -31,6 +31,7 @@
 #include "hardware/watchdog.h"
 #include "pico/cyw43_arch.h"
 #include "ds3231.h"
+#include "i2c_probe.h"
 #include "webserver_utils.h"
 #include "config.h"
 #include "GUI_Paint.h"
@@ -406,6 +407,8 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     float vbat = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
     float temp_c = read_onchip_temperature_c();
     float rtc_temp_c = read_ds3231_temperature_c();
+    i2c_probe_result_t i2c_probe = {0};
+    i2c_probe_expected_devices(&i2c_probe);
     memory_info_t mem = {0};
     get_memory_info(&mem);
 
@@ -519,6 +522,60 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
         snprintf(buffer, sizeof(buffer),
                  "<div class='section'>RTC Temperature: <span class='value'>%s &deg;C</span></div>",
                  rtc_temp_str);
+        strcat(page, buffer);
+    }
+
+    // I2C diagnostics for expected onboard devices
+    {
+        const char* ds3231_color = (i2c_probe.ds3231_present && i2c_probe.ds3231_status_ok && i2c_probe.ds3231_temp_ok)
+                                   ? "green" : (i2c_probe.ds3231_present ? "orange" : "red");
+        const char* bmp581_color = (i2c_probe.bmp581_present && i2c_probe.bmp581_chip_id_ok)
+                                   ? "green" : (i2c_probe.bmp581_present ? "orange" : "red");
+        const char* rv3028_color = (i2c_probe.rv3028_present && i2c_probe.rv3028_id_ok)
+                                   ? "green" : (i2c_probe.rv3028_present ? "orange" : "red");
+
+        const char* ds3231_state = i2c_probe.ds3231_present ? "present" : "missing";
+        const char* bmp581_state = i2c_probe.bmp581_present ? "present" : "missing";
+        const char* rv3028_state = i2c_probe.rv3028_present ? "present" : "missing";
+
+        char ds3231_status_str[8] = "n/a";
+        char ds3231_temp_str[16] = "n/a";
+        char bmp581_addr_str[8] = "0x47/46";
+        char bmp581_chip_id_str[8] = "n/a";
+        char rv3028_id_str[16] = "n/a";
+
+        if (i2c_probe.ds3231_status_ok) {
+            snprintf(ds3231_status_str, sizeof(ds3231_status_str), "0x%02X", i2c_probe.ds3231_status_reg);
+        }
+        if (i2c_probe.ds3231_temp_ok) {
+            int whole = i2c_probe.ds3231_temp_quarter_c / 4;
+            int quarter = i2c_probe.ds3231_temp_quarter_c % 4;
+            if (quarter < 0) { quarter += 4; whole -= 1; }
+            switch (quarter) {
+                case 0: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.0", whole); break;
+                case 1: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.25", whole); break;
+                case 2: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.5", whole); break;
+                default: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.75", whole); break;
+            }
+        }
+
+        if (i2c_probe.bmp581_present) {
+            snprintf(bmp581_addr_str, sizeof(bmp581_addr_str), "0x%02X", i2c_probe.bmp581_addr);
+            snprintf(bmp581_chip_id_str, sizeof(bmp581_chip_id_str), "0x%02X", i2c_probe.bmp581_chip_id);
+        }
+
+        if (i2c_probe.rv3028_present) {
+            snprintf(rv3028_id_str, sizeof(rv3028_id_str), "0x%02X/0x%02X", i2c_probe.rv3028_hid, i2c_probe.rv3028_vid);
+        }
+
+        snprintf(buffer, sizeof(buffer),
+                 "<div class='section'>I2C diagnostics:<br>"
+                 "DS3231 (0x68): <span class='value %s'>%s</span>, status(0x0F)=%s, temp(0x11/12)=%s &deg;C<br>"
+                 "BMP581 (%s): <span class='value %s'>%s</span>, chip-id(0x01)=%s (exp 0x50)<br>"
+                 "RV-3028 (0x52): <span class='value %s'>%s</span>, hid/vid(0x28)=%s</div>",
+                 ds3231_color, ds3231_state, ds3231_status_str, ds3231_temp_str,
+                 bmp581_addr_str, bmp581_color, bmp581_state, bmp581_chip_id_str,
+                 rv3028_color, rv3028_state, rv3028_id_str);
         strcat(page, buffer);
     }
 

@@ -1,0 +1,80 @@
+#include "i2c_probe.h"
+
+#include "hardware/i2c.h"
+#include <stddef.h>
+#include <string.h>
+
+#define DS3231_ADDR       0x68u
+#define DS3231_STATUS_REG 0x0Fu
+#define DS3231_TEMP_REG   0x11u
+
+#define BMP581_ADDR_PRIMARY   0x47u
+#define BMP581_ADDR_SECONDARY 0x46u
+#define BMP581_CHIP_ID_REG    0x01u
+#define BMP581_CHIP_ID_VALUE  0x50u
+
+#define RV3028_ADDR      0x52u
+#define RV3028_HIDVID_REG 0x28u
+
+static bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
+    const int write_rc = i2c_write_blocking(i2c_default, addr, &reg, 1, true);
+    if (write_rc < 0) {
+        return false;
+    }
+
+    const int read_rc = i2c_read_blocking(i2c_default, addr, data, (size_t)len, false);
+    if (read_rc < 0) {
+        return false;
+    }
+
+    return ((size_t)read_rc == len);
+}
+
+void i2c_probe_expected_devices(i2c_probe_result_t *out) {
+    if (!out) {
+        return;
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->bmp581_addr = 0xFFu;
+
+    uint8_t value = 0;
+    if (i2c_read_reg(DS3231_ADDR, DS3231_STATUS_REG, &value, 1)) {
+        out->ds3231_present = true;
+        out->ds3231_status_ok = true;
+        out->ds3231_status_reg = value;
+    }
+
+    uint8_t ds_temp_raw[2] = {0};
+    if (i2c_read_reg(DS3231_ADDR, DS3231_TEMP_REG, ds_temp_raw, sizeof(ds_temp_raw))) {
+        out->ds3231_present = true;
+        out->ds3231_temp_ok = true;
+        /* DS3231 temperature is signed quarter-degrees across MSB and top 2 LSB bits. */
+        out->ds3231_temp_quarter_c = (int16_t)(((int16_t)(int8_t)ds_temp_raw[0] << 2) | (ds_temp_raw[1] >> 6));
+    }
+
+    static const uint8_t bmp581_addresses[] = {
+        BMP581_ADDR_PRIMARY,
+        BMP581_ADDR_SECONDARY,
+    };
+    for (size_t i = 0; i < sizeof(bmp581_addresses); i++) {
+        const uint8_t addr = bmp581_addresses[i];
+        if (!i2c_read_reg(addr, BMP581_CHIP_ID_REG, &value, 1)) {
+            continue;
+        }
+        out->bmp581_present = true;
+        out->bmp581_addr = addr;
+        out->bmp581_chip_id = value;
+        out->bmp581_chip_id_ok = (value == BMP581_CHIP_ID_VALUE);
+        break;
+    }
+
+    uint8_t rv3028_id[2] = {0};
+    if (i2c_read_reg(RV3028_ADDR, RV3028_HIDVID_REG, rv3028_id, sizeof(rv3028_id))) {
+        out->rv3028_present = true;
+        out->rv3028_hid = rv3028_id[0];
+        out->rv3028_vid = rv3028_id[1];
+        out->rv3028_id_ok = !((rv3028_id[0] == 0x00u && rv3028_id[1] == 0x00u) ||
+                              (rv3028_id[0] == 0xFFu && rv3028_id[1] == 0xFFu));
+    }
+}
