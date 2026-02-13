@@ -57,7 +57,8 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
         BMP581_ADDR_PRIMARY,
         BMP581_ADDR_SECONDARY,
     };
-    for (size_t i = 0; i < sizeof(bmp581_addresses); i++) {
+    const size_t bmp581_address_count = sizeof(bmp581_addresses) / sizeof(bmp581_addresses[0]);
+    for (size_t i = 0; i < bmp581_address_count; i++) {
         const uint8_t addr = bmp581_addresses[i];
         if (!i2c_read_reg(addr, BMP581_CHIP_ID_REG, &value, 1)) {
             continue;
