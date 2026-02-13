@@ -20,6 +20,11 @@ typedef struct i2c_probe_result_t {
     uint8_t rv3028_hid;
     uint8_t rv3028_vid;
     bool rv3028_id_ok;
+
+    bool st25_user_present;
+    bool st25_system_present;
+    uint8_t st25_ic_ref;
+    bool st25_ic_ref_ok;
 } i2c_probe_result_t;
 
 void i2c_probe_expected_devices(i2c_probe_result_t *out);

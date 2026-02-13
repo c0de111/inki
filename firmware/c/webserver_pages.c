@@ -533,16 +533,22 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
                                    ? "green" : (i2c_probe.bmp581_present ? "orange" : "red");
         const char* rv3028_color = (i2c_probe.rv3028_present && i2c_probe.rv3028_id_ok)
                                    ? "green" : (i2c_probe.rv3028_present ? "orange" : "red");
+        const bool st25_present = i2c_probe.st25_user_present || i2c_probe.st25_system_present;
+        const char* st25_color = (st25_present && i2c_probe.st25_ic_ref_ok)
+                                 ? "green" : (st25_present ? "orange" : "red");
 
         const char* ds3231_state = i2c_probe.ds3231_present ? "present" : "missing";
         const char* bmp581_state = i2c_probe.bmp581_present ? "present" : "missing";
         const char* rv3028_state = i2c_probe.rv3028_present ? "present" : "missing";
+        const char* st25_state = st25_present ? "present" : "missing";
 
         char ds3231_status_str[8] = "n/a";
         char ds3231_temp_str[16] = "n/a";
         char bmp581_addr_str[8] = "0x47/46";
         char bmp581_chip_id_str[8] = "n/a";
         char rv3028_id_str[16] = "n/a";
+        char st25_probe_str[24] = "n/a";
+        char st25_ic_ref_str[8] = "n/a";
 
         if (i2c_probe.ds3231_status_ok) {
             snprintf(ds3231_status_str, sizeof(ds3231_status_str), "0x%02X", i2c_probe.ds3231_status_reg);
@@ -568,14 +574,25 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
             snprintf(rv3028_id_str, sizeof(rv3028_id_str), "0x%02X/0x%02X", i2c_probe.rv3028_hid, i2c_probe.rv3028_vid);
         }
 
+        if (st25_present) {
+            snprintf(st25_probe_str, sizeof(st25_probe_str), "0x53=%s 0x57=%s",
+                     i2c_probe.st25_user_present ? "ACK" : "NACK",
+                     i2c_probe.st25_system_present ? "ACK" : "NACK");
+        }
+        if (i2c_probe.st25_ic_ref != 0xFFu) {
+            snprintf(st25_ic_ref_str, sizeof(st25_ic_ref_str), "0x%02X", i2c_probe.st25_ic_ref);
+        }
+
         snprintf(buffer, sizeof(buffer),
                  "<div class='section'>I2C diagnostics:<br>"
                  "DS3231 (0x68): <span class='value %s'>%s</span>, status(0x0F)=%s, temp(0x11/12)=%s &deg;C<br>"
                  "BMP581 (%s): <span class='value %s'>%s</span>, chip-id(0x01)=%s (exp 0x50)<br>"
-                 "RV-3028 (0x52): <span class='value %s'>%s</span>, hid/vid(0x28)=%s</div>",
+                 "RV-3028 (0x52): <span class='value %s'>%s</span>, hid/vid(0x28)=%s<br>"
+                 "ST25DV (0x53/0x57): <span class='value %s'>%s</span>, probe=%s, IC_REF(0x0017)=%s (exp 0x50/0x51)</div>",
                  ds3231_color, ds3231_state, ds3231_status_str, ds3231_temp_str,
                  bmp581_addr_str, bmp581_color, bmp581_state, bmp581_chip_id_str,
-                 rv3028_color, rv3028_state, rv3028_id_str);
+                 rv3028_color, rv3028_state, rv3028_id_str,
+                 st25_color, st25_state, st25_probe_str, st25_ic_ref_str);
         strcat(page, buffer);
     }
 

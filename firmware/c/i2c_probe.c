@@ -16,6 +16,12 @@
 #define RV3028_ADDR      0x52u
 #define RV3028_HIDVID_REG 0x28u
 
+#define ST25_ADDR_USER_DYNAMIC 0x53u
+#define ST25_ADDR_SYSTEM       0x57u
+#define ST25_SYSTEM_IC_REF_REG 0x0017u
+#define ST25_IC_REF_DV04KC     0x50u
+#define ST25_IC_REF_DV16_64KC  0x51u
+
 static bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
     const int write_rc = i2c_write_blocking(i2c_default, addr, &reg, 1, true);
     if (write_rc < 0) {
@@ -30,6 +36,31 @@ static bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
     return ((size_t)read_rc == len);
 }
 
+static bool i2c_read_reg16(uint8_t addr, uint16_t reg, uint8_t *data, size_t len) {
+    const uint8_t reg_buf[2] = {
+        (uint8_t)((reg >> 8) & 0xFFu),
+        (uint8_t)(reg & 0xFFu),
+    };
+
+    const int write_rc = i2c_write_blocking(i2c_default, addr, reg_buf, sizeof(reg_buf), true);
+    if (write_rc < 0) {
+        return false;
+    }
+
+    const int read_rc = i2c_read_blocking(i2c_default, addr, data, (size_t)len, false);
+    if (read_rc < 0) {
+        return false;
+    }
+
+    return ((size_t)read_rc == len);
+}
+
+static bool i2c_probe_addr16(uint8_t addr) {
+    const uint8_t probe_reg[2] = {0x00u, 0x00u};
+    const int write_rc = i2c_write_blocking(i2c_default, addr, probe_reg, sizeof(probe_reg), false);
+    return (write_rc == (int)sizeof(probe_reg));
+}
+
 void i2c_probe_expected_devices(i2c_probe_result_t *out) {
     if (!out) {
         return;
@@ -37,6 +68,7 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
 
     memset(out, 0, sizeof(*out));
     out->bmp581_addr = 0xFFu;
+    out->st25_ic_ref = 0xFFu;
 
     uint8_t value = 0;
     if (i2c_read_reg(DS3231_ADDR, DS3231_STATUS_REG, &value, 1)) {
@@ -77,5 +109,14 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
         out->rv3028_vid = rv3028_id[1];
         out->rv3028_id_ok = !((rv3028_id[0] == 0x00u && rv3028_id[1] == 0x00u) ||
                               (rv3028_id[0] == 0xFFu && rv3028_id[1] == 0xFFu));
+    }
+
+    out->st25_user_present = i2c_probe_addr16(ST25_ADDR_USER_DYNAMIC);
+    out->st25_system_present = i2c_probe_addr16(ST25_ADDR_SYSTEM);
+
+    if (i2c_read_reg16(ST25_ADDR_SYSTEM, ST25_SYSTEM_IC_REF_REG, &value, 1)) {
+        out->st25_system_present = true;
+        out->st25_ic_ref = value;
+        out->st25_ic_ref_ok = (value == ST25_IC_REF_DV04KC || value == ST25_IC_REF_DV16_64KC);
     }
 }
