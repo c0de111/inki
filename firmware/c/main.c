@@ -702,6 +702,7 @@ void read_mac_address() {
 
 //  ---------------------start functions for data from server --------------------------------
 
+#ifdef USE_CASE_SEATSURFING
 // Global array to store SeatSurfing data per configured seat (display uses first seat on 4.2")
 static seat_info_t seatsurfing_data[SEATSURFING_MAX_SEATS] = {0};
 
@@ -731,6 +732,7 @@ void seatsurfing_data_received(const char* response_data, size_t length, void* a
               seatsurfing_data[0].is_available ? "YES" : "NO",
               seatsurfing_data[0].user_email[0] ? seatsurfing_data[0].user_email : "None");
 }
+#endif // USE_CASE_SEATSURFING
 
 
 /**

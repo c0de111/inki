@@ -211,7 +211,7 @@ A playful feature for indecisive moments. Randomly displays either “Yes!” or
 ---
 
 ### Page 3: **Web Interface Info**  
-Shows Wi-Fi setup info so you can connect to the device’s web UI. No network connection required.
+Shows Wi-Fi setup info so you can connect to the device’s web UI.
 
 <p align="center">
   <a href="images/4_2_white_pages/esign_4_2_page_3.JPG" target="_blank">
@@ -226,24 +226,6 @@ Pages 4–7 mirror pages 0–3 (legacy button combos).
 ## Configuration via Web Interface
 
 Should be self-explanatory.
-
-## Repository Structure
-
-```
-esign/
-├── LICENSE                    # Top-level: explains dual-licensing
-├── hardware/                 # Schematics, pcb, 3D printable case
-│   ├── LICENSE               # CERN-OHL-S v2.0
-│	 ├── enclosure/            # 3D printable STL files and documentation
-│	 ├── circuit/              # KiCAD files and documentation
-│   └── ...
-├── firmware/                 # C firmware source, headers, build system
-│   ├── LICENSE               # Apache 2.0
-│   └── ...
-├── docs/                    # Markdown docs, tips, and background
-├── images/                  # Photos, renderings, examples
-└── README.md                # This file
-```
 
 ---
 
