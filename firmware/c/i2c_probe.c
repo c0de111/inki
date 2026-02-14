@@ -13,7 +13,7 @@
 #define BMP581_CHIP_ID_REG    0x01u
 #define BMP581_CHIP_ID_VALUE  0x50u
 
-#define RV3028_ADDR      0x52u
+#define RV3028_ADDR       0x52u
 #define RV3028_HIDVID_REG 0x28u
 
 #define ST25_ADDR_USER_DYNAMIC 0x53u
@@ -55,6 +55,18 @@ static bool i2c_read_reg16(uint8_t addr, uint16_t reg, uint8_t *data, size_t len
     return ((size_t)read_rc == len);
 }
 
+/*
+ * Address probe for 8-bit register devices.
+ * Writes only the register pointer and checks for ACK.
+ */
+static bool i2c_probe_reg8(uint8_t addr, uint8_t reg) {
+    const int write_rc = i2c_write_blocking(i2c_default, addr, &reg, 1, false);
+    return (write_rc == 1);
+}
+
+/*
+ * Address probe for devices using 16-bit register pointers (ST25 system/user areas).
+ */
 static bool i2c_probe_addr16(uint8_t addr) {
     const uint8_t probe_reg[2] = {0x00u, 0x00u};
     const int write_rc = i2c_write_blocking(i2c_default, addr, probe_reg, sizeof(probe_reg), false);
@@ -68,6 +80,9 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
 
     memset(out, 0, sizeof(*out));
     out->bmp581_addr = 0xFFu;
+    out->bmp581_chip_id = 0xFFu;
+    out->rv3028_hid = 0xFFu;
+    out->rv3028_vid = 0xFFu;
     out->st25_ic_ref = 0xFFu;
 
     uint8_t value = 0;
@@ -85,6 +100,10 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
         out->ds3231_temp_quarter_c = (int16_t)(((int16_t)(int8_t)ds_temp_raw[0] << 2) | (ds_temp_raw[1] >> 6));
     }
 
+    out->bmp581_addr_primary_ack = i2c_probe_reg8(BMP581_ADDR_PRIMARY, BMP581_CHIP_ID_REG);
+    out->bmp581_addr_secondary_ack = i2c_probe_reg8(BMP581_ADDR_SECONDARY, BMP581_CHIP_ID_REG);
+    out->bmp581_present = out->bmp581_addr_primary_ack || out->bmp581_addr_secondary_ack;
+
     static const uint8_t bmp581_addresses[] = {
         BMP581_ADDR_PRIMARY,
         BMP581_ADDR_SECONDARY,
@@ -101,6 +120,17 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
         out->bmp581_chip_id_ok = (value == BMP581_CHIP_ID_VALUE);
         break;
     }
+
+    if (out->bmp581_addr == 0xFFu) {
+        if (out->bmp581_addr_primary_ack) {
+            out->bmp581_addr = BMP581_ADDR_PRIMARY;
+        } else if (out->bmp581_addr_secondary_ack) {
+            out->bmp581_addr = BMP581_ADDR_SECONDARY;
+        }
+    }
+
+    out->rv3028_addr_ack = i2c_probe_reg8(RV3028_ADDR, RV3028_HIDVID_REG);
+    out->rv3028_present = out->rv3028_addr_ack;
 
     uint8_t rv3028_id[2] = {0};
     if (i2c_read_reg(RV3028_ADDR, RV3028_HIDVID_REG, rv3028_id, sizeof(rv3028_id))) {

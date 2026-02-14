@@ -545,7 +545,9 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
         char ds3231_status_str[8] = "n/a";
         char ds3231_temp_str[16] = "n/a";
         char bmp581_addr_str[8] = "0x47/46";
+        char bmp581_probe_str[24] = "0x47=NACK 0x46=NACK";
         char bmp581_chip_id_str[8] = "n/a";
+        char rv3028_probe_str[16] = "0x52=NACK";
         char rv3028_id_str[16] = "n/a";
         char st25_probe_str[24] = "n/a";
         char st25_ic_ref_str[8] = "n/a";
@@ -565,12 +567,21 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
             }
         }
 
-        if (i2c_probe.bmp581_present) {
+        snprintf(bmp581_probe_str, sizeof(bmp581_probe_str), "0x47=%s 0x46=%s",
+                 i2c_probe.bmp581_addr_primary_ack ? "ACK" : "NACK",
+                 i2c_probe.bmp581_addr_secondary_ack ? "ACK" : "NACK");
+
+        if (i2c_probe.bmp581_addr != 0xFFu) {
             snprintf(bmp581_addr_str, sizeof(bmp581_addr_str), "0x%02X", i2c_probe.bmp581_addr);
+        }
+        if (i2c_probe.bmp581_chip_id != 0xFFu) {
             snprintf(bmp581_chip_id_str, sizeof(bmp581_chip_id_str), "0x%02X", i2c_probe.bmp581_chip_id);
         }
 
-        if (i2c_probe.rv3028_present) {
+        if (i2c_probe.rv3028_addr_ack) {
+            snprintf(rv3028_probe_str, sizeof(rv3028_probe_str), "0x52=ACK");
+        }
+        if (i2c_probe.rv3028_hid != 0xFFu && i2c_probe.rv3028_vid != 0xFFu) {
             snprintf(rv3028_id_str, sizeof(rv3028_id_str), "0x%02X/0x%02X", i2c_probe.rv3028_hid, i2c_probe.rv3028_vid);
         }
 
@@ -586,12 +597,12 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
         snprintf(buffer, sizeof(buffer),
                  "<div class='section'>I2C diagnostics:<br>"
                  "DS3231 (0x68): <span class='value %s'>%s</span>, status(0x0F)=%s, temp(0x11/12)=%s &deg;C<br>"
-                 "BMP581 (%s): <span class='value %s'>%s</span>, chip-id(0x01)=%s (exp 0x50)<br>"
-                 "RV-3028 (0x52): <span class='value %s'>%s</span>, hid/vid(0x28)=%s<br>"
+                 "BMP581 (%s): <span class='value %s'>%s</span>, probe=%s, chip-id(0x01)=%s (exp 0x50)<br>"
+                 "RV-3028 (0x52): <span class='value %s'>%s</span>, probe=%s, hid/vid(0x28)=%s<br>"
                  "ST25DV (0x53/0x57): <span class='value %s'>%s</span>, probe=%s, IC_REF(0x0017)=%s (exp 0x50/0x51)</div>",
                  ds3231_color, ds3231_state, ds3231_status_str, ds3231_temp_str,
-                 bmp581_addr_str, bmp581_color, bmp581_state, bmp581_chip_id_str,
-                 rv3028_color, rv3028_state, rv3028_id_str,
+                 bmp581_addr_str, bmp581_color, bmp581_state, bmp581_probe_str, bmp581_chip_id_str,
+                 rv3028_color, rv3028_state, rv3028_probe_str, rv3028_id_str,
                  st25_color, st25_state, st25_probe_str, st25_ic_ref_str);
         strcat(page, buffer);
     }

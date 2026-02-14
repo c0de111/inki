@@ -12,11 +12,14 @@ typedef struct i2c_probe_result_t {
     int16_t ds3231_temp_quarter_c;
 
     bool bmp581_present;
+    bool bmp581_addr_primary_ack;
+    bool bmp581_addr_secondary_ack;
     uint8_t bmp581_addr;
     uint8_t bmp581_chip_id;
     bool bmp581_chip_id_ok;
 
     bool rv3028_present;
+    bool rv3028_addr_ack;
     uint8_t rv3028_hid;
     uint8_t rv3028_vid;
     bool rv3028_id_ok;
