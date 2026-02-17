@@ -82,6 +82,8 @@ ds3231_clock_setup/
 *.kicad_prl
 *.kicad_pcb.lck
 *.kicad_sch.lck
+_autosave-*.kicad_pcb
+_autosave-*.kicad_sch
 *.bak
 **/fp-info-cache
 

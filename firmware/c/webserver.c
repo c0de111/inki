@@ -72,6 +72,7 @@
 #include "lwip/tcp.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "pico/time.h"
 #include "debug.h"
 #include "main.h"
@@ -1002,24 +1003,27 @@ static void handle_post_upload_logo(struct tcp_pcb* tpcb, struct pbuf* p, const 
 }
 
 static void handle_post_firmware_update(struct tcp_pcb* tpcb, struct pbuf* p, const char* buffer, int copied) {
-    const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
+    const char* cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
         debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Content-Length missing\n");
+        send_firmware_update_page(tpcb, "<h2 style='color:red'>❌ Missing Content-Length</h2>");
+        reset_upload_session();
+        tcp_recved(tpcb, copied);
+        return;
     }
 
-    upload_session.expected_length = atoi(cl + 15);
-    debug_log("UPLOAD FIRMWARE: Expected length: %d\n", (int)upload_session.expected_length);
-
-    if (upload_session.expected_length > FIRMWARE_FLASH_SIZE) {
-        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: File too large (%d > %d bytes)\n", upload_session.expected_length, FIRMWARE_FLASH_SIZE);
+    char* endptr = NULL;
+    unsigned long expected = strtoul(cl + 15, &endptr, 10);
+    if (endptr == cl + 15 || expected == 0 || expected > FIRMWARE_FLASH_SIZE) {
+        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Invalid Content-Length (%s)\n", cl + 15);
         send_firmware_update_page(tpcb, "too_large");
-        upload_session.active = false;
-        upload_session.header_complete = false;
-        upload_session.header_length = 0;
-        tcp_arg(tpcb, NULL);
-        tcp_recv(tpcb, NULL);
-        tcp_close(tpcb);
+        reset_upload_session();
+        tcp_recved(tpcb, copied);
+        return;
     }
+
+    upload_session.expected_length = (size_t)expected;
+    debug_log("UPLOAD FIRMWARE: Expected length: %d\n", (int)upload_session.expected_length);
     // Determine target slot based on get_active_firmware_slot_info()
     const char* slot_info = get_active_firmware_slot_info();
     uint32_t target_offset;
@@ -1066,26 +1070,38 @@ static void handle_post_firmware_update(struct tcp_pcb* tpcb, struct pbuf* p, co
     if (erase_length > FIRMWARE_FLASH_SIZE) {
         debug_log("ERROR: erase_length (%u) exceeds FIRMWARE_FLASH_SIZE (%u), aborting erase!\n",
                   erase_length, FIRMWARE_FLASH_SIZE);
-        upload_session.active = false;
-        return ;
+        send_firmware_update_page(tpcb, "<h2 style='color:red'>❌ Firmware upload aborted (erase range invalid)</h2>");
+        reset_upload_session();
+        tcp_recved(tpcb, copied);
+        return;
     }
 
-    watchdog_update();
-    uint32_t ints = save_and_disable_interrupts();
-    // flash_range_erase(upload_session.flash_offset, FIRMWARE_FLASH_SIZE); // if erase of full slot is required
-    flash_range_erase(upload_session.flash_offset, erase_length);
-    restore_interrupts(ints);
+    size_t erased = 0;
+    while (erased < erase_length) {
+        watchdog_update();
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_erase(upload_session.flash_offset + erased, FLASH_SECTOR_SIZE);
+        restore_interrupts(ints);
+        erased += FLASH_SECTOR_SIZE;
+    }
     watchdog_update();
 
     debug_log("UPLOAD FIRMWARE: flash erased: %d\n", (int)upload_session.expected_length);
 
     const char *body = strstr(upload_session.header_buffer, "\r\n\r\n");
     if (!body) {
-        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Body not found despite complete header?\n");
+        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Body not found despite complete header\n");
+        send_firmware_update_page(tpcb, "<h2 style='color:red'>❌ Upload parse error (no body)</h2>");
+        reset_upload_session();
+        tcp_recved(tpcb, copied);
+        return;
     }
 
     body += 4;
     size_t body_len = upload_session.header_length - (body - upload_session.header_buffer);
+    if (body_len > upload_session.expected_length) {
+        body_len = upload_session.expected_length;
+    }
 
     const uint8_t* ptr = (const uint8_t*)body;
     size_t to_copy = body_len;
@@ -1309,8 +1325,9 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         return ERR_OK;
     }
 
-    char buffer[1500];
-    int copied = pbuf_copy_partial(p, buffer, sizeof(buffer), 0);
+    char buffer[1501];
+    int copied = pbuf_copy_partial(p, buffer, sizeof(buffer) - 1, 0);
+    if (copied < 0) copied = 0;
     buffer[copied] = '\0';
 
     // collect header
@@ -1325,6 +1342,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             char *end = strstr(upload_session.header_buffer, "\r\n\r\n");
             if (!end) {
                 // Header not yet complete
+                tcp_recved(tpcb, copied);
                 pbuf_free(p);
                 return ERR_OK;
             }
@@ -1334,6 +1352,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             char *eol = strstr(route_line, "\r\n"); // Extract only the first header line
             if (!eol) {
                 debug_log_with_color(COLOR_RED, "HEADER: malformed - no CRLF\n");
+                tcp_recved(tpcb, copied);
                 pbuf_free(p);
                 return ERR_OK;
             }
@@ -1383,6 +1402,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             }
         } else {
             debug_log_with_color(COLOR_RED, "HEADER: buffer overflow\n");
+            tcp_recved(tpcb, copied);
             pbuf_free(p);
             return ERR_OK;
         }
@@ -1395,10 +1415,12 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         tcp_recved(tpcb, copied);
         
         // Progress logging for firmware updates
-        int percent = (int)((100ULL * upload_session.total_received) / upload_session.expected_length);
-        if (percent >= g_firmware_progress_logged + 10) {
-            g_firmware_progress_logged = percent;
-            debug_log("UPLOAD FIRMWARE: Progress = %d%%\n", percent);
+        if (upload_session.expected_length > 0) {
+            int percent = (int)((100ULL * upload_session.total_received) / upload_session.expected_length);
+            if (percent >= g_firmware_progress_logged + 10) {
+                g_firmware_progress_logged = percent;
+                debug_log("UPLOAD FIRMWARE: Progress = %d%%\n", percent);
+            }
         }
     } else if (upload_session.active && 
                (upload_session.type == UPLOAD_FORM_WIFI ||
@@ -1457,7 +1479,8 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                 }
             }
 
-            uint32_t actual_crc;
+            uint32_t actual_crc = 0;
+            bool crc_ok = false;
             if (valid && header.slot == expected_slot)
             { // only test crc32 for actual firmware (magic word) files and correct slot
                 const uint8_t *firmware_data = (const uint8_t *)(XIP_BASE + upload_session.flash_offset);
@@ -1465,7 +1488,8 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 
                 debug_log("CRC calc: addr = 0x%08X, header.firmware_size = %u\n", (unsigned)(uintptr_t)firmware_data, (unsigned)header.firmware_size);
 
-                if (actual_crc == header.crc32)
+                crc_ok = (actual_crc == header.crc32);
+                if (crc_ok)
                 {
                     debug_log("CRC check OK: 0x%08X\n", actual_crc);
                 }else
@@ -1475,7 +1499,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                     send_firmware_update_page(tpcb, msg);
                 }
             }
-            if (valid && actual_crc == header.crc32 && header.slot == expected_slot) {
+            if (valid && crc_ok && header.slot == expected_slot) {
                 debug_log("Valid Firmware - you may now reboot from the new version!\n");
                 mark_firmware_valid(upload_session.flash_offset);
 

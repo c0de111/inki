@@ -81,7 +81,8 @@ void send_landing_page(struct tcp_pcb *tpcb) {
            "<a href=\"/device_settings\">Device Settings</a><br>"
            "<a href=\"/upload_logo\">Upload Logo</a><br>"
            "<a href=\"/device_status\">Device Status</a><br>"
-           "<a href=\"/message\">Your Custom Message</a><br>"
+           // Hidden from landing page by request; feature remains available via /message route.
+           // "<a href=\"/message\">Your Custom Message</a><br>"
            "<a href=\"/firmware_update\">Firmware Update</a><br>"
            "<a href=\"/clock\">Set Clock</a><br>"
            "<a href=\"/shutdown\">Reboot</a>");
@@ -383,22 +384,18 @@ void handle_form_message(struct tcp_pcb *tpcb, const char *body, size_t len) {
  * - Active firmware slot information
  */
 void send_device_status_page(struct tcp_pcb* tpcb) {
-    char page[4096];
+    char page[16384];
     char timeout_info[64];
     add_timeout_info(timeout_info, sizeof(timeout_info));
 
-    char buffer[1024];
-    char buffer2[1024];
+    char buffer[2048];
+    char buffer2[256];
     uint8_t mac_address[6];
 
     extern ds3231_t ds3231;
     ds3231_data_t now;
 
-    // Get MAC address using public cyw43_state
-    if (cyw43_wifi_get_mac(&cyw43_state, 0, mac_address) == 0) {
-        // success: mac_address[0]..[5] now valid
-    } else {
-        // fallback: e.g. clear array or mark as invalid
+    if (cyw43_wifi_get_mac(&cyw43_state, 0, mac_address) != 0) {
         memset(mac_address, 0, sizeof(mac_address));
     }
 
@@ -407,14 +404,118 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     float vbat = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
     float temp_c = read_onchip_temperature_c();
     float rtc_temp_c = read_ds3231_temperature_c();
+
     i2c_probe_result_t i2c_probe = {0};
     i2c_probe_expected_devices(&i2c_probe);
+
     memory_info_t mem = {0};
     get_memory_info(&mem);
 
-    // Voltage assessment (for simple color coding)
-    const char* vcc_color = (vcc > 3.5) ? "green" : (vcc > 3.0 ? "orange" : "red");
-    const char* vbat_color = (vbat > 3.1) ? "green" : (vbat > 2.9 ? "orange" : "red");
+    const char* vcc_color = (vcc > 3.5f) ? "green" : (vcc > 3.0f ? "orange" : "red");
+    const char* vbat_color = (vbat > 3.1f) ? "green" : (vbat > 2.9f ? "orange" : "red");
+
+    const bool st25_present = i2c_probe.st25_user_present || i2c_probe.st25_system_present;
+
+    const char* ds3231_color = (i2c_probe.ds3231_present && i2c_probe.ds3231_status_ok && i2c_probe.ds3231_temp_ok)
+                               ? "green" : (i2c_probe.ds3231_present ? "orange" : "red");
+    const char* bmp581_color = (i2c_probe.bmp581_present && i2c_probe.bmp581_chip_id_ok)
+                               ? "green" : (i2c_probe.bmp581_present ? "orange" : "red");
+    const char* rv3028_color = (i2c_probe.rv3028_present && i2c_probe.rv3028_id_ok)
+                               ? "green" : (i2c_probe.rv3028_present ? "orange" : "red");
+    const char* st25_color = (st25_present && i2c_probe.st25_ic_ref_ok)
+                             ? "green" : (st25_present ? "orange" : "red");
+
+    const char* ds3231_state = i2c_probe.ds3231_present ? "detected" : "not detected";
+    const char* bmp581_state = i2c_probe.bmp581_present ? "detected" : "not detected";
+    const char* rv3028_state = i2c_probe.rv3028_present ? "detected" : "not detected";
+    const char* st25_state = st25_present ? "detected" : "not detected";
+    const char* device_type_label =
+#if defined(USE_CASE_SEATSURFING)
+        "inki-seatsurfing";
+#elif defined(USE_CASE_HISTORIAN)
+        "inki-historian";
+#elif defined(USE_CASE_HOMEMATIC)
+        "inki-homematic";
+#elif defined(USE_CASE_WEATHERMAP)
+        "inki-weathermap";
+#elif defined(USE_CASE_NEW_USECASE)
+        "inki-newusecase";
+#else
+        "inki-unknown";
+#endif
+
+    char bmp581_addr_str[8] = "0x47/46";
+    char rtc_temp_str[16] = "n/a";
+
+    if (i2c_probe.bmp581_addr != 0xFFu) {
+        snprintf(bmp581_addr_str, sizeof(bmp581_addr_str), "0x%02X", i2c_probe.bmp581_addr);
+    }
+
+    if (isnan(rtc_temp_c)) {
+        snprintf(rtc_temp_str, sizeof(rtc_temp_str), "n/a");
+    } else {
+        float qf = rtc_temp_c * 4.0f;
+        int q = (int)((qf >= 0.0f) ? (qf + 0.5f) : (qf - 0.5f));
+        int whole = q / 4;
+        int rem = q % 4;
+        if (rem < 0) {
+            rem += 4;
+            whole -= 1;
+        }
+        switch (rem) {
+            case 0: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.0", whole); break;
+            case 1: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.25", whole); break;
+            case 2: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.5", whole); break;
+            default: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.75", whole); break;
+        }
+    }
+
+    format_rtc_time(&now, buffer2, sizeof(buffer2));
+
+    int logo_width = 0;
+    int logo_height = 0;
+    int logo_size = 0;
+    bool has_logo = get_flash_logo_info(&logo_width, &logo_height, &logo_size);
+    char logo_info_str[96] = "not present";
+    if (has_logo) {
+        snprintf(logo_info_str, sizeof(logo_info_str), "%dx%d px, %d Bytes", logo_width, logo_height, logo_size);
+    }
+
+    char build0[16] = {0};
+    char version0[32] = {0};
+    char build1[16] = {0};
+    char version1[32] = {0};
+    uint32_t size0 = 0;
+    uint32_t size1 = 0;
+    uint32_t crc0 = 0;
+    uint32_t crc1 = 0;
+    uint8_t slot_index0 = 0;
+    uint8_t slot_index1 = 0;
+    uint8_t valid0 = 0;
+    uint8_t valid1 = 0;
+
+    bool has0 = get_firmware_slot_info(0, build0, version0, &size0, &crc0, &slot_index0, &valid0);
+    bool has1 = get_firmware_slot_info(1, build1, version1, &size1, &crc1, &slot_index1, &valid1);
+
+    char slot0_row[512];
+    char slot1_row[512];
+    if (has0) {
+        snprintf(slot0_row, sizeof(slot0_row),
+                 "<tr><td>Slot 0</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
+                 version0, build0, size0, valid0);
+    } else {
+        snprintf(slot0_row, sizeof(slot0_row),
+                 "<tr><td>Slot 0</td><td colspan='4'><span class='red value'>empty or invalid</span></td></tr>");
+    }
+
+    if (has1) {
+        snprintf(slot1_row, sizeof(slot1_row),
+                 "<tr><td>Slot 1</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
+                 version1, build1, size1, valid1);
+    } else {
+        snprintf(slot1_row, sizeof(slot1_row),
+                 "<tr><td>Slot 1</td><td colspan='4'><span class='red value'>empty or invalid</span></td></tr>");
+    }
 
     snprintf(page, sizeof(page),
              "<!DOCTYPE html><html><head>"
@@ -423,35 +524,47 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              "<meta http-equiv=\"refresh\" content=\"300\">"
              "<title>Device Status</title>"
              "<style>"
-             "body { font-family: sans-serif; text-align: center; padding: 1em; }"
-             ".value { font-weight: bold; }"
-             ".green { color: green; }"
-             ".orange { color: orange; }"
-             ".red { color: red; }"
-             ".section { margin-bottom: 1.2em; }"
-             "a { display: inline-block; margin-top: 2em; text-decoration: none; color: #0066cc; }"
-             "</style></head><body>"
-             "<h1>Device Status</h1>");
+             ":root { color-scheme: light; }"
+             "* { box-sizing: border-box; }"
+             "body { margin: 0; padding: 0.8rem; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; background: #f5f7fa; color: #1f2937; line-height: 1.45; text-align: center; }"
+             ".container { max-width: 800px; margin: 0 auto; }"
+             "h1 { margin: 0.25rem 0 0.85rem; font-size: 1.4rem; text-align: center; }"
+             "h2 { margin: 0 0 0.45rem; font-size: 1.02rem; text-align: center; }"
+             ".value { font-weight: 700; }"
+             ".mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; }"
+             ".green { color: #0f7b0f; }"
+             ".orange { color: #b56900; }"
+             ".red { color: #b42318; }"
+             ".section { background: #fff; border: 1px solid #d7dde5; border-radius: 10px; margin: 0 auto 0.72rem; padding: 0.72rem 0.82rem; max-width: 540px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); }"
+             ".kv { width: 100%; max-width: 640px; margin: 0 auto; border-collapse: collapse; }"
+             ".kv td { padding: 0.2rem 0.25rem; vertical-align: top; text-align: center; }"
+             ".kv td:first-child { width: 42%; color: #5b6675; }"
+             ".diag-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }"
+             ".diag-table { width: 100%; min-width: 460px; margin: 0 auto; border-collapse: collapse; font-size: 0.94rem; }"
+             ".diag-table th, .diag-table td { border-top: 1px solid #e6ebf1; padding: 0.35rem 0.25rem; text-align: center; vertical-align: top; }"
+             ".diag-table th { color: #4b5563; font-weight: 700; border-top: none; }"
+             ".small { font-size: 0.88rem; color: #5b6675; }"
+             ".section pre { margin: 0.4rem auto 0.25rem; padding: 0.45rem 0.5rem; overflow-x: auto; background: #f8fafc; border-radius: 6px; border: 1px solid #e5e7eb; text-align: left; max-width: 640px; }"
+             "a { display: block; margin: 0.9rem 0 0.25rem; text-align: center; text-decoration: none; color: #0b5ed7; font-weight: 600; }"
+             "@media (min-width: 700px) { body { padding: 1rem; } h1 { font-size: 1.58rem; } .kv td:first-child { width: 34%; } }"
+             "@media (max-width: 560px) { .kv { max-width: 100%; } .kv td, .kv td:first-child { display: block; width: 100%; text-align: center; } .kv tr { display: block; padding: 0.22rem 0; border-top: 1px solid #edf1f6; } .kv tr:first-child { border-top: none; } .diag-table { min-width: 430px; font-size: 0.89rem; } .section { max-width: 100%; } }"
+             "</style></head><body><div class='container'><h1>Device Status</h1>");
 
-    // Raumname & SSID
     snprintf(buffer, sizeof(buffer),
-             "<div class='section'>Room: <span class='value'>%s</span><br>"
-             "SSID: <span class='value'>%s</span></div>",
-             device_config_flash.data.roomname,
-             wifi_config_flash.ssid);
-    strcat(page, buffer);
-
-    // Wi-Fi Einstellungen
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>Reconnect Interval: <span class='value'>%d min</span><br>"
-             "Wi-Fi Timeout: <span class='value'>%d s</span></div>",
+             "<div class='section'><h2>Device And Network</h2>"
+             "<table class='kv'>"
+             "<tr><td>Type</td><td class='value'>%s</td></tr>"
+             "<tr><td>SSID</td><td class='value'>%s</td></tr>"
+             "<tr><td>MAC Address</td><td class='value mono'>%02X:%02X:%02X:%02X:%02X:%02X</td></tr>"
+             "<tr><td>Wi-Fi Reconnect</td><td><span class='value'>%d min</span></td></tr>"
+             "<tr><td>Wi-Fi Timeout</td><td><span class='value'>%d s</span></td></tr>"
+             "<tr><td>Refresh Intervals</td><td class='mono'>[%d, %d, %d, %d, %d, %d, %d, %d]</td></tr>"
+             "</table></div>",
+             device_type_label,
+             wifi_config_flash.ssid,
+             mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5],
              device_config_flash.data.wifi_reconnect_minutes,
-             device_config_flash.data.wifi_timeout);
-    strcat(page, buffer);
-
-    // Refresh-Minuten
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>Refresh Intervals:<br><span class='value'>[%d, %d, %d, %d, %d, %d, %d, %d]</span></div>",
+             device_config_flash.data.wifi_timeout,
              device_config_flash.data.refresh_minutes_by_pushbutton[0],
              device_config_flash.data.refresh_minutes_by_pushbutton[1],
              device_config_flash.data.refresh_minutes_by_pushbutton[2],
@@ -462,293 +575,88 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              device_config_flash.data.refresh_minutes_by_pushbutton[7]);
     strcat(page, buffer);
 
-    // RTC Zeit (roh)
     snprintf(buffer, sizeof(buffer),
-             "<div class='section'>RTC (raw): <span class='value'>%02d:%02d, %s, %02d. %s %04d</span></div>",
+             "<div class='section'><h2>Time And Power</h2>"
+             "<table class='kv'>"
+             "<tr><td>RTC (Raw)</td><td class='value'>%02d:%02d, %s, %02d. %s %04d</td></tr>"
+             "<tr><td>RTC (DST)</td><td class='value'>%s</td></tr>"
+             "<tr><td>RTC Temperature</td><td class='value'>%s &deg;C</td></tr>"
+             "<tr><td>MCU Temperature</td><td class='value'>%.1f &deg;C</td></tr>"
+             "<tr><td>Vcc</td><td><span class='value %s'>%.3f V</span></td></tr>"
+             "<tr><td>Vbat</td><td><span class='value %s'>%.3f V</span></td></tr>"
+             "<tr><td>ADC Conversion</td><td class='value mono'>%.8f</td></tr>"
+             "</table></div>",
              now.hours, now.minutes,
              get_day_of_week(now.day),
              now.date, get_month_name(now.month),
-             2000 + now.year);
-    strcat(page, buffer);
-
-    // RTC Zeit (DST)
-    format_rtc_time(&now, buffer2, sizeof(buffer2));
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>RTC (DST): <span class='value'>%s</span></div>", buffer2);
-    strcat(page, buffer);
-
-    // MAC Adresse
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>MAC address: <span class='value'>%02X:%02X:%02X:%02X:%02X:%02X</span></div>",
-             mac_address[0], mac_address[1], mac_address[2],
-             mac_address[3], mac_address[4], mac_address[5]);
-    strcat(page, buffer);
-
-    // Spannungen
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section'>"
-             "Vcc: <span class='value %s'>%.3f V</span><br>"
-             "Vbat: <span class='value %s'>%.3f V</span><br>"
-             "ADC Conversion Factor: <span class='value'>%.8f</span></div>",
+             2000 + now.year,
+             buffer2,
+             rtc_temp_str,
+             temp_c,
              vcc_color, vcc,
              vbat_color, vbat,
              device_config_flash.data.conversion_factor);
     strcat(page, buffer);
 
-    // On-chip temperature
     snprintf(buffer, sizeof(buffer),
-             "<div class='section'>MCU Temperature: <span class='value'>%.1f &deg;C</span></div>",
-             temp_c);
+             "<div class='section'><h2>I2C Diagnostics</h2>"
+             "<div class='diag-wrap'><table class='diag-table'>"
+             "<thead><tr><th>Device</th><th>Addr</th><th>Status</th></tr></thead>"
+             "<tbody>"
+             "<tr><td>DS3231</td><td class='mono'>0x68</td><td class='value %s'>%s</td></tr>"
+             "<tr><td>BMP581</td><td class='mono'>%s</td><td class='value %s'>%s</td></tr>"
+             "<tr><td>RV-3028</td><td class='mono'>0x52</td><td class='value %s'>%s</td></tr>"
+             "<tr><td>ST25DV</td><td class='mono'>0x53/0x57</td><td class='value %s'>%s</td></tr>"
+             "</tbody></table></div></div>",
+             ds3231_color, ds3231_state,
+             bmp581_addr_str, bmp581_color, bmp581_state,
+             rv3028_color, rv3028_state,
+             st25_color, st25_state);
     strcat(page, buffer);
 
-    // DS3231 temperature (format in exact 0.25°C steps: .0, .25, .5, .75)
-    {
-        char rtc_temp_str[16];
-        if (isnan(rtc_temp_c)) {
-            snprintf(rtc_temp_str, sizeof(rtc_temp_str), "n/a");
-        } else {
-            float qf = rtc_temp_c * 4.0f;
-            int q = (int)((qf >= 0.0f) ? (qf + 0.5f) : (qf - 0.5f)); // round to nearest quarter
-            int whole = q / 4;
-            int rem = q % 4;
-            if (rem < 0) { rem += 4; whole -= 1; }
-            switch (rem) {
-                case 0: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.0", whole); break;
-                case 1: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.25", whole); break;
-                case 2: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.5", whole); break;
-                case 3: snprintf(rtc_temp_str, sizeof(rtc_temp_str), "%d.75", whole); break;
-            }
-        }
-        snprintf(buffer, sizeof(buffer),
-                 "<div class='section'>RTC Temperature: <span class='value'>%s &deg;C</span></div>",
-                 rtc_temp_str);
-        strcat(page, buffer);
-    }
-
-    // I2C diagnostics for expected onboard devices
-    {
-        const char* ds3231_color = (i2c_probe.ds3231_present && i2c_probe.ds3231_status_ok && i2c_probe.ds3231_temp_ok)
-                                   ? "green" : (i2c_probe.ds3231_present ? "orange" : "red");
-        const char* bmp581_color = (i2c_probe.bmp581_present && i2c_probe.bmp581_chip_id_ok)
-                                   ? "green" : (i2c_probe.bmp581_present ? "orange" : "red");
-        const char* rv3028_color = (i2c_probe.rv3028_present && i2c_probe.rv3028_id_ok)
-                                   ? "green" : (i2c_probe.rv3028_present ? "orange" : "red");
-        const bool st25_present = i2c_probe.st25_user_present || i2c_probe.st25_system_present;
-        const char* st25_color = (st25_present && i2c_probe.st25_ic_ref_ok)
-                                 ? "green" : (st25_present ? "orange" : "red");
-
-        const char* ds3231_state = i2c_probe.ds3231_present ? "present" : "missing";
-        const char* bmp581_state = i2c_probe.bmp581_present ? "present" : "missing";
-        const char* rv3028_state = i2c_probe.rv3028_present ? "present" : "missing";
-        const char* st25_state = st25_present ? "present" : "missing";
-
-        char ds3231_status_str[8] = "n/a";
-        char ds3231_temp_str[16] = "n/a";
-        char bmp581_addr_str[8] = "0x47/46";
-        char bmp581_probe_str[24] = "0x47=NACK 0x46=NACK";
-        char bmp581_chip_id_str[8] = "n/a";
-        char rv3028_probe_str[16] = "0x52=NACK";
-        char rv3028_id_str[16] = "n/a";
-        char st25_probe_str[24] = "n/a";
-        char st25_ic_ref_str[8] = "n/a";
-
-        if (i2c_probe.ds3231_status_ok) {
-            snprintf(ds3231_status_str, sizeof(ds3231_status_str), "0x%02X", i2c_probe.ds3231_status_reg);
-        }
-        if (i2c_probe.ds3231_temp_ok) {
-            int whole = i2c_probe.ds3231_temp_quarter_c / 4;
-            int quarter = i2c_probe.ds3231_temp_quarter_c % 4;
-            if (quarter < 0) { quarter += 4; whole -= 1; }
-            switch (quarter) {
-                case 0: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.0", whole); break;
-                case 1: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.25", whole); break;
-                case 2: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.5", whole); break;
-                default: snprintf(ds3231_temp_str, sizeof(ds3231_temp_str), "%d.75", whole); break;
-            }
-        }
-
-        snprintf(bmp581_probe_str, sizeof(bmp581_probe_str), "0x47=%s 0x46=%s",
-                 i2c_probe.bmp581_addr_primary_ack ? "ACK" : "NACK",
-                 i2c_probe.bmp581_addr_secondary_ack ? "ACK" : "NACK");
-
-        if (i2c_probe.bmp581_addr != 0xFFu) {
-            snprintf(bmp581_addr_str, sizeof(bmp581_addr_str), "0x%02X", i2c_probe.bmp581_addr);
-        }
-        if (i2c_probe.bmp581_chip_id != 0xFFu) {
-            snprintf(bmp581_chip_id_str, sizeof(bmp581_chip_id_str), "0x%02X", i2c_probe.bmp581_chip_id);
-        }
-
-        if (i2c_probe.rv3028_addr_ack) {
-            snprintf(rv3028_probe_str, sizeof(rv3028_probe_str), "0x52=ACK");
-        }
-        if (i2c_probe.rv3028_hid != 0xFFu && i2c_probe.rv3028_vid != 0xFFu) {
-            snprintf(rv3028_id_str, sizeof(rv3028_id_str), "0x%02X/0x%02X", i2c_probe.rv3028_hid, i2c_probe.rv3028_vid);
-        }
-
-        if (st25_present) {
-            snprintf(st25_probe_str, sizeof(st25_probe_str), "0x53=%s 0x57=%s",
-                     i2c_probe.st25_user_present ? "ACK" : "NACK",
-                     i2c_probe.st25_system_present ? "ACK" : "NACK");
-        }
-        if (i2c_probe.st25_ic_ref != 0xFFu) {
-            snprintf(st25_ic_ref_str, sizeof(st25_ic_ref_str), "0x%02X", i2c_probe.st25_ic_ref);
-        }
-
-        snprintf(buffer, sizeof(buffer),
-                 "<div class='section'>I2C diagnostics:<br>"
-                 "DS3231 (0x68): <span class='value %s'>%s</span>, status(0x0F)=%s, temp(0x11/12)=%s &deg;C<br>"
-                 "BMP581 (%s): <span class='value %s'>%s</span>, probe=%s, chip-id(0x01)=%s (exp 0x50)<br>"
-                 "RV-3028 (0x52): <span class='value %s'>%s</span>, probe=%s, hid/vid(0x28)=%s<br>"
-                 "ST25DV (0x53/0x57): <span class='value %s'>%s</span>, probe=%s, IC_REF(0x0017)=%s (exp 0x50/0x51)</div>",
-                 ds3231_color, ds3231_state, ds3231_status_str, ds3231_temp_str,
-                 bmp581_addr_str, bmp581_color, bmp581_state, bmp581_probe_str, bmp581_chip_id_str,
-                 rv3028_color, rv3028_state, rv3028_probe_str, rv3028_id_str,
-                 st25_color, st25_state, st25_probe_str, st25_ic_ref_str);
-        strcat(page, buffer);
-    }
-
-    // Memory info (numeric)
     snprintf(buffer, sizeof(buffer),
-             "<div class='section'>Memory:<br>"
-             "Heap used: <span class='value'>%u KB</span><br>"
-             "Heap headroom: <span class='value'>%u KB</span><br>"
-             "Stack margin: <span class='value'>%u KB (approx)</span></div>",
+             "<div class='section'><h2>Memory</h2>"
+             "<table class='kv'>"
+             "<tr><td>Heap Used</td><td class='value'>%u KB</td></tr>"
+             "<tr><td>Heap Headroom</td><td class='value'>%u KB</td></tr>"
+             "<tr><td>Stack Margin</td><td class='value'>%u KB (approx)</td></tr>"
+             "<tr><td>Heap Base</td><td class='value mono'>0x%08X</td></tr>"
+             "<tr><td>Heap End</td><td class='value mono'>0x%08X</td></tr>"
+             "<tr><td>Stack Limit</td><td class='value mono'>0x%08X</td></tr>"
+             "<tr><td>SP (core0)</td><td class='value mono'>0x%08X</td></tr>"
+             "</table></div>",
              (unsigned)(mem.heap_used_bytes / 1024U),
              (unsigned)(mem.heap_headroom_bytes / 1024U),
-             (unsigned)(mem.stack_margin_bytes / 1024U));
-    strcat(page, buffer);
-
-    // Memory ASCII bar (heap_base .. heap_limit)
-    {
-        const int BAR_W = 60;
-        char bar[BAR_W + 1];
-        for (int i = 0; i < BAR_W; i++) bar[i] = '.'; // default: free headroom
-        bar[BAR_W] = '\0';
-
-        uintptr_t total = (mem.heap_limit_addr > mem.heap_base_addr)
-                            ? (mem.heap_limit_addr - mem.heap_base_addr) : 1;
-        uintptr_t heap_used = (mem.heap_end_addr > mem.heap_base_addr)
-                              ? (mem.heap_end_addr - mem.heap_base_addr) : 0;
-        uintptr_t margin = (mem.sp_addr > mem.heap_end_addr)
-                           ? (mem.sp_addr - mem.heap_end_addr) : 0;
-        if (margin > (mem.heap_limit_addr - mem.heap_end_addr)) {
-            margin = (mem.heap_limit_addr - mem.heap_end_addr);
-        }
-
-        int used_len = (int)((heap_used * BAR_W) / total);
-        if (used_len < 0) used_len = 0; if (used_len > BAR_W) used_len = BAR_W;
-        int margin_len = (int)((margin * BAR_W) / total);
-        if (margin_len < 0) margin_len = 0;
-        if (used_len + margin_len > BAR_W) margin_len = BAR_W - used_len;
-
-        // Fill used region with '#'
-        for (int i = 0; i < used_len; i++) bar[i] = '#';
-        // Fill stack margin region with '+'
-        for (int i = 0; i < margin_len; i++) {
-            int idx = used_len + i;
-            if (idx >= 0 && idx < BAR_W) bar[idx] = '+';
-        }
-
-        snprintf(buffer, sizeof(buffer),
-                 "<div class='section'><pre>[%s]</pre>"
-                 "<div style='font-size:0.9em;'>"
-                 "#=heap used, +=stack margin (approx), .=free headroom"
-                 "</div></div>", bar);
-        strcat(page, buffer);
-    }
-
-    // Addresses (hex)
-    snprintf(buffer, sizeof(buffer),
-             "<div class='section' style='font-size:0.95em;'>"
-             "Addresses:<br>"
-             "Heap base: <span class='value'>0x%08X</span><br>"
-             "Heap end : <span class='value'>0x%08X</span><br>"
-             "Stack lim: <span class='value'>0x%08X</span><br>"
-             "SP (c0)  : <span class='value'>0x%08X</span>"
-             "</div>",
+             (unsigned)(mem.stack_margin_bytes / 1024U),
              (unsigned)mem.heap_base_addr,
              (unsigned)mem.heap_end_addr,
              (unsigned)mem.heap_limit_addr,
              (unsigned)mem.sp_addr);
     strcat(page, buffer);
 
-    // RP2040 reference ranges
     snprintf(buffer, sizeof(buffer),
-             "<div class='section' style='font-size:0.9em;color:#555;'>"
-             "RP2040 reference: SRAM 0x20000000–0x20042000 (264 KB), XIP 0x10000000 (flash base)"
-             "</div>");
+             "<div class='section'><h2>Flash And Firmware</h2>"
+             "<table class='kv'>"
+             "<tr><td>Logo In Flash</td><td class='value %s'>%s</td></tr>"
+             "<tr><td>Active Firmware</td><td class='value mono'>%s</td></tr>"
+             "</table>"
+             "<div class='diag-wrap'><table class='diag-table'>"
+             "<thead><tr><th>Slot</th><th>Version</th><th>Build</th><th>Size (B)</th><th>Valid</th></tr></thead>"
+             "<tbody>%s%s</tbody>"
+             "</table></div></div>",
+             has_logo ? "green" : "red",
+             logo_info_str,
+             get_active_firmware_slot_info(),
+             slot0_row,
+             slot1_row);
     strcat(page, buffer);
 
-    // Logo-Flash-Info :
-    int logo_width = 0, logo_height = 0, logo_size = 0;
-    if (get_flash_logo_info(&logo_width, &logo_height, &logo_size)) {
-        snprintf(buffer, sizeof(buffer),
-                 "<div class='section'>Logo in flash:<br>"
-                 "<span class='value'>%dx%d px, %d Bytes</span></div>",
-                 logo_width, logo_height, logo_size);
-    } else {
-        snprintf(buffer, sizeof(buffer),
-                 "<div class='section'>Logo in flash: <span class='value red'>not present</span></div>");
-    }
-    strcat(page, buffer);
-
-// active slot and reset pointer
     snprintf(buffer, sizeof(buffer),
-             "<div class='section'>Aktive Firmware:<br>"
-             "<div><span class='value'>%s</span></div><br>",
-             get_active_firmware_slot_info());
-
+             "<div class='section small'>%s</div>",
+             timeout_info);
     strcat(page, buffer);
 
-    char build0[16] = {0}, version0[32] = {0};
-    char build1[16] = {0}, version1[32] = {0};
-    uint32_t size0 = 0, size1 = 0;
-    uint32_t crc0 = 0, crc1 = 0;
-    uint8_t slot_index0 = 0, slot_index1 = 0;
-    uint8_t valid0 = 0, valid1 = 0;
-
-    bool has0 = get_firmware_slot_info(0, build0, version0, &size0, &crc0, &slot_index0, &valid0);
-    bool has1 = get_firmware_slot_info(1, build1, version1, &size1, &crc1, &slot_index1, &valid1);
-
-    // Slot 0 HTML
-    if (has0) {
-        snprintf(buffer, sizeof(buffer),
-                 "<div>Slot 0:</div>\n"
-                 "<div>Version: <span class='value'>%s</span></div>\n"
-                 "<div>Build: <span class='value'>%s</span></div>\n"
-                 "<div>Size: <span class='value'>%u Bytes</span></div>\n"
-                 "<div>CRC32: <span class='value'>0x%08X</span></div>\n"
-                 "<div>Slot: <span class='value'>%u</span></div>\n"
-                 "<div>Valid: <span class='value'>%u</span></div><br>\n\n\n",
-                 version0, build0, size0, crc0, slot_index0, valid0);
-    } else {
-        snprintf(buffer, sizeof(buffer),
-                 "<li>Slot 0: <span class='value red'>empty or invalid</span></li>\n");
-    }
-    strcat(page, buffer);
-
-    // Slot 1 HTML
-    if (has1) {
-        snprintf(buffer, sizeof(buffer),
-                 "<div>Slot 1:</div>\n"
-                 "<div>Version: <span class='value'>%s</span></div>\n"
-                 "<div>Build: <span class='value'>%s</span></div>\n"
-                 "<div>Size: <span class='value'>%u Bytes</span></div>\n"
-                 "<div>CRC32: <span class='value'>0x%08X</span></div>\n"
-                 "<div>Slot: <span class='value'>%u</span></div>\n"
-                 "<div>Valid: <span class='value'>%u</span></div>\n",
-                 version1, build1, size1, crc1, slot_index1, valid1);
-    } else {
-        snprintf(buffer, sizeof(buffer),
-                 "<li>Slot 1: <span class='value red'>empty or invalid</span></li>\n");
-    }
-    strcat(page, buffer);
-
-        // Close list
-        strcat(page, "</ul></div>\n");
-
-    // Back link
-    strcat(page, "<a href=\"/\">back</a></body></html>");
+    strcat(page, "<a href=\"/\">back</a></div></body></html>");
 
     send_response(tpcb, page);
 }
@@ -1038,7 +946,7 @@ void send_wifi_config_page(struct tcp_pcb *tpcb, const char *message) {
  * server URL, API credentials, and location configuration.
  */
 void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
-    char page[2048];
+    char page[8192];
     char timeout_info[64];
     add_timeout_info(timeout_info, sizeof(timeout_info));
 
@@ -1059,7 +967,10 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
              "body { font-family: sans-serif; text-align: center; }"
              "form { max-width: 400px; margin: auto; padding: 1em; }"
              "label { display: block; margin-bottom: 1em; font-size: 1em; }"
-             "input[type='text'] { width: 100%%; padding: 0.5em; font-size: 1em; }"
+             "label.inline { display: inline-block; margin-right: 1em; }"
+             "input[type='text'], input[type='number'] { width: 100%%; padding: 0.5em; font-size: 1em; box-sizing: border-box; }"
+             "fieldset { border: 1px solid #ccc; padding: 1em 1.2em; margin-top: 1em; text-align: left; }"
+             "legend { font-weight: bold; }"
              "input[type='submit'] { padding: 0.6em 1em; font-size: 1em; margin: 0.5em; width: 45%%; max-width: 150px; }"
              "a { display: inline-block; margin-top: 1.5em; font-size: 0.9em; text-decoration: none; color: #0066cc; }"
              "</style></head><body>"
@@ -1072,22 +983,55 @@ void send_seatsurfing_config_page(struct tcp_pcb* tpcb, const char* message) {
 
              snprintf(page + strlen(page), sizeof(page) - strlen(page),
              "<form method=\"POST\" action=\"/seatsurfing\">"
+             "<fieldset><legend>Room Settings</legend>"
+             "<label>Room name:<br><input type=\"text\" name=\"roomname\" value=\"%s\" maxlength=\"15\"></label>"
+             "<div style=\"margin-top:1em;\">"
+             "<strong>Room type</strong><br>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"0\" %s> Office</label>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"1\" %s> Meeting</label>"
+             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"2\" %s> Lecture hall</label>"
+             "</div>"
+             "<div style=\"margin-top:1em;\">"
+             "<strong>Number of seats:</strong> <span id=\"number_of_seats\">%u</span><br>"
+             "<small>Number of seats is defined by filled Space Name fields below.</small>"
+             "</div>"
+             "</fieldset>"
+             "<fieldset><legend>SeatSurfing API</legend>"
              "<label>API Host:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
              "<label>Benutzername:<br><input type=\"text\" name=\"text2\" value=\"%s\"></label>"
              "<label>Passwort:<br><input type=\"text\" name=\"text3\" value=\"%s\"></label>"
              "<label>IP-Adresse:<br><input type=\"text\" name=\"text4\" value=\"%s\"></label>"
              "<label>Port:<br><input type=\"text\" name=\"text5\" value=\"%d\"></label>"
              "<label>Location ID:<br><input type=\"text\" name=\"text6\" value=\"%s\"></label>"
-             "<label>Space Name 1:<br><input type=\"text\" name=\"text7\" value=\"%s\"></label>"
-             "<label>Space Name 2:<br><input type=\"text\" name=\"text8\" value=\"%s\"></label>"
-             "<label>Space Name 3:<br><input type=\"text\" name=\"text9\" value=\"%s\"></label>"
-             "<label>Space Name 4:<br><input type=\"text\" name=\"text10\" value=\"%s\"></label>"
-             "<small>Seats used = number of filled names above. Name may also be the Space ID.</small><br>"
+             "<label>Space Name 1:<br><input type=\"text\" name=\"text7\" value=\"%s\" oninput=\"updateDerivedSeats()\"></label>"
+             "<label>Space Name 2:<br><input type=\"text\" name=\"text8\" value=\"%s\" oninput=\"updateDerivedSeats()\"></label>"
+             "<label>Space Name 3:<br><input type=\"text\" name=\"text9\" value=\"%s\" oninput=\"updateDerivedSeats()\"></label>"
+             "<label>Space Name 4:<br><input type=\"text\" name=\"text10\" value=\"%s\" oninput=\"updateDerivedSeats()\"></label>"
+             "</fieldset>"
+             "<small>Seats are derived from filled Space Name fields and stored automatically.</small><br>"
              "<input type=\"submit\" value=\"store\">"
              "</form>"
              "<a href=\"/\">Back to Start</a>"
              "<p>%s</p>"
+             "<script>"
+             "function updateDerivedSeats(){"
+             "  var count = 0;"
+             "  for (var i = 7; i <= 10; i++) {"
+             "    var el = document.querySelector('input[name=\"text' + i + '\"]');"
+             "    if (el && el.value.trim().length) count++;"
+             "  }"
+             "  if (count === 0) count = 1;"
+             "  var seats = document.getElementById('number_of_seats');"
+             "  if (seats) seats.textContent = count;"
+             "}"
+             "window.addEventListener('load', updateDerivedSeats);"
+             "</script>"
              "</body></html>",
+             device_config_flash.data.roomname,
+             (device_config_flash.data.type == 0 ? "checked" : ""),
+             (device_config_flash.data.type == 1 ? "checked" : ""),
+             (device_config_flash.data.type == 2 ? "checked" : ""),
+             (unsigned)seatsurfing_config_flash.data.seat_count,
              seatsurfing_config_flash.data.host,
              seatsurfing_config_flash.data.username,
              seatsurfing_config_flash.data.password,
@@ -1379,35 +1323,7 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<form method=\"POST\" action=\"/device_config\">");
 
-#ifdef USE_CASE_SEATSURFING
-    // Full room settings for SeatSurfing
-    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
-             "<fieldset><legend>Room Settings</legend>"
-
-             // Room name input
-             "<label>Room name:<br>"
-             "<input type=\"text\" name=\"roomname\" value=\"%s\" maxlength=\"15\"></label>",
-             device_config_flash.data.roomname);
-
-    // Room type and number of seats
-    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
-             "<div style=\"margin-top:1em;\">"
-             "<strong>Room type</strong><br>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"0\" %s> Office</label>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"1\" %s> Meeting</label>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"type\" value=\"2\" %s> Lecture hall</label>"
-             "</div>"
-
-             // Number of seats input
-             "<label style=\"margin-top:1em; display:block;\">"
-             "Number of seats:<br>"
-             "<input type=\"number\" id=\"number_of_seats\" name=\"number_of_seats\" value=\"%d\" min=\"0\" max=\"5\">"
-             "</label></fieldset>",
-             (device_config_flash.data.type == 0 ? "checked" : ""),
-             (device_config_flash.data.type == 1 ? "checked" : ""),
-             (device_config_flash.data.type == 2 ? "checked" : ""),
-             device_config_flash.data.number_of_seats);
-#else
+#ifndef USE_CASE_SEATSURFING
     // Simplified for Historian/Homematic: only Name & Title (stored in roomname)
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<fieldset><legend>Name & Title</legend>"
@@ -1417,18 +1333,6 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              device_config_flash.data.roomname);
 #endif
 
-    // ePaper type: only SeatSurfing needs seat-limit onchange hook
-#ifdef USE_CASE_SEATSURFING
-    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
-             "<fieldset><legend>ePaper-Typ</legend>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"0\" %s onchange=\"updateSeatLimit()\"> None</label>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"1\" %s onchange=\"updateSeatLimit()\"> 7.5 Zoll</label>"
-             "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"2\" %s onchange=\"updateSeatLimit()\"> 4.2 Zoll</label>"
-             "</fieldset>",
-             (device_config_flash.data.epapertype == 0 ? "checked" : ""),
-             (device_config_flash.data.epapertype == 1 ? "checked" : ""),
-             (device_config_flash.data.epapertype == 2 ? "checked" : ""));
-#else
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
              "<fieldset><legend>ePaper-Typ</legend>"
              "<label class=\"inline\"><input type=\"radio\" name=\"epapertype\" value=\"0\" %s> None</label>"
@@ -1438,7 +1342,6 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              (device_config_flash.data.epapertype == 0 ? "checked" : ""),
              (device_config_flash.data.epapertype == 1 ? "checked" : ""),
              (device_config_flash.data.epapertype == 2 ? "checked" : ""));
-#endif
 
     // Refresh-Intervalle
     snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
@@ -1539,27 +1442,6 @@ void send_device_config_page(struct tcp_pcb* tpcb, const char* message) {
              "<p>%s</p>"
              "</body></html>",
              timeout_info);
-
-    // Only include seat-limit helper when SeatSurfing fields are present
-#ifdef USE_CASE_SEATSURFING
-    snprintf(strchr(page, '\0'), sizeof(page) - strlen(page),
-             "<script>"
-             "function updateSeatLimit() {"
-             "  var epaper = document.querySelector('input[name=\"epapertype\"]:checked').value;"
-             "  var seats = document.getElementById('number_of_seats');"
-             "  if (epaper == '2') {"
-             "    seats.value = 1;"
-             "    seats.max = 1;"
-             "  } else if (epaper == '1') {"
-             "    if (seats.value > 3) seats.value = 3;"
-             "    seats.max = 3;"
-             "  } else {"
-             "    seats.max = 5;"
-             "  }"
-             "}"
-             "window.onload = updateSeatLimit;"
-             "</script>");
-#endif
 
     debug_log("device settings page length: %d\n", strlen(page));
     send_response(tpcb, page);
@@ -1670,11 +1552,19 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
         debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Seatsurfing-Konfiguration.\n");
     }
 
-    // Keep device-config seat count in sync so render code knows how many seats to draw
+    // Keep device-config room settings in sync for SeatSurfing rendering
     device_config_t dev_cfg = { .crc32 = 0 };
     memcpy(&dev_cfg.data, &device_config_flash.data, sizeof(device_config_data_t));
+    if (result.roomname[0] != '\0') {
+        strncpy(dev_cfg.data.roomname, result.roomname, sizeof(dev_cfg.data.roomname) - 1);
+    }
+    if (strstr(body, "type=") != NULL && result.type >= 0 && result.type <= 2) {
+        dev_cfg.data.type = (RoomType)result.type;
+    }
     dev_cfg.data.number_of_seats = seat_count;
-    save_device_config(&dev_cfg);
+    if (!save_device_config(&dev_cfg)) {
+        debug_log_with_color(COLOR_RED, "Error syncing SeatSurfing-derived room settings.\n");
+    }
 
     send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
 }
@@ -1877,9 +1767,8 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
     memcpy(&new_cfg.data, &device_config_flash.data, sizeof(device_config_data_t));
 
     // Neue Werte eintragen
+#ifndef USE_CASE_SEATSURFING
     strncpy(new_cfg.data.roomname, result.roomname, sizeof(new_cfg.data.roomname) - 1);
-#ifdef USE_CASE_SEATSURFING
-    new_cfg.data.type = (RoomType)result.type;
 #endif
     new_cfg.data.epapertype = (EpaperType)result.epapertype;
 
@@ -1887,9 +1776,6 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
         new_cfg.data.refresh_minutes_by_pushbutton[i] = result.refresh_minutes_by_pushbutton[i];
     }
 
-    #ifdef USE_CASE_SEATSURFING
-    new_cfg.data.number_of_seats = result.number_of_seats;
-    #endif
     new_cfg.data.show_query_date = result.show_query_date;
     new_cfg.data.query_only_at_officehours = result.query_only_at_officehours;
     new_cfg.data.wifi_reconnect_minutes = result.wifi_reconnect_minutes;

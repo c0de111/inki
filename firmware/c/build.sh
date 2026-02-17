@@ -169,6 +169,7 @@ BUILD_DIR="$SCRIPT_DIR/build"
 CRC32SUM="$SCRIPT_DIR/crc32sum"
 BIN_SLOT0="$BUILD_DIR/inki_slot0.bin"
 BIN_SLOT1="$BUILD_DIR/inki_slot1.bin"
+BIN_UPLOAD_DIR="$BUILD_DIR/binaries"
 
 patch_firmware() {
     local BIN="$1"
@@ -205,3 +206,9 @@ patch_firmware "$BIN_SLOT0" 0
 patch_firmware "$BIN_SLOT1" 1
 
 echo "✅ Firmware headers patched successfully."
+
+mkdir -p "$BIN_UPLOAD_DIR"
+cp -f "$BIN_SLOT0" "$BIN_UPLOAD_DIR/inki_slot0.bin"
+cp -f "$BIN_SLOT1" "$BIN_UPLOAD_DIR/inki_slot1.bin"
+
+echo "✅ Upload binaries copied to: $BIN_UPLOAD_DIR"

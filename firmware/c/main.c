@@ -2781,12 +2781,10 @@ void render_page_wifi_error(ds3231_t* clock, UBYTE* image_buffer) {
 void render_page_wifi_setup(UBYTE* image) {
     int x_offset = 0;
     int y_offset = 0;
-#ifdef USE_CASE_HISTORIAN
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         x_offset = (EPD_7IN5_V2_WIDTH - EPD_4IN2_V2_WIDTH) / 2;
         y_offset = (EPD_7IN5_V2_HEIGHT - EPD_4IN2_V2_HEIGHT) / 2;
     }
-#endif
 
     if (!draw_flash_logo(image, 290 + x_offset, 10 + y_offset)) {
         DrawSubImage(image, &inki_octopus_100_95, 290 + x_offset, 15 + y_offset);
