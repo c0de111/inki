@@ -1,0 +1,80 @@
+name: Firmware Build Matrix
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  firmware-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        use_case:
+          - seatsurfing
+          - historian
+          - homematic
+          - weathermap
+
+    steps:
+      - name: Resolve G1 toggle
+        id: gate
+        env:
+          INKI_CI_G1_ENABLED: ${{ vars.INKI_CI_G1_ENABLED }}
+        run: |
+          set -euo pipefail
+          value="${INKI_CI_G1_ENABLED:-1}"
+          value_lc="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+          case "$value_lc" in
+            0|false|off|no)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+          echo "G1 toggle INKI_CI_G1_ENABLED='${value}' -> enabled=$(grep '^enabled=' "$GITHUB_OUTPUT" | cut -d= -f2)"
+
+      - name: G1 disabled
+        if: steps.gate.outputs.enabled == 'false'
+        run: |
+          echo "G1 firmware build matrix is disabled via repository variable INKI_CI_G1_ENABLED."
+          echo "Set INKI_CI_G1_ENABLED to 1/true/on to re-enable."
+
+      - name: Checkout repository
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install ARM toolchain
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Install Pico SDK 2.1.0
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/pico"
+          if [ ! -d "$HOME/pico/pico-sdk" ]; then
+            git clone --depth 1 --branch 2.1.0 https://github.com/raspberrypi/pico-sdk.git "$HOME/pico/pico-sdk"
+          fi
+          git -C "$HOME/pico/pico-sdk" checkout 2.1.0
+          git -C "$HOME/pico/pico-sdk" submodule update --init --depth 1
+
+      - name: Build host crc32 helper
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          cd firmware/c
+          gcc -O2 -Wall -Wextra -o crc32sum crc32sum.c
+
+      - name: Build firmware (${{ matrix.use_case }})
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          export PICO_SDK_PATH="$HOME/pico/pico-sdk"
+          cd firmware/c
+          chmod +x ./build.sh
+          ./build.sh --${{ matrix.use_case }}
