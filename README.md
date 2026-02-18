@@ -60,19 +60,17 @@ inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
 
 - Start and connect to the inki Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
 
-- Setup the configuration of the device (settings will be stored for future use)
+- Setup the configuration of the device 
 
   - Wi-Fi credentials
-  - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, ...)
-  - Device settings (room numbers, seats per room, automatic refresh intervals...)
+  - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, room name, ...)
+  - Optionally adjust device settings (automatic refresh intervals...)
   - Optionally upload a custom logo / piktogram
   - Optionally upload firmware updates, inki will automatically choose the most recent version at next reboot
   - Set realtime clock, using the client's time (your phone/tablet/computer used for connecting to inki)
-  - inki reboots and starts displaying live information from the configured source (e.g., seatsurfing server).
+  - inki reboots and starts displaying live information from the configured source 
 
 No cables, programmer or flashing required — just insert batteries and use your browser.
-
-For more options and logo uploads, see [See “Configuration via Web Interface”](#configuration-via-web-interface)
 
 <p align="center">
   <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
@@ -96,13 +94,13 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
   Compatible with Waveshare 7.5" V2 and 4.2" V2 displays, retains its content even when powered off.
 
 - **Automatically synchronizes with: seats booked via seatsurfing, data from ccu-historian**
-  Shows current booking state and name, layouts, refresh time and display content can be adjusted for room types (office, conference, seminar), or data from ccu-historian
+  Shows current booking state and name, layouts, refresh time and display content can be adjusted for room types, or data from ccu-historian or a homematic ccu.
 
 - **Wi-Fi Connectivity**
   Periodically fetches content via HTTP, refresh time freely programmable.
 
 - **Multi-Page Display**
-  Up to 8 user-selectable display pages via pushbuttons (pages 4–7 mirror pages 0–3 for legacy combos). [See „User-selectable pages“](#user-selectable-pages)
+  User-selectable display pages via pushbuttons. [See „User-selectable pages“](#user-selectable-pages)
 
 - **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
@@ -119,7 +117,7 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
 
 <p align="center">
   <i>Left: Log of the AA battery voltage of a 7.5&quot; prototype, running for 198 days with 1800-second refresh intervals.<br>
-  Right: The 4.2&quot; version of the eSign device with its backside visible (including batteries and RTC).<br>
+  Right: The 4.2&quot; version of the inki device with its backside visible (including batteries and RTC).<br>
   Click any image to view the full-resolution version.</i>
 </p>
 
@@ -127,7 +125,7 @@ For more options and logo uploads, see [See “Configuration via Web Interface�
 
 ## Build your own *inki*
 
-This repository provides all design files, documentation, and code to build your own *inki*:
+This repository provides all files, documentation, and code to build your own *inki*:
 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular enclosure with a dovetail mount - [(STLs and FreeCAD files)](hardware/enclosure/).
@@ -164,7 +162,7 @@ Eight combinations are available by holding buttons 1–3 while pressing *Start*
 
 ---
 
-### Page 0: **Room Occupation (Default View)**  
+### Page 1: **Room Occupation (Default View)**  
 Displays current room occupancy fetched from the seatsurfing server. The room name, occupant, and space number are shown. This page is shown automatically triggered by the Real Time Clock.
 
 <p align="center">
@@ -175,7 +173,7 @@ Displays current room occupancy fetched from the seatsurfing server. The room na
 
 ---
 
-### Page 1: **Videokonferenz**  
+### Page 2: **Videokonferenz**  
 Static “videoconference in progress” view. No network connection required.
 
 <p align="center">
@@ -186,7 +184,7 @@ Static “videoconference in progress” view. No network connection required.
 
 ---
 
-### Page 2: **Universal Decision Maker**  
+### Page 3: **Universal Decision Maker**  
 A playful feature for indecisive moments. Randomly displays either “Yes!” or “No!” without requiring a network connection.
 
 
@@ -210,22 +208,14 @@ A playful feature for indecisive moments. Randomly displays either “Yes!” or
 
 ---
 
-### Page 3: **Web Interface Info**  
+### Page 4: **Web Interface Info**  
 Shows Wi-Fi setup info so you can connect to the device’s web UI.
 
 <p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_3.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_3.JPG" alt="page 3 eSign Device" width="400" style="border-radius: 8px;">
+  <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
+   <img src="images/inki_webinterface_landingpage_combined.png" alt="inki setup and configuration interface" width="600" style="border-radius: 8px;">
   </a>
 </p>
-
----
-
-Pages 4–7 mirror pages 0–3 (legacy button combos).
-
-## Configuration via Web Interface
-
-Should be self-explanatory.
 
 ---
 

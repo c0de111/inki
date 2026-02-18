@@ -8,7 +8,10 @@ const firmware_header_t firmware_header = {
     .git_version = "@GIT_VERSION@",
     .firmware_size = 0x00000000,  // patched later
     .slot = 1,
-    .crc32 = 0x00000000           // patched later
+    .crc32 = 0x00000000,          // patched later
+    .meta_version = 1,
+    .use_case_id = USE_CASE_ID,
+    .use_case_name = USE_CASE_NAME
 };
 
 _Static_assert(sizeof(firmware_header_t) == 256, "firmware_header_t must be 256 bytes");

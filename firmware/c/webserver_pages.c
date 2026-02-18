@@ -41,6 +41,70 @@
 // HTML PAGE GENERATION FUNCTIONS
 // =============================================================================
 
+static const char* fw_use_case_name_from_id(uint8_t use_case_id) {
+    switch (use_case_id) {
+        case USE_CASE_ID_SEATSURFING: return "SeatSurfing";
+        case USE_CASE_ID_HISTORIAN:   return "Historian";
+        case USE_CASE_ID_HOMEMATIC:   return "Homematic";
+        case USE_CASE_ID_WEATHERMAP:  return "Weathermap";
+        case USE_CASE_ID_NEW_USECASE: return "NewUseCase";
+        default:                      return NULL;
+    }
+}
+
+static bool fw_use_case_meta_valid(const firmware_header_t* header) {
+    if (!header || header->meta_version != 1) {
+        return false;
+    }
+
+    const char* expected_name = fw_use_case_name_from_id(header->use_case_id);
+    if (!expected_name) {
+        return false;
+    }
+
+    size_t name_len = 0;
+    while (name_len < sizeof(header->use_case_name) && header->use_case_name[name_len] != '\0') {
+        name_len++;
+    }
+    if (name_len == 0 || name_len == sizeof(header->use_case_name)) {
+        return false;
+    }
+
+    return strcmp(header->use_case_name, expected_name) == 0;
+}
+
+static void format_slot_use_case(uint8_t slot, char* out, size_t out_len, bool with_id) {
+    if (!out || out_len == 0) {
+        return;
+    }
+
+    uint32_t offset = (slot == 0) ? FIRMWARE_SLOT0_FLASH_OFFSET :
+                      (slot == 1) ? FIRMWARE_SLOT1_FLASH_OFFSET : 0;
+
+    if (offset == 0) {
+        snprintf(out, out_len, "n/a");
+        return;
+    }
+
+    const firmware_header_t* header = (const firmware_header_t*)FLASH_PTR(offset);
+    if (memcmp(header->magic, FIRMWARE_MAGIC, FIRMWARE_MAGIC_LEN) != 0 || header->valid_flag != 1) {
+        snprintf(out, out_len, "empty");
+        return;
+    }
+
+    if (fw_use_case_meta_valid(header)) {
+        if (with_id) {
+            snprintf(out, out_len, "%s (%u)", header->use_case_name, (unsigned)header->use_case_id);
+        } else {
+            snprintf(out, out_len, "%s", header->use_case_name);
+        }
+    } else if (header->meta_version == 0 && header->use_case_id == 0 && header->use_case_name[0] == '\0') {
+        snprintf(out, out_len, "legacy/unknown");
+    } else {
+        snprintf(out, out_len, "invalid metadata");
+    }
+}
+
 /**
  * @brief Generates and sends the main landing page with navigation menu
  * @param tpcb TCP connection pointer
@@ -429,20 +493,17 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
     const char* bmp581_state = i2c_probe.bmp581_present ? "detected" : "not detected";
     const char* rv3028_state = i2c_probe.rv3028_present ? "detected" : "not detected";
     const char* st25_state = st25_present ? "detected" : "not detected";
-    const char* device_type_label =
-#if defined(USE_CASE_SEATSURFING)
-        "inki-seatsurfing";
-#elif defined(USE_CASE_HISTORIAN)
-        "inki-historian";
-#elif defined(USE_CASE_HOMEMATIC)
-        "inki-homematic";
-#elif defined(USE_CASE_WEATHERMAP)
-        "inki-weathermap";
-#elif defined(USE_CASE_NEW_USECASE)
-        "inki-newusecase";
-#else
-        "inki-unknown";
-#endif
+    const char* use_case_slug = "unknown";
+    switch (USE_CASE_ID) {
+        case USE_CASE_ID_SEATSURFING: use_case_slug = "seatsurfing"; break;
+        case USE_CASE_ID_HISTORIAN:   use_case_slug = "historian"; break;
+        case USE_CASE_ID_HOMEMATIC:   use_case_slug = "homematic"; break;
+        case USE_CASE_ID_WEATHERMAP:  use_case_slug = "weathermap"; break;
+        case USE_CASE_ID_NEW_USECASE: use_case_slug = "newusecase"; break;
+        default: break;
+    }
+    char device_type_label[32];
+    snprintf(device_type_label, sizeof(device_type_label), "inki-%s", use_case_slug);
 
     char bmp581_addr_str[8] = "0x47/46";
     char rtc_temp_str[16] = "n/a";
@@ -499,22 +560,26 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
 
     char slot0_row[512];
     char slot1_row[512];
+    char slot0_use_case[64] = "n/a";
+    char slot1_use_case[64] = "n/a";
     if (has0) {
+        format_slot_use_case(0, slot0_use_case, sizeof(slot0_use_case), false);
         snprintf(slot0_row, sizeof(slot0_row),
-                 "<tr><td>Slot 0</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
-                 version0, build0, size0, valid0);
+                 "<tr><td>Slot 0</td><td class='mono'>%s</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
+                 version0, slot0_use_case, build0, size0, valid0);
     } else {
         snprintf(slot0_row, sizeof(slot0_row),
-                 "<tr><td>Slot 0</td><td colspan='4'><span class='red value'>empty or invalid</span></td></tr>");
+                 "<tr><td>Slot 0</td><td colspan='5'><span class='red value'>empty or invalid</span></td></tr>");
     }
 
     if (has1) {
+        format_slot_use_case(1, slot1_use_case, sizeof(slot1_use_case), false);
         snprintf(slot1_row, sizeof(slot1_row),
-                 "<tr><td>Slot 1</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
-                 version1, build1, size1, valid1);
+                 "<tr><td>Slot 1</td><td class='mono'>%s</td><td class='mono'>%s</td><td>%s</td><td class='mono'>%u</td><td>%u</td></tr>",
+                 version1, slot1_use_case, build1, size1, valid1);
     } else {
         snprintf(slot1_row, sizeof(slot1_row),
-                 "<tr><td>Slot 1</td><td colspan='4'><span class='red value'>empty or invalid</span></td></tr>");
+                 "<tr><td>Slot 1</td><td colspan='5'><span class='red value'>empty or invalid</span></td></tr>");
     }
 
     snprintf(page, sizeof(page),
@@ -641,7 +706,7 @@ void send_device_status_page(struct tcp_pcb* tpcb) {
              "<tr><td>Active Firmware</td><td class='value mono'>%s</td></tr>"
              "</table>"
              "<div class='diag-wrap'><table class='diag-table'>"
-             "<thead><tr><th>Slot</th><th>Version</th><th>Build</th><th>Size (B)</th><th>Valid</th></tr></thead>"
+             "<thead><tr><th>Slot</th><th>Version</th><th>Use Case</th><th>Build</th><th>Size (B)</th><th>Valid</th></tr></thead>"
              "<tbody>%s%s</tbody>"
              "</table></div></div>",
              has_logo ? "green" : "red",
@@ -850,6 +915,8 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
         uint32_t crc0 = 0, crc1 = 0;
         uint8_t slot_index0 = 0, slot_index1 = 0;
         uint8_t valid0 = 0, valid1 = 0;
+        char slot0_use_case[64] = "n/a";
+        char slot1_use_case[64] = "n/a";
 
         bool has0 = get_firmware_slot_info(0, build0, version0, &size0, &crc0, &slot_index0, &valid0);
         bool has1 = get_firmware_slot_info(1, build1, version1, &size1, &crc1, &slot_index1, &valid1);
@@ -858,17 +925,19 @@ void send_firmware_update_page(struct tcp_pcb* tpcb, const char* message) {
             strcat(page, "<p><b>Firmware im Flash gefunden:</b></p><ul>\n");
 
             if (has0) {
+                format_slot_use_case(0, slot0_use_case, sizeof(slot0_use_case), false);
                 snprintf(page + strlen(page), sizeof(page) - strlen(page),
-                         "<div>Slot 0: %s (%s), %u Bytes</div>\n",
-                         version0, build0, size0);
+                         "<div>Slot 0: %s, %s, (%s), %u Bytes</div>\n",
+                         version0, slot0_use_case, build0, size0);
             } else {
                 strcat(page, "<div>Slot 0: <i>empty or invalid</i></div>\n");
             }
 
             if (has1) {
+                format_slot_use_case(1, slot1_use_case, sizeof(slot1_use_case), false);
                 snprintf(page + strlen(page), sizeof(page) - strlen(page),
-                         "<div>Slot 1: %s (%s), %u Bytes</div>\n",
-                         version1, build1, size1);
+                         "<div>Slot 1: %s, %s, (%s), %u Bytes</div>\n",
+                         version1, slot1_use_case, build1, size1);
             } else {
                 strcat(page, "<div>Slot 1: <i>empty or invalid</i></div>\n");
             }

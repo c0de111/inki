@@ -43,26 +43,38 @@
     #define USE_CASE_SEATSURFING    // Default fallback
 #endif
 
+// Stable numeric IDs stored in firmware header metadata
+#define USE_CASE_ID_SEATSURFING 1
+#define USE_CASE_ID_HISTORIAN   2
+#define USE_CASE_ID_HOMEMATIC   3
+#define USE_CASE_ID_WEATHERMAP  4
+#define USE_CASE_ID_NEW_USECASE 5
+
 // Validate use case selection: exactly one must be defined
 #if defined(USE_CASE_SEATSURFING)
     #if defined(USE_CASE_HISTORIAN) || defined(USE_CASE_HOMEMATIC) || defined(USE_CASE_NEW_USECASE)
         #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
     #endif
     #define USE_CASE_NAME "SeatSurfing"
+    #define USE_CASE_ID USE_CASE_ID_SEATSURFING
 #elif defined(USE_CASE_HISTORIAN)
     #if defined(USE_CASE_HOMEMATIC) || defined(USE_CASE_NEW_USECASE)
         #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
     #endif
     #define USE_CASE_NAME "Historian"
+    #define USE_CASE_ID USE_CASE_ID_HISTORIAN
 #elif defined(USE_CASE_HOMEMATIC)
     #if defined(USE_CASE_NEW_USECASE)
         #error "Define exactly one use case: USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, or USE_CASE_NEW_USECASE."
     #endif
     #define USE_CASE_NAME "Homematic"
+    #define USE_CASE_ID USE_CASE_ID_HOMEMATIC
 #elif defined(USE_CASE_WEATHERMAP)
     #define USE_CASE_NAME "Weathermap"
+    #define USE_CASE_ID USE_CASE_ID_WEATHERMAP
 #elif defined(USE_CASE_NEW_USECASE)
     #define USE_CASE_NAME "NewUseCase"
+    #define USE_CASE_ID USE_CASE_ID_NEW_USECASE
 #else
     #error "No use case defined! Define USE_CASE_SEATSURFING, USE_CASE_HISTORIAN, USE_CASE_HOMEMATIC, USE_CASE_WEATHERMAP, or USE_CASE_NEW_USECASE."
 #endif

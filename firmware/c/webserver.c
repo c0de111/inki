@@ -153,6 +153,75 @@ static int64_t shutdown_callback(alarm_id_t id, void *user_data);
 void mark_firmware_valid(uint32_t flash_offset);
 void flush_page_to_flash(void);
 
+static const char* use_case_name_from_id(uint8_t use_case_id) {
+    switch (use_case_id) {
+        case USE_CASE_ID_SEATSURFING: return "SeatSurfing";
+        case USE_CASE_ID_HISTORIAN:   return "Historian";
+        case USE_CASE_ID_HOMEMATIC:   return "Homematic";
+        case USE_CASE_ID_WEATHERMAP:  return "Weathermap";
+        case USE_CASE_ID_NEW_USECASE: return "NewUseCase";
+        default:                      return NULL;
+    }
+}
+
+static bool firmware_header_use_case_meta_valid(const firmware_header_t* header) {
+    if (!header) {
+        return false;
+    }
+
+    if (header->meta_version != 1) {
+        return false;
+    }
+
+    const char* expected_name = use_case_name_from_id(header->use_case_id);
+    if (!expected_name) {
+        return false;
+    }
+
+    size_t name_len = 0;
+    while (name_len < sizeof(header->use_case_name) && header->use_case_name[name_len] != '\0') {
+        name_len++;
+    }
+
+    if (name_len == 0 || name_len == sizeof(header->use_case_name)) {
+        return false;
+    }
+
+    return strcmp(header->use_case_name, expected_name) == 0;
+}
+
+static bool zero_active_use_case_settings_sector(void) {
+#if defined(USE_CASE_SEATSURFING)
+    const uint32_t cfg_offset = SEATSURFING_CONFIG_FLASH_OFFSET;
+#elif defined(USE_CASE_HISTORIAN)
+    const uint32_t cfg_offset = HISTORIAN_CONFIG_FLASH_OFFSET;
+#elif defined(USE_CASE_HOMEMATIC)
+    const uint32_t cfg_offset = HOMEMATIC_CONFIG_FLASH_OFFSET;
+#elif defined(USE_CASE_WEATHERMAP)
+    const uint32_t cfg_offset = WEATHERMAP_CONFIG_FLASH_OFFSET;
+#else
+    const uint32_t cfg_offset = (CONFIG_FLASH_OFFSET + 0x1000);
+#endif
+
+    const uint32_t sector_offset = cfg_offset & ~(FLASH_SECTOR_SIZE - 1);
+    uint8_t zero_page[FLASH_PAGE_SIZE];
+    memset(zero_page, 0x00, sizeof(zero_page));
+
+    debug_log_with_color(COLOR_YELLOW,
+                         "FIRMWARE: Use-case mismatch -> zeroing settings sector at 0x%X\n",
+                         sector_offset);
+
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
+    for (uint32_t off = 0; off < FLASH_SECTOR_SIZE; off += FLASH_PAGE_SIZE) {
+        flash_range_program(sector_offset + off, zero_page, FLASH_PAGE_SIZE);
+    }
+    restore_interrupts(ints);
+
+    debug_log_with_color(COLOR_YELLOW, "FIRMWARE: Settings sector zeroed.\n");
+    return true;
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -1453,7 +1522,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         debug_log("FLASH end offset: 0x%X\n", flash_writer.flash_offset);
 
         if (upload_session.type == UPLOAD_FIRMWARE) {
-            char msg[512];
+            char msg[1024];
             firmware_header_t header;
             memcpy(&header, FLASH_PTR(upload_session.flash_offset), sizeof(header));
 
@@ -1499,9 +1568,61 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                     send_firmware_update_page(tpcb, msg);
                 }
             }
+
+            bool use_case_meta_valid = firmware_header_use_case_meta_valid(&header);
+            bool use_case_mismatch = false;
+            if (use_case_meta_valid) {
+                use_case_mismatch = (header.use_case_id != USE_CASE_ID);
+                if (use_case_mismatch) {
+                    debug_log_with_color(COLOR_YELLOW,
+                                         "FIRMWARE: Use-case mismatch (uploaded: %s/%u, running: %s/%u)\n",
+                                         header.use_case_name,
+                                         (unsigned)header.use_case_id,
+                                         USE_CASE_NAME,
+                                         (unsigned)USE_CASE_ID);
+                }
+            } else if (header.meta_version != 0 || header.use_case_id != 0 || header.use_case_name[0] != '\0') {
+                debug_log_with_color(COLOR_YELLOW,
+                                     "FIRMWARE: Ignoring invalid/unknown use-case metadata (version=%u, id=%u, name='%.*s')\n",
+                                     (unsigned)header.meta_version,
+                                     (unsigned)header.use_case_id,
+                                     (int)sizeof(header.use_case_name),
+                                     header.use_case_name);
+            }
+
             if (valid && crc_ok && header.slot == expected_slot) {
                 debug_log("Valid Firmware - you may now reboot from the new version!\n");
                 mark_firmware_valid(upload_session.flash_offset);
+                bool settings_zeroed = false;
+                if (use_case_mismatch) {
+                    settings_zeroed = zero_active_use_case_settings_sector();
+                }
+
+                char use_case_html[160];
+                if (use_case_meta_valid) {
+                    snprintf(use_case_html, sizeof(use_case_html),
+                             "Use Case: <code>%s</code> (id %u)<br>",
+                             header.use_case_name,
+                             (unsigned)header.use_case_id);
+                } else {
+                    snprintf(use_case_html, sizeof(use_case_html),
+                             "Use Case: <code>legacy/unknown metadata</code><br>");
+                }
+
+                char warning_html[448] = "";
+                if (use_case_mismatch) {
+                    snprintf(warning_html, sizeof(warning_html),
+                             "<p style='color:orange'><b>Warning:</b> Uploaded use case "
+                             "(<code>%s</code>, id %u) differs from running use case "
+                             "(<code>%s</code>, id %u). %s</p>",
+                             header.use_case_name,
+                             (unsigned)header.use_case_id,
+                             USE_CASE_NAME,
+                             (unsigned)USE_CASE_ID,
+                             settings_zeroed
+                                 ? "Use-case settings were reset to 0 and must be reconfigured."
+                                 : "Some settings will be undefined!");
+                }
 
                 snprintf(msg, sizeof(msg),
                          "<h2 style='color:green'>Valid Firmware – you may now reboot from the new version!</h2>"
@@ -1510,13 +1631,17 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                          "Build Date: <code>%s</code><br>"
                          "Size: <code>%u bytes</code><br>"
                          "CRC32: <code>0x%08X</code><br>"
-                         "Slot: <code>%u</code>"
-                         "</p>",
+                         "Slot: <code>%u</code><br>"
+                         "%s"
+                         "</p>"
+                         "%s",
                          header.git_version,
                          header.build_date,
                          header.firmware_size,
                          header.crc32,
-                         header.slot);
+                         header.slot,
+                         use_case_html,
+                         warning_html);
 
                 send_firmware_update_page(tpcb, msg);
             }
@@ -1578,6 +1703,19 @@ void mark_firmware_valid(uint32_t flash_offset) {
     debug_log("  firmware_size : %u\n", header->firmware_size);
     debug_log("  slot          : %u\n", header->slot);
     debug_log("  crc32         : 0x%08X\n", header->crc32);
+    debug_log("  meta_version  : %u\n", header->meta_version);
+    debug_log("  use_case_id   : %u\n", header->use_case_id);
+    debug_log("  use_case_name : '%.*s'\n", (int)sizeof(header->use_case_name), header->use_case_name);
+    if (firmware_header_use_case_meta_valid(header)) {
+        const char* expected_name = use_case_name_from_id(header->use_case_id);
+        debug_log("  use_case_meta : valid (%s/%u)\n",
+                  expected_name ? expected_name : "unknown",
+                  (unsigned)header->use_case_id);
+    } else if (header->meta_version == 0 && header->use_case_id == 0 && header->use_case_name[0] == '\0') {
+        debug_log("  use_case_meta : legacy/unknown\n");
+    } else {
+        debug_log("  use_case_meta : invalid\n");
+    }
 
     header->valid_flag = 1;
 

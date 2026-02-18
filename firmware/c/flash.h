@@ -115,8 +115,20 @@ typedef struct __attribute__((packed)) {
     uint32_t firmware_size;     // Byte-Anzahl der Firmwaredaten
     uint8_t slot;               // 0 = slot0, 1 = slot1, 255 = direct
     uint32_t crc32;             // CRC über Firmwaredaten
-    uint8_t reserved[185];      // Reserve für spätere Erweiterung
+
+    // Metadata v1 for use-case-aware OTA handling
+    uint8_t meta_version;       // 0 = legacy/no metadata, 1 = metadata v1
+    uint8_t use_case_id;        // See USE_CASE_ID_* in config.h
+    char use_case_name[24];     // NUL-terminated use-case label
+
+    uint8_t reserved[159];      // Reserve for future extension (header remains 256 B)
 } firmware_header_t;
+_Static_assert(sizeof(firmware_header_t) == 256, "firmware_header_t must be 256 bytes");
+_Static_assert(sizeof(USE_CASE_NAME) <= sizeof(((firmware_header_t*)0)->use_case_name),
+               "USE_CASE_NAME too long for firmware_header_t.use_case_name");
+_Static_assert(offsetof(firmware_header_t, firmware_size) == 62, "firmware_size offset changed");
+_Static_assert(offsetof(firmware_header_t, crc32) == 67, "crc32 offset changed");
+_Static_assert(offsetof(firmware_header_t, meta_version) == 71, "meta_version offset changed");
 
 // Weathermap meta (marker only for now)
 #define WEATHERMAP_META_FLASH_OFFSET      (CONFIG_FLASH_OFFSET + 0x5000)  // 0x1EC000 - Weathermap marker/meta
