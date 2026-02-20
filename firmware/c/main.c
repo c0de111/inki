@@ -2025,7 +2025,7 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
 
         // Main message
         Paint_DrawString_EN(80, 180, "Videoconference", &font_ubuntu_mono_28pt_bold, WHITE, BLACK);
-        Paint_DrawString_EN(80, 240, "Please do not disturb", &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
+        Paint_DrawString_EN(80, 270, "Please do not disturb", &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
 
         // Timestamp (start time)
         ds3231_data_t ds3231_data;
@@ -2033,7 +2033,7 @@ void render_page_1(ds3231_t* clock, UBYTE* image_buffer, float battery_voltage) 
         char time_string[8];
         format_short_time(&ds3231_data, time_string, sizeof(time_string));
         snprintf(buffer, sizeof(buffer), "Start: %s", time_string);
-        Paint_DrawString_EN(80, 300, buffer, &font_ubuntu_mono_14pt, WHITE, BLACK);
+        Paint_DrawString_EN(80, 340, buffer, &font_ubuntu_mono_14pt, WHITE, BLACK);
 
 
     } else if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
