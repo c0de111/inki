@@ -104,6 +104,8 @@ No cables, programmer or flashing required — just insert batteries and use you
 
 - **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
+- **Telemetry** Optional [inki-monitor](inki-monitor/) companion service for battery, Wi-Fi, and temperature monitoring with browser-rendered charts.
+
 - **Energy Efficiency** Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). Runtime (depending on wake-up frequency and thus iterations) up to years. For estimation use the script [power_consumption_estimate.py](hardware/circuit/)
 
 <p align="center">
