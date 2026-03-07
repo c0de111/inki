@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <h1>{{ title }}</h1>
+
+    <section class="card">
+      <h2>Devices</h2>
+      {% if devices %}
+        <div class="device-grid">
+          {% for device in devices %}
+            <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get" class="device-tile-form">
+              <button type="submit" title="{{ device['device_id'] }}" class="device-tile">
+                <span class="device-tile-name">{{ device['label'] or device['device_id'] }}</span>
+                {% if device['last_fw_version'] or device['last_fw_build_date'] %}
+                  <span class="device-tile-submeta muted">
+                    {% if device['last_fw_version'] %}{{ device['last_fw_version'] }}{% endif %}
+                    {% if device['last_fw_build_date'] %}
+                      {% if device['last_fw_version'] %} {% endif %}({{ device['last_fw_build_date'] }})
+                    {% endif %}
+                  </span>
+                {% endif %}
+                <span class="device-tile-meta muted">last seen {{ device['last_seen_ago'] }}</span>
+              </button>
+            </form>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No telemetry data received yet.</p>
+      {% endif %}
+    </section>
+
+    <div class="repo-signature mono muted">
+      inki-monitor @ {{ repo_info['signature'] }} ({{ repo_info['build_date'] }})
+    </div>
+  </main>
+</body>
+</html>

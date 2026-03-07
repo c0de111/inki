@@ -56,5 +56,3 @@ extern const SubImage qr_github_link;
 
 #endif
 /* FILE END */
-
-

@@ -1,8 +1,12 @@
 #pragma once
-#include <stdint.h>
 #include "ImageResources.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 #define USER_CONFIG_MAX_SIZE 4096
+#define TELEMETRY_HOST_MAX_LEN 32
+#define TELEMETRY_TOKEN_MAX_LEN 96
+#define TELEMETRY_LABEL_MAX_LEN 32
 
 // Enum for ePaper types
 typedef enum {
@@ -13,17 +17,12 @@ typedef enum {
 } EpaperType;
 
 // Enum for room usage type
-typedef enum {
-    ROOM_TYPE_OFFICE,
-    ROOM_TYPE_CONFERENCE,
-    ROOM_TYPE_LAB,
-    ROOM_TYPE_WORKSHOP
-} RoomType;
+typedef enum { ROOM_TYPE_OFFICE, ROOM_TYPE_CONFERENCE, ROOM_TYPE_LAB, ROOM_TYPE_WORKSHOP } RoomType;
 
 // Properties describing a room type
 typedef struct {
     RoomType type;
-    const char* description;
+    const char *description;
     int number_of_seats;
     int number_of_people_meeting;
     bool has_projector;
@@ -75,6 +74,12 @@ typedef struct {
     uint8_t pushbutton2_pin;
     uint8_t pushbutton3_pin;
     int num_pushbuttons;
+    bool telemetry_enabled;
+    int telemetry_timeout_ms;
+    char telemetry_host[TELEMETRY_HOST_MAX_LEN];
+    uint16_t telemetry_port;
+    char telemetry_token[TELEMETRY_TOKEN_MAX_LEN];
+    char telemetry_label[TELEMETRY_LABEL_MAX_LEN];
     // uint8_t background_id;  // keine Pointer im Flash!
     // SubImage qr_code_1_image;
     // SubImage qr_code_2_image;

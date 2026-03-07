@@ -69,4 +69,3 @@ Notes:
 - App on core 0; Wi‑Fi/lwIP on core 1; shared flash and SRAM.
 - No `cyw43_arch_poll()` needed with the background arch.
 - Your code stays simple; the second core handles radio and TCP/IP under the hood.
-

@@ -11,7 +11,7 @@ title: Seatsurfing - inki
   <img src="{{ '/assets/images/inki_front.JPG' | relative_url }}" alt="Seatsurfing room booking display" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
-Seatsurfing room booking display showing real-time seat availability 
+Seatsurfing room booking display showing real-time seat availability
 </p>
 
 ## Overview

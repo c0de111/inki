@@ -34,8 +34,6 @@ OUTPUT_FILE="$BUILD_DIR/inki_${CASE_SUFFIX}.uf2"
 
 # Memory addresses from linker scripts
 BOOTLOADER_ADDR=0x10000000
-SLOT0_ADDR=0x10010000
-CONFIG_ADDR=0x101E7000
 
 # Note: bootloader.bin already contains Boot2 stage at the beginning
 
@@ -44,8 +42,7 @@ echo "Creating UF2 file for inki firmware..."
 # Download UF2 tools from Microsoft's repository if missing
 if [ ! -f "$UF2_TOOL" ]; then
     echo "Downloading UF2 conversion tool from Microsoft's repository..."
-    curl -L -o "$UF2_TOOL" https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2conv.py
-    if [ $? -ne 0 ]; then
+    if ! curl -L -o "$UF2_TOOL" https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2conv.py; then
         echo "❌ Error: Failed to download UF2 conversion tool"
         exit 1
     fi
@@ -57,8 +54,7 @@ fi
 UF2_FAMILIES="$SCRIPT_DIR/uf2families.json"
 if [ ! -f "$UF2_FAMILIES" ]; then
     echo "Downloading UF2 families database..."
-    curl -L -o "$UF2_FAMILIES" https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2families.json
-    if [ $? -ne 0 ]; then
+    if ! curl -L -o "$UF2_FAMILIES" https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2families.json; then
         echo "❌ Error: Failed to download UF2 families database"
         exit 1
     fi

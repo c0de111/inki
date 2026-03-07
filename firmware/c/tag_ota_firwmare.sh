@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Colors (optional, works in most terminals)
 GREEN='\033[0;32m'

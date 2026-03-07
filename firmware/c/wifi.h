@@ -18,10 +18,10 @@
  * indicating success or the type of failure encountered.
  */
 typedef enum {
-    WIFI_SUCCESS = 0,           /**< Wi-Fi and server communication succeeded */
-    WIFI_ERROR_CONNECTION = 1,  /**< Wi-Fi connection failed */
-    WIFI_ERROR_SERVER = 2,      /**< Server communication failed */
-    WIFI_NOT_REQUIRED = 3       /**< Wi-Fi not required for this operation */
+    WIFI_SUCCESS = 0,          /**< Wi-Fi and server communication succeeded */
+    WIFI_ERROR_CONNECTION = 1, /**< Wi-Fi connection failed */
+    WIFI_ERROR_SERVER = 2,     /**< Server communication failed */
+    WIFI_NOT_REQUIRED = 3      /**< Wi-Fi not required for this operation */
 } WifiResult;
 
 /**

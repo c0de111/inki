@@ -4,23 +4,23 @@
 #include <stddef.h>
 #include <string.h>
 
-#define DS3231_ADDR       0x68u
+#define DS3231_ADDR 0x68u
 #define DS3231_STATUS_REG 0x0Fu
-#define DS3231_TEMP_REG   0x11u
+#define DS3231_TEMP_REG 0x11u
 
-#define BMP581_ADDR_PRIMARY   0x47u
+#define BMP581_ADDR_PRIMARY 0x47u
 #define BMP581_ADDR_SECONDARY 0x46u
-#define BMP581_CHIP_ID_REG    0x01u
-#define BMP581_CHIP_ID_VALUE  0x50u
+#define BMP581_CHIP_ID_REG 0x01u
+#define BMP581_CHIP_ID_VALUE 0x50u
 
-#define RV3028_ADDR       0x52u
+#define RV3028_ADDR 0x52u
 #define RV3028_HIDVID_REG 0x28u
 
 #define ST25_ADDR_USER_DYNAMIC 0x53u
-#define ST25_ADDR_SYSTEM       0x57u
+#define ST25_ADDR_SYSTEM 0x57u
 #define ST25_SYSTEM_IC_REF_REG 0x0017u
-#define ST25_IC_REF_DV04KC     0x50u
-#define ST25_IC_REF_DV16_64KC  0x51u
+#define ST25_IC_REF_DV04KC 0x50u
+#define ST25_IC_REF_DV16_64KC 0x51u
 
 static bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
     const int write_rc = i2c_write_blocking(i2c_default, addr, &reg, 1, true);
@@ -97,7 +97,8 @@ void i2c_probe_expected_devices(i2c_probe_result_t *out) {
         out->ds3231_present = true;
         out->ds3231_temp_ok = true;
         /* DS3231 temperature is signed quarter-degrees across MSB and top 2 LSB bits. */
-        out->ds3231_temp_quarter_c = (int16_t)(((int16_t)(int8_t)ds_temp_raw[0] << 2) | (ds_temp_raw[1] >> 6));
+        out->ds3231_temp_quarter_c =
+            (int16_t)(((int16_t)(int8_t)ds_temp_raw[0] << 2) | (ds_temp_raw[1] >> 6));
     }
 
     out->bmp581_addr_primary_ack = i2c_probe_reg8(BMP581_ADDR_PRIMARY, BMP581_CHIP_ID_REG);

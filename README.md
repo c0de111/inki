@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <i>7.5" version displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours. 
+  <i>7.5" version displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours.
 </i>
 <!-- <i>Click the image to view video.</i> -->
 </p>
@@ -60,7 +60,7 @@ inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
 
 - Start and connect to the inki Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
 
-- Setup the configuration of the device 
+- Setup the configuration of the device
 
   - Wi-Fi credentials
   - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, room name, ...)
@@ -68,7 +68,7 @@ inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
   - Optionally upload a custom logo / piktogram
   - Optionally upload firmware updates, inki will automatically choose the most recent version at next reboot
   - Set realtime clock, using the client's time (your phone/tablet/computer used for connecting to inki)
-  - inki reboots and starts displaying live information from the configured source 
+  - inki reboots and starts displaying live information from the configured source
 
 No cables, programmer or flashing required — just insert batteries and use your browser.
 
@@ -89,7 +89,7 @@ No cables, programmer or flashing required — just insert batteries and use you
 
 - **Web Interface**
   For setup, configuration and updates via WIFI, bootloader (https://github.com/c0de111/pico_bootloader) automatically chooses most recent firmware version
-  
+
 - **ePaper Display Support**
   Compatible with Waveshare 7.5" V2 and 4.2" V2 displays, retains its content even when powered off.
 
@@ -105,7 +105,7 @@ No cables, programmer or flashing required — just insert batteries and use you
 - **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
 
 - **Energy Efficiency** Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). Runtime (depending on wake-up frequency and thus iterations) up to years. For estimation use the script [power_consumption_estimate.py](hardware/circuit/)
-  
+
 <p align="center">
   <a href="images/log_prototype_esign_7_5.png" target="_blank">
     <img src="images/log_prototype_esign_7_5.png" alt="eSign 7.5&quot; log" width="400" style="border-radius: 8px; margin-right: 12px;">
@@ -129,7 +129,7 @@ This repository provides all files, documentation, and code to build your own *i
 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular enclosure with a dovetail mount - [(STLs and FreeCAD files)](hardware/enclosure/).
-   
+
    ### Assembly Animation (4.2" version)
 
 ![Assembly Animation](docs/assets/images/assembly.gif)
@@ -156,13 +156,13 @@ This animation shows the step-by-step assembly of the 4.2" enclosure.
 
 Eight combinations are available by holding buttons 1–3 while pressing *Start*. New hardware diode-ORs the buttons so **any button wakes the device**; older boards still only wake on Button 1, but page selection works the same once awake.
 
-> **Page selection logic:**  
-> Active page = sum of pressed buttons: **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**  
+> **Page selection logic:**
+> Active page = sum of pressed buttons: **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**
 > Pages 0–3 are primary; pages 4–7 mirror 0–3 (legacy combos).
 
 ---
 
-### Page 1: **Room Occupation (Default View)**  
+### Page 1: **Room Occupation (Default View)**
 Displays current room occupancy fetched from the seatsurfing server. The room name, occupant, and space number are shown. This page is shown automatically triggered by the Real Time Clock.
 
 <p align="center">
@@ -173,7 +173,7 @@ Displays current room occupancy fetched from the seatsurfing server. The room na
 
 ---
 
-### Page 2: **Videokonferenz**  
+### Page 2: **Videokonferenz**
 Static “videoconference in progress” view. No network connection required.
 
 <p align="center">
@@ -184,7 +184,7 @@ Static “videoconference in progress” view. No network connection required.
 
 ---
 
-### Page 3: **Universal Decision Maker**  
+### Page 3: **Universal Decision Maker**
 A playful feature for indecisive moments. Randomly displays either “Yes!” or “No!” without requiring a network connection.
 
 
@@ -208,7 +208,7 @@ A playful feature for indecisive moments. Randomly displays either “Yes!” or
 
 ---
 
-### Page 4: **Web Interface Info**  
+### Page 4: **Web Interface Info**
 Shows Wi-Fi setup info so you can connect to the device’s web UI.
 
 <p align="center">

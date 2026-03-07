@@ -70,4 +70,3 @@ int homematic_build_http_post(char* out, size_t n, const char* host, const char*
                     "%.*s",
                     host, xml_len, xml_len, xml);
 }
-

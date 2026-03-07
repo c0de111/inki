@@ -13,4 +13,3 @@ bool ext_led_is_initialized(void);
 void board_led_on(void);
 void board_led_off(void);
 void board_led_toggle(void);
-

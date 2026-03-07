@@ -45,7 +45,7 @@ You can easily configure inki-homematic through the web interface, such as from 
   <img src="{{ '/assets/images/inki-homematic_webinterface2.png' | relative_url }}" alt="Homematic web interface device configuration" width="300" style="border-radius: 8px; margin: 10px 0 5px 0;">
 </p>
 <p style="text-align: center; font-style: italic; color: #666; margin-top: 0; margin-bottom: 15px;">
-Main configuration screen 
+Main configuration screen
 </p>
 
 Specific homematic settings are accessed by the corresponding page and allow to set the relevant parameters:

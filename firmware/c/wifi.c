@@ -9,9 +9,9 @@
 #include "wifi.h"
 #include "debug.h"
 #include "flash.h"
-#include "pico/cyw43_arch.h" // Pico SDK header for Wi-Fi country and auth definitions
 #include "hardware/watchdog.h"
 #include "lwip/netif.h"
+#include "pico/cyw43_arch.h" // Pico SDK header for Wi-Fi country and auth definitions
 
 /**
  * @brief   Country configuration for Wi-Fi.
@@ -49,21 +49,20 @@ WifiResult wifi_connect(void) {
     debug_log("Attempting to connect to network...\n");
     int wifi_connected = -1;
     int wifi_attempt_count = 0;
-    while (wifi_connected != 0 && wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
+    while (wifi_connected != 0 &&
+           wifi_attempt_count < device_config_flash.data.number_wifi_attempts) {
         wifi_attempt_count++;
-        wifi_connected = cyw43_arch_wifi_connect_timeout_ms(
-            wifi_config_flash.ssid,
-            wifi_config_flash.password,
-            auth,
-            device_config_flash.data.wifi_timeout
-        );
+        wifi_connected =
+            cyw43_arch_wifi_connect_timeout_ms(wifi_config_flash.ssid, wifi_config_flash.password,
+                                               auth, device_config_flash.data.wifi_timeout);
         watchdog_update();
         debug_log_with_color(COLOR_YELLOW, "Trying to connect to %s ... Attempt %d\n",
                              wifi_config_flash.ssid, wifi_attempt_count);
     }
 
     if (wifi_connected != 0) {
-        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n", wifi_attempt_count);
+        debug_log_with_color(COLOR_RED, "Failed to connect to Wi-Fi after %d attempts.\n",
+                             wifi_attempt_count);
         cyw43_arch_deinit();
         return WIFI_ERROR_CONNECTION;
     }

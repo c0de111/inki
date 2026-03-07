@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ device['label'] or device['device_id'] }} - {{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/plotly-basic-2.35.2.min.js') }}"></script>
+</head>
+<body>
+  <main class="page">
+    <p class="plot-left-align"><a href="{{ url_for('index') }}">&larr; Back to device list</a></p>
+
+    <section class="card plot-card">
+      <div id="device-plot" class="plotly-chart" aria-label="Battery plot for {{ device['label'] or device['device_id'] }}"></div>
+      <div id="device-plot-error" class="plot-error" hidden></div>
+    </section>
+
+    <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get">
+      <section class="card controls-card plot-width-card">
+        <div class="controls">
+          <span class="muted mono controls-id">{{ device['device_id'] }}</span>
+          <label>length <input type="number" name="l" min="0" value="{{ l_param }}"></label>
+          <label>start <input type="number" name="s" min="0" value="{{ s_param }}"></label>
+          <button type="submit">Update</button>
+        </div>
+      </section>
+
+      <section class="card summary-grid plot-width-card">
+        <div class="metric-static"><strong>Battery (pre Wi-Fi)</strong><br>{{ '%.3f'|format(device['last_battery_before_wifi_v']) }} V</div>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_battery_post" value="1" {% if show_battery_post %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Battery (post Wi-Fi)</strong><br>{% if device['last_battery_after_wifi_v'] is none %}n/a{% else %}{{ '%.3f'|format(device['last_battery_after_wifi_v']) }} V{% endif %}</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_battery_sag" value="1" {% if show_battery_sag %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Battery Sag</strong><br>{% if device['last_battery_sag_v'] is none %}n/a{% else %}{{ '%.0f'|format(device['last_battery_sag_v'] * 1000.0) }} mV{% endif %}</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_coin_cell" value="1" {% if show_coin_cell %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Coin Cell</strong><br>{{ '%.3f'|format(device['last_coin_cell_v']) }} V</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_pico_temp" value="1" {% if show_pico_temp %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Pico Temp</strong><br>{% if device['last_pico_temp_c'] is none %}n/a{% else %}{{ '%.1f'|format(device['last_pico_temp_c']) }} °C{% endif %}</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_time_to_telemetry" value="1" {% if show_time_to_telemetry %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Time to Telemetry</strong><br>{% if device['last_telemetry_send_elapsed_ms'] is none %}n/a{% else %}{{ '%.1f'|format(device['last_telemetry_send_elapsed_ms'] / 1000.0) }} s{% endif %}</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_query_ok" value="1" {% if show_query_ok %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Query OK</strong><br>
+            {% if device['last_query_ok'] is none %}n/a{% elif device['last_query_ok'] %}yes{% else %}no{% endif %}
+          </span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_wifi_rssi" value="1" {% if show_wifi_rssi %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Wi-Fi RSSI</strong><br>{% if device['last_wifi_rssi_dbm'] is none %}n/a{% else %}{{ device['last_wifi_rssi_dbm'] }} dBm{% endif %}</span>
+        </label>
+      </section>
+    </form>
+
+    <div class="repo-signature mono muted plot-left-align">
+      inki-monitor @ {{ repo_info['signature'] }} ({{ repo_info['build_date'] }})
+    </div>
+  </main>
+  <script>
+    const plotPageConfig = {{ {
+      "device_id": device["device_id"],
+      "label": device["label"],
+      "l": l_param,
+      "s": s_param,
+      "show_battery_post": show_battery_post,
+      "show_battery_sag": show_battery_sag,
+      "show_coin_cell": show_coin_cell,
+      "show_time_to_telemetry": show_time_to_telemetry,
+      "show_pico_temp": show_pico_temp,
+      "show_query_ok": show_query_ok,
+      "show_wifi_rssi": show_wifi_rssi,
+      "plot_data_url": url_for("device_plot_data", device_id=device["device_id"]),
+    } | tojson }};
+
+    function fmtLocalDateTime(tsSec) {
+      const d = new Date(tsSec * 1000);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function fmtDuration(totalSec) {
+      const sec = Math.max(0, Math.floor(totalSec));
+      const days = Math.floor(sec / 86400);
+      const rem = sec % 86400;
+      const hh = Math.floor(rem / 3600);
+      const mm = Math.floor((rem % 3600) / 60);
+      const ss = rem % 60;
+      const pad = (n) => String(n).padStart(2, "0");
+      if (days > 0) {
+        return `${days} days, ${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+      }
+      return `${hh}:${pad(mm)}:${pad(ss)}`;
+    }
+
+    function finitePairs(x, y) {
+      const out = {x: [], y: []};
+      for (let i = 0; i < x.length; i += 1) {
+        const val = y[i];
+        if (val !== null && Number.isFinite(val)) {
+          out.x.push(x[i]);
+          out.y.push(val);
+        }
+      }
+      return out;
+    }
+
+    function computeStats(samples) {
+      if (!samples.length) {
+        return null;
+      }
+      const last = samples[samples.length - 1];
+      const times = samples.map((s) => Number(s.received_at_unix_s));
+      const deltas = [];
+      for (let i = 1; i < times.length; i += 1) {
+        deltas.push(times[i] - times[i - 1]);
+      }
+
+      const stats = {
+        count: samples.length,
+        last_ts: Number(last.received_at_unix_s),
+        last_v: Number(last.battery_before_wifi_v),
+        median_s: null,
+        avg_s: null,
+        stdev_s: null,
+        runtime_s: times.length >= 2 ? (times[times.length - 1] - times[0]) : null,
+      };
+
+      if (deltas.length > 0) {
+        const sorted = [...deltas].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        stats.median_s = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        stats.avg_s = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+        if (deltas.length >= 2) {
+          const meanVal = stats.avg_s;
+          const variance = deltas.reduce((sum, v) => sum + (v - meanVal) * (v - meanVal), 0) / (deltas.length - 1);
+          stats.stdev_s = Math.sqrt(variance);
+        }
+      }
+      return stats;
+    }
+
+    function buildStatsLines(stats) {
+      if (!stats) return [];
+      const lines = [];
+      if (stats.avg_s !== null) {
+        if (stats.stdev_s !== null) {
+          lines.push(`avg: (${stats.avg_s.toFixed(1)}±${stats.stdev_s.toFixed(1)})s`);
+        } else {
+          lines.push(`avg: ${stats.avg_s.toFixed(1)}s`);
+        }
+        lines.push(`median: ${stats.median_s.toFixed(1)}s`);
+      }
+      lines.push(`# of queries: ${stats.count}`);
+      lines.push(`last: ${fmtLocalDateTime(stats.last_ts)}`);
+      if (stats.runtime_s !== null) {
+        lines.push(`runtime: ${fmtDuration(stats.runtime_s)}`);
+      }
+      lines.push(`last V: ${stats.last_v.toFixed(3)}`);
+      return lines;
+    }
+
+    function rowDomains(count) {
+      const bottom = 0.08;
+      const top = 0.98;
+      const height = (top - bottom) / count;
+      const domains = [];
+      for (let i = 0; i < count; i += 1) {
+        const d0 = top - (i + 1) * height;
+        const d1 = top - i * height;
+        domains.push([d0, d1]);
+      }
+      return domains;
+    }
+
+    function axisNamesForRow(rowIndex) {
+      const xNum = rowIndex + 1;
+      const yLeftNum = rowIndex * 2 + 1;
+      const yRightNum = yLeftNum + 1;
+      return {
+        xRef: xNum === 1 ? "x" : `x${xNum}`,
+        yLeftRef: yLeftNum === 1 ? "y" : `y${yLeftNum}`,
+        yRightRef: `y${yRightNum}`,
+        xKey: xNum === 1 ? "xaxis" : `xaxis${xNum}`,
+        yLeftKey: yLeftNum === 1 ? "yaxis" : `yaxis${yLeftNum}`,
+        yRightKey: `yaxis${yRightNum}`,
+      };
+    }
+
+    function buildPlotFigure(payload) {
+      const samples = payload.samples || [];
+      if (!samples.length) {
+        return {
+          data: [],
+          layout: {
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(0,0,0,0)",
+            margin: {l: 60, r: 40, t: 40, b: 40},
+            annotations: [{text: "No telemetry data", x: 0.5, y: 0.5, xref: "paper", yref: "paper", showarrow: false}],
+          },
+        };
+      }
+
+      const x = samples.map((s) => new Date(Number(s.received_at_unix_s) * 1000));
+      const timeSpanMs = x.length > 1 ? (x[x.length - 1] - x[0]) : 0;
+      const xTickFormat = timeSpanMs >= (45 * 24 * 3600 * 1000) ? "%d.%m.%Y" : "%d.%m. %H:%M";
+      const batteryPre = samples.map((s) => Number(s.battery_before_wifi_v));
+      const batteryPost = samples.map((s) => s.battery_after_wifi_v === null ? null : Number(s.battery_after_wifi_v));
+      const batterySagMv = samples.map((s) => s.battery_sag_v === null ? null : Number(s.battery_sag_v) * 1000.0);
+      const coinCell = samples.map((s) => s.coin_cell_v === null ? null : Number(s.coin_cell_v));
+      const telemetrySec = samples.map((s) => s.telemetry_send_elapsed_ms === null ? null : Number(s.telemetry_send_elapsed_ms) / 1000.0);
+      const picoTemp = samples.map((s) => s.pico_temp_c === null ? null : Number(s.pico_temp_c));
+      const queryOk = samples.map((s) => s.query_ok === null ? null : Number(s.query_ok));
+      const wifiRssi = samples.map((s) => s.wifi_rssi_dbm === null ? null : Number(s.wifi_rssi_dbm));
+
+      const rows = [];
+      rows.push({kind: "top"});
+      const middleHasData = (plotPageConfig.show_time_to_telemetry && telemetrySec.some((v) => v !== null)) ||
+                            (plotPageConfig.show_pico_temp && picoTemp.some((v) => v !== null));
+      const bottomHasData = (plotPageConfig.show_query_ok && queryOk.some((v) => v !== null)) ||
+                            (plotPageConfig.show_wifi_rssi && wifiRssi.some((v) => v !== null));
+      if (middleHasData) rows.push({kind: "middle"});
+      if (bottomHasData) rows.push({kind: "bottom"});
+
+      const domains = rowDomains(rows.length);
+      const data = [];
+      const layout = {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        margin: {l: 70, r: 70, t: 16, b: 54},
+        font: {size: 13, color: "#2e2e2e"},
+        showlegend: false,
+        annotations: [],
+      };
+
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        const names = axisNamesForRow(rowIndex);
+        const domain = domains[rowIndex];
+        const isBottomRow = rowIndex === rows.length - 1;
+        layout[names.xKey] = {
+          domain: [0.08, 0.91],
+          anchor: names.yLeftRef,
+          type: "date",
+          showgrid: true,
+          gridcolor: "#b0b0b0",
+          linecolor: "#2e2e2e",
+          mirror: true,
+          tickformat: xTickFormat,
+          tickangle: isBottomRow ? 45 : 0,
+          showticklabels: isBottomRow,
+        };
+        layout[names.yLeftKey] = {
+          domain,
+          anchor: names.xRef,
+          showgrid: true,
+          gridcolor: "#b0b0b0",
+          zeroline: false,
+          linecolor: "#2e2e2e",
+          mirror: true,
+        };
+      }
+
+      const topAxes = axisNamesForRow(0);
+      data.push({
+        x, y: batteryPre, type: "scatter", mode: "markers",
+        marker: {color: "red", size: 6},
+        xaxis: topAxes.xRef, yaxis: topAxes.yLeftRef,
+        name: "Battery (pre Wi-Fi)",
+        hovertemplate: "U(pre): %{y:.3f} V<br>%{x}<extra></extra>",
+      });
+
+      if (plotPageConfig.show_battery_post) {
+        const pairs = finitePairs(x, batteryPost);
+        if (pairs.x.length) {
+          data.push({
+            x: pairs.x, y: pairs.y, type: "scatter", mode: "markers",
+            marker: {color: "blue", size: 6},
+            xaxis: topAxes.xRef, yaxis: topAxes.yLeftRef,
+            name: "Battery (post Wi-Fi)",
+            hovertemplate: "U(post): %{y:.3f} V<br>%{x}<extra></extra>",
+          });
+        }
+      }
+
+      if (plotPageConfig.show_coin_cell) {
+        const pairs = finitePairs(x, coinCell);
+        if (pairs.x.length) {
+          data.push({
+            x: pairs.x, y: pairs.y, type: "scatter", mode: "markers",
+            marker: {color: "black", size: 5},
+            xaxis: topAxes.xRef, yaxis: topAxes.yLeftRef,
+            name: "Coin Cell",
+            hovertemplate: "Coin: %{y:.3f} V<br>%{x}<extra></extra>",
+          });
+        }
+      }
+
+      const topVoltageCandidates = [];
+      for (const v of batteryPre) {
+        if (v !== null && Number.isFinite(v)) topVoltageCandidates.push(v);
+      }
+      if (plotPageConfig.show_battery_post) {
+        for (const v of batteryPost) {
+          if (v !== null && Number.isFinite(v)) topVoltageCandidates.push(v);
+        }
+      }
+      if (plotPageConfig.show_coin_cell) {
+        for (const v of coinCell) {
+          if (v !== null && Number.isFinite(v)) topVoltageCandidates.push(v);
+        }
+      }
+
+      let topVoltageMin = 3.0;
+      if (topVoltageCandidates.length > 0) {
+        const minVisible = Math.min(...topVoltageCandidates);
+        if (minVisible < 3.0) {
+          topVoltageMin = Math.max(0.0, minVisible - 0.05);
+        }
+      }
+
+      layout[topAxes.yLeftKey].title = {text: "voltage / V"};
+      layout[topAxes.yLeftKey].range = [topVoltageMin, 5.0];
+
+      const topRightAxisKey = topAxes.yRightKey;
+      const topRightAxisBase = {
+        anchor: topAxes.xRef,
+        overlaying: topAxes.yLeftRef,
+        side: "right",
+        zeroline: false,
+        linecolor: "#2e2e2e",
+        mirror: false,
+        showgrid: false,
+      };
+      const sagPairs = plotPageConfig.show_battery_sag ? finitePairs(x, batterySagMv) : {x: [], y: []};
+      if (sagPairs.x.length) {
+        data.push({
+          x: sagPairs.x, y: sagPairs.y, type: "scatter", mode: "lines+markers",
+          line: {color: "green", width: 2}, marker: {color: "green", size: 4},
+          xaxis: topAxes.xRef, yaxis: topAxes.yRightRef,
+          name: "Battery Sag",
+          hovertemplate: "Sag: %{y:.0f} mV<br>%{x}<extra></extra>",
+        });
+        const sagMin = Math.min(...sagPairs.y);
+        const sagMax = Math.max(...sagPairs.y);
+        const sagPad = sagMin === sagMax ? Math.max(5, Math.abs(sagMin) * 0.1 + 1) : Math.max(2, (sagMax - sagMin) * 0.25);
+        layout[topRightAxisKey] = {
+          ...topRightAxisBase,
+          title: {text: "battery sag / mV", font: {color: "green"}},
+          tickfont: {color: "green"},
+          range: [sagMin - sagPad, sagMax + sagPad],
+          tickcolor: "green",
+          showline: true,
+          linecolor: "green",
+        };
+      } else {
+        layout[topRightAxisKey] = {
+          ...topRightAxisBase,
+          title: {text: "voltage per battery / V"},
+          range: [topVoltageMin / 3.0, (5.0 / 3.0)],
+          tickvals: [1.0, 1.25, 1.5],
+          showline: true,
+        };
+      }
+
+      const topDomain = domains[0];
+      const titleText = (payload.label && String(payload.label).trim()) ? String(payload.label).trim() : payload.device_id;
+      layout.annotations.push({
+        xref: "paper", yref: "paper", x: 0.10, y: topDomain[1] - 0.02,
+        text: titleText, showarrow: false, xanchor: "left", yanchor: "top",
+        bgcolor: "white", bordercolor: "#2e2e2e", borderwidth: 2, font: {size: 13, color: "#2e2e2e"},
+      });
+
+      const stats = computeStats(samples);
+      if (stats) {
+        layout.annotations.push({
+          xref: "paper", yref: "paper", x: 0.88, y: topDomain[1] - 0.02,
+          text: buildStatsLines(stats).join("<br>"),
+          showarrow: false, xanchor: "right", yanchor: "top", align: "left",
+          bgcolor: "white", bordercolor: "#2e2e2e", borderwidth: 2,
+          font: {size: 13, color: "#6f6f6f"},
+        });
+      }
+
+      let rowCursor = 1;
+      if (middleHasData) {
+        const axes = axisNamesForRow(rowCursor);
+        const timePairs = plotPageConfig.show_time_to_telemetry ? finitePairs(x, telemetrySec) : {x: [], y: []};
+        const picoPairs = plotPageConfig.show_pico_temp ? finitePairs(x, picoTemp) : {x: [], y: []};
+        const hasTime = timePairs.x.length > 0;
+        const hasPico = picoPairs.x.length > 0;
+        const rightOnly = !hasTime && hasPico;
+        let hasLeft = false;
+        let hasRight = false;
+
+        if (hasTime) {
+          hasLeft = true;
+          data.push({
+            x: timePairs.x, y: timePairs.y, type: "scatter", mode: "lines+markers",
+            line: {color: "magenta", width: 2}, marker: {color: "magenta", size: 4},
+            xaxis: axes.xRef, yaxis: axes.yLeftRef,
+            hovertemplate: "Time: %{y:.1f} s<br>%{x}<extra></extra>",
+          });
+        }
+        if (hasPico) {
+          if (rightOnly) {
+            hasLeft = true;
+            data.push({
+              x: picoPairs.x, y: picoPairs.y, type: "scatter", mode: "lines+markers",
+              line: {color: "#20c4cf", width: 2}, marker: {color: "#20c4cf", size: 4},
+              xaxis: axes.xRef, yaxis: axes.yLeftRef,
+              hovertemplate: "Pico temp: %{y:.1f} °C<br>%{x}<extra></extra>",
+            });
+          } else {
+            hasRight = true;
+            data.push({
+              x: picoPairs.x, y: picoPairs.y, type: "scatter", mode: "lines+markers",
+              line: {color: "#20c4cf", width: 2}, marker: {color: "#20c4cf", size: 4},
+              xaxis: axes.xRef, yaxis: axes.yRightRef,
+              hovertemplate: "Pico temp: %{y:.1f} °C<br>%{x}<extra></extra>",
+            });
+          }
+        }
+
+        if (hasTime) {
+          layout[axes.yLeftKey].title = {text: "time to telemetry / s", font: {color: "magenta"}};
+          layout[axes.yLeftKey].tickfont = {color: "magenta"};
+        } else if (rightOnly) {
+          layout[axes.yLeftKey].title = {text: "pico temp / C", font: {color: "#169aa3"}};
+          layout[axes.yLeftKey].tickfont = {color: "#169aa3"};
+          layout[axes.yLeftKey].tickcolor = "#169aa3";
+          layout[axes.yLeftKey].showline = true;
+          layout[axes.yLeftKey].linecolor = "#169aa3";
+        } else {
+          layout[axes.yLeftKey].title = {text: ""};
+          layout[axes.yLeftKey].tickfont = {color: "#000000"};
+        }
+
+        if (!hasLeft && hasRight) {
+          layout[axes.yLeftKey].showticklabels = false;
+          layout[axes.yLeftKey].ticks = "";
+          layout[axes.yLeftKey].showline = false;
+          layout[axes.yLeftKey].title = {text: ""};
+          layout[axes.yLeftKey].zeroline = false;
+        }
+        layout[axes.yRightKey] = {
+          anchor: axes.xRef,
+          overlaying: axes.yLeftRef,
+          side: "right",
+          showgrid: false,
+          zeroline: false,
+          showline: hasRight,
+          linecolor: "#169aa3",
+          tickfont: {color: "#169aa3"},
+          title: hasRight ? {text: "pico temp / C", font: {color: "#169aa3"}} : {text: ""},
+          showticklabels: hasRight,
+          ticks: hasRight ? undefined : "",
+        };
+        rowCursor += 1;
+      }
+
+      if (bottomHasData) {
+        const axes = axisNamesForRow(rowCursor);
+        const queryPairs = plotPageConfig.show_query_ok ? finitePairs(x, queryOk) : {x: [], y: []};
+        const rssiPairs = plotPageConfig.show_wifi_rssi ? finitePairs(x, wifiRssi) : {x: [], y: []};
+        const hasQuery = queryPairs.x.length > 0;
+        const hasRssi = rssiPairs.x.length > 0;
+        const rightOnly = !hasQuery && hasRssi;
+        let hasLeft = false;
+        let hasRight = false;
+
+        if (hasQuery) {
+          hasLeft = true;
+          data.push({
+            x: queryPairs.x, y: queryPairs.y, type: "scatter", mode: "lines+markers",
+            line: {color: "#7f3fbf", width: 2}, marker: {color: "#7f3fbf", size: 4},
+            xaxis: axes.xRef, yaxis: axes.yLeftRef,
+            hovertemplate: "Query OK: %{y}<br>%{x}<extra></extra>",
+          });
+          layout[axes.yLeftKey].range = [-0.05, 1.05];
+          layout[axes.yLeftKey].tickvals = [0, 1];
+          layout[axes.yLeftKey].ticktext = ["no", "yes"];
+          layout[axes.yLeftKey].title = {text: "query ok", font: {color: "#7f3fbf"}};
+          layout[axes.yLeftKey].tickfont = {color: "#7f3fbf"};
+        }
+        if (hasRssi) {
+          if (rightOnly) {
+            hasLeft = true;
+            data.push({
+              x: rssiPairs.x, y: rssiPairs.y, type: "scatter", mode: "lines+markers",
+              line: {color: "#c27c0e", width: 2}, marker: {color: "#c27c0e", size: 4},
+              xaxis: axes.xRef, yaxis: axes.yLeftRef,
+              hovertemplate: "Wi-Fi RSSI: %{y:.1f} dBm<br>%{x}<extra></extra>",
+            });
+            layout[axes.yLeftKey].title = {text: "wifi rssi / dBm", font: {color: "#c27c0e"}};
+            layout[axes.yLeftKey].tickfont = {color: "#c27c0e"};
+            layout[axes.yLeftKey].tickcolor = "#c27c0e";
+            layout[axes.yLeftKey].showline = true;
+            layout[axes.yLeftKey].linecolor = "#c27c0e";
+          } else {
+            hasRight = true;
+            data.push({
+              x: rssiPairs.x, y: rssiPairs.y, type: "scatter", mode: "lines+markers",
+              line: {color: "#c27c0e", width: 2}, marker: {color: "#c27c0e", size: 4},
+              xaxis: axes.xRef, yaxis: axes.yRightRef,
+              hovertemplate: "Wi-Fi RSSI: %{y:.1f} dBm<br>%{x}<extra></extra>",
+            });
+          }
+        }
+        if (!hasLeft && hasRight) {
+          layout[axes.yLeftKey].showticklabels = false;
+          layout[axes.yLeftKey].ticks = "";
+          layout[axes.yLeftKey].showline = false;
+          layout[axes.yLeftKey].title = {text: ""};
+          layout[axes.yLeftKey].zeroline = false;
+        }
+        layout[axes.yRightKey] = {
+          anchor: axes.xRef,
+          overlaying: axes.yLeftRef,
+          side: "right",
+          showgrid: false,
+          zeroline: false,
+          showline: hasRight,
+          linecolor: "#c27c0e",
+          tickfont: {color: "#c27c0e"},
+          title: hasRight ? {text: "wifi rssi / dBm", font: {color: "#c27c0e"}} : {text: ""},
+          showticklabels: hasRight,
+          ticks: hasRight ? undefined : "",
+        };
+      }
+
+      return {data, layout};
+    }
+
+    async function loadPlot() {
+      const div = document.getElementById("device-plot");
+      const errorDiv = document.getElementById("device-plot-error");
+      const params = new URLSearchParams({l: String(plotPageConfig.l), s: String(plotPageConfig.s)});
+      try {
+        errorDiv.hidden = true;
+        const resp = await fetch(`${plotPageConfig.plot_data_url}?${params.toString()}`, {cache: "no-store"});
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const payload = await resp.json();
+        const fig = buildPlotFigure(payload);
+        await Plotly.newPlot(div, fig.data, fig.layout, {
+          responsive: true,
+          displaylogo: false,
+          displayModeBar: true,
+        });
+      } catch (err) {
+        errorDiv.textContent = `Failed to load plot data: ${err}`;
+        errorDiv.hidden = false;
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", loadPlot);
+    window.addEventListener("resize", () => {
+      const div = document.getElementById("device-plot");
+      if (div && div.data) {
+        Plotly.Plots.resize(div);
+      }
+    });
+  </script>
+</body>
+</html>

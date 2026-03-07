@@ -23,4 +23,3 @@
 //
 static const unsigned char trust_store_pem[] = "";
 static const unsigned int trust_store_pem_len = sizeof(trust_store_pem);
-

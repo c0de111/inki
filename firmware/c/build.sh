@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # -----------------------------------------------------------------------------
 # build.sh – Full build pipeline for inki firmware (Pico W)
@@ -26,8 +27,10 @@ export PICO_SDK_PATH="${PICO_SDK_PATH:-$HOME/pico/pico-sdk}"
 # Default configuration
 USB_BOOTLOADER_ENABLE=0
 USE_CASE="SEATSURFING"  # Default use case
+INKI_DEBUG_USB_WAIT=OFF
+INKI_DEBUG_TLS_CB=OFF
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 # Work around pico-sdk 2.1.0 + GCC 15 host build failure (pioasm lacks <cstdint>)
 # This patches the SDK headers in place, idempotently, so fresh clones/build dirs work.
 patch_pioasm_headers() {
@@ -64,7 +67,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --seatsurfing)
-      USE_CASE="SEATSURFING" 
+      USE_CASE="SEATSURFING"
       shift
       ;;
     --weathermap)
@@ -79,6 +82,14 @@ while [[ $# -gt 0 ]]; do
       USB_BOOTLOADER_ENABLE=1
       shift
       ;;
+    --debug-usb-wait)
+      INKI_DEBUG_USB_WAIT=ON
+      shift
+      ;;
+    --debug-tls-cb)
+      INKI_DEBUG_TLS_CB=ON
+      shift
+      ;;
     --help|-h)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
@@ -86,7 +97,10 @@ while [[ $# -gt 0 ]]; do
       echo "  --historian            Build for Historian use case"
       echo "  --homematic            Build for Homematic use case"
       echo "  --seatsurfing          Build for SeatSurfing use case (default)"
+      echo "  --weathermap           Build for Weathermap use case"
       echo "  --new-usecase          Build for new use case template"
+      echo "  --debug-usb-wait       Enable startup USB wait helper (CMake: INKI_DEBUG_USB_WAIT=ON)"
+      echo "  --debug-tls-cb         Enable TLS debug callback helper (CMake: INKI_DEBUG_TLS_CB=ON)"
       echo "  --help|-h              Show this help"
       exit 0
       ;;
@@ -112,8 +126,8 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-VERSION_HEADER="version.h"
-TEMPLATE_HEADER="version_template.h.in"
+VERSION_HEADER="$SCRIPT_DIR/version.h"
+TEMPLATE_HEADER="$SCRIPT_DIR/version_template.h.in"
 
 if [ ! -f "$VERSION_HEADER" ]; then
   echo "⚠️  Warning: '$VERSION_HEADER' not found."
@@ -136,9 +150,9 @@ if [ "$USB_BOOTLOADER_ENABLE" -eq 1 ]; then
 else
     echo -e "\033[1;32m[INFO] USB-UART Bootloader DISABLED\033[0m" # green
 fi
+echo "[INFO] Optional debug switches: --debug-usb-wait (INKI_DEBUG_USB_WAIT=${INKI_DEBUG_USB_WAIT}), --debug-tls-cb (INKI_DEBUG_TLS_CB=${INKI_DEBUG_TLS_CB})"
 
 # Define the build directory relative to the script's location
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 
 # Create the build directory if it doesn't exist
@@ -153,6 +167,8 @@ cd "$BUILD_DIR" || exit 1
 echo "Building for use case: $USE_CASE"
 cmake -DUSB_BOOTLOADER_ENABLE=${USB_BOOTLOADER_ENABLE} \
       -DUSE_CASE_DEFINE="USE_CASE_${USE_CASE}" \
+      -DINKI_DEBUG_USB_WAIT=${INKI_DEBUG_USB_WAIT} \
+      -DINKI_DEBUG_TLS_CB=${INKI_DEBUG_TLS_CB} \
       "$SCRIPT_DIR"
 
 # Force a rebuild

@@ -3,15 +3,13 @@
 
 #include "debug.h"
 #include "seatsurfing_client.h"
-#include <stdbool.h>
 #include "third_party/cjson/cJSON.h"
+#include <stdbool.h>
 
 #ifdef USE_CASE_SEATSURFING
 
-int seatsurfing_build_http_request(char* buffer, size_t buffer_size,
-                                   const char* host,
-                                   const char* location_id,
-                                   const char* auth_b64) {
+int seatsurfing_build_http_request(char *buffer, size_t buffer_size, const char *host,
+                                   const char *location_id, const char *auth_b64) {
     if (!buffer || !host || !location_id || !auth_b64) {
         return -1;
     }
@@ -31,59 +29,57 @@ int seatsurfing_build_http_request(char* buffer, size_t buffer_size,
     return len;
 }
 
-seat_info_t seatsurfing_parse_seat_info(const char* json, const char* target_space_id_or_name) {
-    seat_info_t info = {
-        .is_available = true,
-        .user_email = {0},
-        .desk_name = {0}
-    };
+seat_info_t seatsurfing_parse_seat_info(const char *json, const char *target_space_id_or_name) {
+    seat_info_t info = {.is_available = true, .user_email = {0}, .desk_name = {0}};
 
-    const char* target = (target_space_id_or_name && *target_space_id_or_name) ? target_space_id_or_name : NULL;
+    const char *target =
+        (target_space_id_or_name && *target_space_id_or_name) ? target_space_id_or_name : NULL;
 
-    cJSON* root = cJSON_Parse(json);
+    cJSON *root = cJSON_Parse(json);
     if (!root) {
         return info;
     }
 
     if (cJSON_IsArray(root)) {
-        cJSON* item = NULL;
+        cJSON *item = NULL;
         cJSON_ArrayForEach(item, root) {
-            if (!cJSON_IsObject(item)) continue;
-            cJSON* id = cJSON_GetObjectItemCaseSensitive(item, "id");
-            cJSON* name = cJSON_GetObjectItemCaseSensitive(item, "name");
+            if (!cJSON_IsObject(item))
+                continue;
+            const cJSON *id = cJSON_GetObjectItemCaseSensitive(item, "id");
+            const cJSON *name = cJSON_GetObjectItemCaseSensitive(item, "name");
 
             bool match = false;
             if (!target) {
                 // take the first entry as fallback
                 match = true;
             } else {
-                if (cJSON_IsString(id) && strcmp(id->valuestring, target) == 0) {
-                    match = true;
-                } else if (cJSON_IsString(name) && strcmp(name->valuestring, target) == 0) {
+                if ((cJSON_IsString(id) && strcmp(id->valuestring, target) == 0) ||
+                    (cJSON_IsString(name) && strcmp(name->valuestring, target) == 0)) {
                     match = true;
                 }
             }
 
-            if (!match) continue;
-            if (!target) target = ""; // mark found
+            if (!match)
+                continue;
 
             if (cJSON_IsString(name)) {
                 strncpy(info.desk_name, name->valuestring, sizeof(info.desk_name) - 1);
             }
 
-            cJSON* available = cJSON_GetObjectItemCaseSensitive(item, "available");
+            const cJSON *available = cJSON_GetObjectItemCaseSensitive(item, "available");
             if (cJSON_IsBool(available)) {
                 info.is_available = cJSON_IsTrue(available);
             }
 
             if (!info.is_available) {
-                cJSON* bookings = cJSON_GetObjectItemCaseSensitive(item, "bookings");
+                const cJSON *bookings = cJSON_GetObjectItemCaseSensitive(item, "bookings");
                 if (cJSON_IsArray(bookings)) {
-                    cJSON* b = cJSON_GetArrayItem(bookings, 0);
+                    const cJSON *b = cJSON_GetArrayItem(bookings, 0);
                     if (cJSON_IsObject(b)) {
-                        cJSON* email = cJSON_GetObjectItemCaseSensitive(b, "userEmail");
+                        const cJSON *email = cJSON_GetObjectItemCaseSensitive(b, "userEmail");
                         if (cJSON_IsString(email)) {
-                            strncpy(info.user_email, email->valuestring, sizeof(info.user_email) - 1);
+                            strncpy(info.user_email, email->valuestring,
+                                    sizeof(info.user_email) - 1);
                         }
                     }
                 }
@@ -96,4 +92,3 @@ seat_info_t seatsurfing_parse_seat_info(const char* json, const char* target_spa
     return info;
 }
 #endif // USE_CASE_SEATSURFING
-#include "third_party/cjson/cJSON.h"

@@ -108,3 +108,10 @@ firmware/c/certs/trust_store_pem.h
 
 # Public export output
 out/
+
+# inki-monitor runtime files
+inki-monitor/.venv/
+inki-monitor/config.yaml
+inki-monitor/data/
+inki-monitor/__pycache__/
+inki-monitor/*.pyc

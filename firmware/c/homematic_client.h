@@ -1,19 +1,19 @@
 #pragma once
-#include <stddef.h>
-#include <stdbool.h>
 #include "homematic_config.h"
+#include <stdbool.h>
+#include <stddef.h>
 
 // Build a single getValue XML-RPC body
-int homematic_build_getvalue(char* buf, size_t n, const char* address, const char* key);
+int homematic_build_getvalue(char *buf, size_t n, const char *address, const char *key);
 
 // Build a system.multicall XML-RPC body for all configured items
-int homematic_build_multicall(char* buf, size_t n, const homematic_config_t* cfg);
+int homematic_build_multicall(char *buf, size_t n, const homematic_config_t *cfg);
 
 // Build HTTP/1.0 POST with Content-Length for given XML body
-int homematic_build_http_post(char* out, size_t n, const char* host, const char* xml, int xml_len);
+int homematic_build_http_post(char *out, size_t n, const char *host, const char *xml, int xml_len);
 
 // Build getParamsetDescription (VALUES) XML-RPC body to query metadata incl. UNIT
-int homematic_build_getparamsetdesc(char* buf, size_t n, const char* address);
+int homematic_build_getparamsetdesc(char *buf, size_t n, const char *address);
 
 // Build getServiceMessages (optional boolean includeInternal=1)
-int homematic_build_get_service_messages(char* buf, size_t n);
+int homematic_build_get_service_messages(char *buf, size_t n);

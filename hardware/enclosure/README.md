@@ -78,5 +78,5 @@ Each folder includes:
 
 ## License
 
-These files are licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.  
+These files are licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.
 See `../LICENSE` for full license text.

@@ -15,7 +15,7 @@ Temperature progression of a Homematic sensor in our garden over the last 24 hou
 </p>
 
 ## Overview
-In home automation systems you often have quite a lot of constantly changing and interesting data. Of course, you can look it up in your favorite web interface. However, it might be nice to have this automatically happen, and have a attractive "electronic picture" on your wall that you can briefly look at in your all-days routine. Above you see the 7.5" version of inki displaying the temperature in our garden from the ccu-historian home automation system from the last 24 hours, and the gas consumption in our home. It is quite fun to see the dynamics this way. 
+In home automation systems you often have quite a lot of constantly changing and interesting data. Of course, you can look it up in your favorite web interface. However, it might be nice to have this automatically happen, and have a attractive "electronic picture" on your wall that you can briefly look at in your all-days routine. Above you see the 7.5" version of inki displaying the temperature in our garden from the ccu-historian home automation system from the last 24 hours, and the gas consumption in our home. It is quite fun to see the dynamics this way.
 
 <p align="center">
   <img src="{{ '/assets/images/inki_historian_gas.JPG' | relative_url }}" alt="Historian gas visualization" width="500" style="border-radius: 8px; margin: 10px 0 5px 0;">

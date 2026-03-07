@@ -1,0 +1,15 @@
+[Unit]
+Description=inki-monitor telemetry service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/inki-private/inki-monitor
+ExecStart=/path/to/inki-private/inki-monitor/.venv/bin/python3 app.py
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

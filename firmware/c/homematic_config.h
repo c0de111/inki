@@ -1,6 +1,6 @@
 #pragma once
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define HOMEMATIC_MAX_ITEMS 6
 
@@ -12,10 +12,10 @@ typedef struct {
 
 typedef struct {
     uint8_t ip[4];
-    uint16_t port;               // default 2010
-    bool add_interface_prefix;   // prepend "HmIP-RF." when true (if missing)
-    bool auto_label;             // try to fetch labels from CCU
-    uint8_t count;               // number of active items in items[]
+    uint16_t port;             // default 2010
+    bool add_interface_prefix; // prepend "HmIP-RF." when true (if missing)
+    bool auto_label;           // try to fetch labels from CCU
+    uint8_t count;             // number of active items in items[]
     homematic_item_t items[HOMEMATIC_MAX_ITEMS];
 } homematic_config_data_t;
 

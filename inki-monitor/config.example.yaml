@@ -1,0 +1,22 @@
+server:
+  bind_host: "0.0.0.0"
+  bind_port: 3004
+
+auth:
+  ingest_token: "CHANGE_ME"
+
+storage:
+  sqlite_path: "./data/inki-monitor.sqlite3"
+
+limits:
+  max_payload_bytes: 8192
+
+plot:
+  default_l: 0
+  default_s: 0
+  figsize_scale: 0.5
+  dpi: 150
+
+ui:
+  title: "inki-monitor"
+  sort_by: "label"

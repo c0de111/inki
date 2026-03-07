@@ -35,6 +35,7 @@ add_executable(inki_slot0
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture
+    inki_monitor.c  # Optional telemetry POST to inki-monitor (runtime, fail-safe)
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
@@ -61,6 +62,7 @@ add_executable(inki_slot1
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture
+    inki_monitor.c  # Optional telemetry POST to inki-monitor (runtime, fail-safe)
     historian_client.c  # Historian helpers (time, JSON, request build)
     seatsurfing_client.c  # SeatSurfing request builder
     homematic_client.c   # Homematic XML-RPC request builders
@@ -186,6 +188,8 @@ target_sources(inki_slot1 PRIVATE
 )
 
 option(USB_BOOTLOADER_ENABLE "Enable USB support in bootloader" OFF)
+option(INKI_DEBUG_USB_WAIT "Enable debug USB wait helper in application startup" OFF)
+option(INKI_DEBUG_TLS_CB "Enable debug TLS callback helper in application TLS setup" OFF)
 
 if(USB_BOOTLOADER_ENABLE)
 pico_enable_stdio_usb(inki_bootloader 1)
@@ -243,6 +247,18 @@ if(USE_CASE_DEFINE)
     target_compile_definitions(inki_slot1 PRIVATE ${USE_CASE_DEFINE})
     message(STATUS "Use case override: ${USE_CASE_DEFINE}")
 endif()
+
+if(INKI_DEBUG_USB_WAIT)
+    target_compile_definitions(inki_slot0 PRIVATE INKI_DEBUG_USB_WAIT=1)
+    target_compile_definitions(inki_slot1 PRIVATE INKI_DEBUG_USB_WAIT=1)
+endif()
+
+if(INKI_DEBUG_TLS_CB)
+    target_compile_definitions(inki_slot0 PRIVATE INKI_DEBUG_TLS_CB=1)
+    target_compile_definitions(inki_slot1 PRIVATE INKI_DEBUG_TLS_CB=1)
+endif()
+
+message(STATUS "Debug flags: INKI_DEBUG_USB_WAIT=${INKI_DEBUG_USB_WAIT}, INKI_DEBUG_TLS_CB=${INKI_DEBUG_TLS_CB}")
 #[[
 target_link_libraries(inki_default_config
     pico_stdlib

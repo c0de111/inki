@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>inki Logo Converter</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f5f5f5; color: #333; padding: 2rem; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
+  .subtitle { color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .card { background: #fff; border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .card h2 { font-size: 1rem; margin-bottom: 0.8rem; }
+
+  .drop-zone { border: 2px dashed #ccc; border-radius: 8px; padding: 2rem; text-align: center;
+               cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #666; background: #fafafa; }
+  .drop-zone input { display: none; }
+  .drop-zone p { color: #888; font-size: 0.9rem; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+  .controls label { font-size: 0.85rem; color: #555; }
+  .controls input[type="range"] { width: 180px; }
+  .controls input[type="number"] { width: 70px; padding: 0.3rem; border: 1px solid #ccc;
+                                    border-radius: 4px; font-size: 0.85rem; }
+  .val { font-size: 0.85rem; color: #333; min-width: 2rem; display: inline-block; }
+
+  .preview-area { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; margin-top: 0.8rem; }
+  .preview-box { text-align: center; }
+  .preview-box p { font-size: 0.75rem; color: #888; margin-top: 0.3rem; }
+  canvas { border: 1px solid #ddd; background: #fff; image-rendering: pixelated; }
+  #preview-original { max-width: 200px; max-height: 200px; border: 1px solid #ddd; }
+
+  .info { font-size: 0.8rem; color: #555; margin-top: 0.5rem; line-height: 1.5; }
+  .info .warn { color: #c60; }
+  .info .ok { color: #2a2; }
+  .info .err { color: #c00; }
+
+  .actions { margin-top: 1rem; display: flex; gap: 0.8rem; flex-wrap: wrap; }
+  button { padding: 0.5rem 1.2rem; border: none; border-radius: 4px; font-size: 0.85rem;
+           cursor: pointer; transition: background 0.2s; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .btn-primary { background: #333; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #555; }
+  .btn-secondary { background: #eee; color: #333; }
+  .btn-secondary:hover:not(:disabled) { background: #ddd; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>inki Logo Converter</h1>
+<p class="subtitle">Convert any image to inki ePaper logo format (.bin)</p>
+
+<div class="card">
+  <h2>1. Select image</h2>
+  <div class="drop-zone" id="drop-zone">
+    <p>Drop an image here or click to select</p>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+</div>
+
+<div class="card hidden" id="settings-card">
+  <h2>2. Adjust settings</h2>
+  <div class="controls">
+    <div>
+      <label for="threshold-slider">B/W threshold</label><br>
+      <input type="range" id="threshold-slider" min="1" max="254" value="128">
+      <span class="val" id="threshold-val">128</span>
+    </div>
+    <div>
+      <label for="max-dim">Max dimension (px)</label><br>
+      <input type="number" id="max-dim" min="8" max="250" value="100">
+    </div>
+    <div>
+      <label><input type="checkbox" id="invert-check"> Invert colors</label>
+    </div>
+  </div>
+  <div class="preview-area">
+    <div class="preview-box">
+      <img id="preview-original" alt="Original">
+      <p>Original</p>
+    </div>
+    <div class="preview-box">
+      <canvas id="preview-bw"></canvas>
+      <p id="preview-bw-label">ePaper preview</p>
+    </div>
+  </div>
+  <div class="info" id="info-text"></div>
+</div>
+
+<div class="card hidden" id="actions-card">
+  <h2>3. Download</h2>
+  <div class="actions">
+    <button class="btn-primary" id="btn-download" disabled>Download .bin</button>
+  </div>
+  <p class="info" style="margin-top:0.6rem;">Upload the downloaded file to your inki device via the setup web interface.</p>
+</div>
+
+<script>
+"use strict";
+
+const HEADER_SIZE = 18;
+const MAX_BIN_SIZE = 8192;
+const MAX_DATA_SIZE = MAX_BIN_SIZE - HEADER_SIZE;
+
+const dropZone = document.getElementById("drop-zone");
+const fileInput = document.getElementById("file-input");
+const settingsCard = document.getElementById("settings-card");
+const actionsCard = document.getElementById("actions-card");
+const thresholdSlider = document.getElementById("threshold-slider");
+const thresholdVal = document.getElementById("threshold-val");
+const maxDimInput = document.getElementById("max-dim");
+const invertCheck = document.getElementById("invert-check");
+const previewOriginal = document.getElementById("preview-original");
+const previewBW = document.getElementById("preview-bw");
+const previewBWLabel = document.getElementById("preview-bw-label");
+const infoText = document.getElementById("info-text");
+const btnDownload = document.getElementById("btn-download");
+
+let sourceImage = null;
+let currentBin = null;
+
+// --- Drop zone ---
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  if (e.dataTransfer.files.length > 0) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files.length > 0) loadFile(fileInput.files[0]); });
+
+// --- Settings changes ---
+thresholdSlider.addEventListener("input", () => { thresholdVal.textContent = thresholdSlider.value; render(); });
+maxDimInput.addEventListener("change", render);
+invertCheck.addEventListener("change", render);
+
+function loadFile(file) {
+  if (!file.type.startsWith("image/")) {
+    alert("Please select an image file.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      previewOriginal.src = e.target.result;
+      settingsCard.classList.remove("hidden");
+      actionsCard.classList.remove("hidden");
+      dropZone.querySelector("p").textContent = file.name;
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function render() {
+  if (!sourceImage) return;
+
+  const threshold = parseInt(thresholdSlider.value, 10);
+  let maxDim = parseInt(maxDimInput.value, 10);
+  if (isNaN(maxDim) || maxDim < 8) maxDim = 8;
+  if (maxDim > 250) maxDim = 250;
+  const invert = invertCheck.checked;
+
+  // Scale to fit max dimension while preserving aspect ratio
+  let w = sourceImage.naturalWidth;
+  let h = sourceImage.naturalHeight;
+  if (w > maxDim || h > maxDim) {
+    const scale = Math.min(maxDim / w, maxDim / h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  }
+  if (w < 1) w = 1;
+  if (h < 1) h = 1;
+
+  // Pad width to multiple of 8
+  const paddedW = Math.ceil(w / 8) * 8;
+
+  // Draw scaled image onto offscreen canvas to get pixel data
+  const offCanvas = document.createElement("canvas");
+  offCanvas.width = w;
+  offCanvas.height = h;
+  const offCtx = offCanvas.getContext("2d");
+  offCtx.fillStyle = "#ffffff";
+  offCtx.fillRect(0, 0, w, h);
+  offCtx.drawImage(sourceImage, 0, 0, w, h);
+  const imageData = offCtx.getImageData(0, 0, w, h);
+  const pixels = imageData.data;
+
+  // Convert to grayscale array
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = pixels[i * 4];
+    const g = pixels[i * 4 + 1];
+    const b = pixels[i * 4 + 2];
+    const a = pixels[i * 4 + 3];
+    // Blend alpha against white background
+    const lum = Math.round((0.299 * r + 0.587 * g + 0.114 * b) * (a / 255) + 255 * (1 - a / 255));
+    gray[i] = lum;
+  }
+
+  // Threshold to 1-bit and pack bytes (matching generate_logo_bin.py exactly)
+  const bytesPerRow = paddedW / 8;
+  const dataBytes = new Uint8Array(bytesPerRow * h);
+
+  for (let y = 0; y < h; y++) {
+    for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+      let byte = 0;
+      const bitsInByte = Math.min(8, paddedW - byteIdx * 8);
+      for (let bit = 0; bit < bitsInByte; bit++) {
+        const x = byteIdx * 8 + bit;
+        let isBlack;
+        if (x < w) {
+          const val = gray[y * w + x];
+          isBlack = invert ? (val <= threshold) : (val > threshold);
+        } else {
+          isBlack = true; // padding: set bit so after ~byte it becomes 0 = white on ePaper
+        }
+        if (isBlack) {
+          byte |= (1 << (7 - bit));
+        }
+      }
+      byte <<= (8 - bitsInByte);
+      // Invert each byte for ePaper format
+      dataBytes[y * bytesPerRow + byteIdx] = (~byte) & 0xFF;
+    }
+  }
+
+  // Build .bin (18-byte header + data)
+  const totalSize = HEADER_SIZE + dataBytes.length;
+  const bin = new ArrayBuffer(totalSize);
+  const view = new DataView(bin);
+  // Magic "LOGO" (4 bytes)
+  view.setUint8(0, 0x4C); // L
+  view.setUint8(1, 0x4F); // O
+  view.setUint8(2, 0x47); // G
+  view.setUint8(3, 0x4F); // O
+  // Width (uint16 LE)
+  view.setUint16(4, paddedW, true);
+  // Height (uint16 LE)
+  view.setUint16(6, h, true);
+  // Datalen (uint32 LE)
+  view.setUint32(8, dataBytes.length, true);
+  // Reserved (6 bytes zeros) - already zero from ArrayBuffer init
+  // Pixel data
+  const binBytes = new Uint8Array(bin);
+  binBytes.set(dataBytes, HEADER_SIZE);
+
+  currentBin = bin;
+
+  // Render ePaper preview
+  previewBW.width = paddedW;
+  previewBW.height = h;
+  const ctx = previewBW.getContext("2d");
+  const previewData = ctx.createImageData(paddedW, h);
+  for (let y = 0; y < h; y++) {
+    for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+      const rawByte = dataBytes[y * bytesPerRow + byteIdx];
+      for (let bit = 0; bit < 8; bit++) {
+        const x = byteIdx * 8 + bit;
+        if (x >= paddedW) break;
+        // In .bin format: bit 0 = white, bit 1 = black (matches view_logo_bin.py)
+        const bitVal = (rawByte >> (7 - bit)) & 1;
+        const color = bitVal ? 0 : 255;
+        const idx = (y * paddedW + x) * 4;
+        previewData.data[idx] = color;
+        previewData.data[idx + 1] = color;
+        previewData.data[idx + 2] = color;
+        previewData.data[idx + 3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(previewData, 0, 0);
+  // Scale preview canvas display size for visibility
+  const displayScale = Math.max(1, Math.min(3, Math.floor(300 / Math.max(paddedW, h))));
+  previewBW.style.width = (paddedW * displayScale) + "px";
+  previewBW.style.height = (h * displayScale) + "px";
+  previewBWLabel.textContent = `ePaper preview (${paddedW}x${h} px)`;
+
+  // Info text
+  let info = `Output: ${paddedW} x ${h} px, ${totalSize} bytes`;
+  if (paddedW !== w) info += ` (padded from ${w}px width)`;
+  info += "<br>";
+
+  if (totalSize > MAX_BIN_SIZE) {
+    info += `<span class="err">Too large for flash (${totalSize} > ${MAX_BIN_SIZE} bytes). Reduce max dimension.</span>`;
+    btnDownload.disabled = true;
+  } else {
+    const pct = Math.round(totalSize / MAX_BIN_SIZE * 100);
+    info += `<span class="ok">Fits in flash (${pct}% of ${MAX_BIN_SIZE} bytes used)</span>`;
+    btnDownload.disabled = false;
+  }
+  infoText.innerHTML = info;
+}
+
+// --- Download ---
+btnDownload.addEventListener("click", () => {
+  if (!currentBin) return;
+  const blob = new Blob([currentBin], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "logo_flash.bin";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>

@@ -73,8 +73,8 @@ sleep 1.5
 #   -c "program build/inki_default_config.bin 0x101E7000 reset exit"
 
 # # ----- Done -----
-# end_time=$(date +%s)
-# elapsed=$((end_time - start_time))
+end_time=$(date +%s)
+elapsed=$((end_time - start_time))
 
 echo
 echo -e "${GREEN}Flashing complete in ${elapsed} seconds.${RESET}"

@@ -28,15 +28,15 @@ In the default state of the circuit, **Q1** is in the off-state and the Pico doe
 
 
 Manual user interaction via:
- 
+
 - **SW1 / DIP switch**: Allow static configuration.
-	-  **"gate"**: **pushbutton #0** can be connected to gate for manual triggering 
+	-  **"gate"**: **pushbutton #0** can be connected to gate for manual triggering
 	- **"always on"**: gate of **Q1** can be permanently grounded (powering Vsys of the Pico with Vcc) for debugging
 	- **"LED"**: activate status LED, signaling running Pico
 	- **"Vbat"**: Connect DS3231 Vbat to Vcc via **D2** (see below)
 
-- **Pushbuttons** (**J2**, **J4**, **J5**): 
-	- **pushbutton #0** / **J2**: the same line as INT# and used for manual wake-up. 
+- **Pushbuttons** (**J2**, **J4**, **J5**):
+	- **pushbutton #0** / **J2**: the same line as INT# and used for manual wake-up.
 	- **pushbutton #1-3**: for manual user input, debounced by 1k resistors and 100nF caps, read once at start-up by the Pico -> First push **pushbutton #1-3**, only after that start Pico by **pushbutton #0**
 
 ---
@@ -49,17 +49,17 @@ The typical battery life under realistic usage conditions can be estimated by po
 
 **Used Parameters**
 
-- **Idle current**: 5 µA (RTC consumption, residual current via pullups and others)  
-- **Activation consumption**: 0.250 mAh per wake-up (same for 4.2″ and 7.5″ versions, measured)  
-- **LED consumption** (included above): 0.021 mAh per wake-up  
-- **Wake-up schedule**: 7× per day, 5 days per week  
-- **Battery self-discharge**: 2.5 % per year  
-- **Battery capacity**: 1200 mAh (AAA batteries)  
+- **Idle current**: 5 µA (RTC consumption, residual current via pullups and others)
+- **Activation consumption**: 0.250 mAh per wake-up (same for 4.2″ and 7.5″ versions, measured)
+- **LED consumption** (included above): 0.021 mAh per wake-up
+- **Wake-up schedule**: 7× per day, 5 days per week
+- **Battery self-discharge**: 2.5 % per year
+- **Battery capacity**: 1200 mAh (AAA batteries)
 
 **Annualized Consumption Rates (approximate)**
 
-- **Idle**: 43.8 mAh/year  
-- **Active (wake-ups)**: 456.2 mAh/year  
+- **Idle**: 43.8 mAh/year
+- **Active (wake-ups)**: 456.2 mAh/year
 
 **⇒ Estimated battery lifetime: 850 days (≈ 2.33 years)**
 
@@ -78,17 +78,17 @@ This is based on measurements and gives estimations useful to gauge wake-up ener
 
 **Used Parameters**
 
-- **Idle current**: 5 µA (RTC consumption, residual current via pullups and others)  
-- **Activation consumption**: 0.250 mAh per wake-up (same for 4.2″ and 7.5″ versions, measured)  
-- **LED consumption** (included above): 0.021 mAh per wake-up  
-- **Wake-up schedule**: 48× per day, 7 days per week  
-- **Battery self-discharge**: 2.5 % per year  
-- **Battery capacity**: 2500 mAh (AA batteries)  
+- **Idle current**: 5 µA (RTC consumption, residual current via pullups and others)
+- **Activation consumption**: 0.250 mAh per wake-up (same for 4.2″ and 7.5″ versions, measured)
+- **LED consumption** (included above): 0.021 mAh per wake-up
+- **Wake-up schedule**: 48× per day, 7 days per week
+- **Battery self-discharge**: 2.5 % per year
+- **Battery capacity**: 2500 mAh (AA batteries)
 
 **Annualized Consumption Rates (approximate)**
 
-- **Idle**: 43.8 mAh/year  
-- **Active (wake-ups)**: 4380 mAh/year  
+- **Idle**: 43.8 mAh/year
+- **Active (wake-ups)**: 4380 mAh/year
 
 **⇒ Estimated battery lifetime: 205 days (≈ 0.56 years)**
 
@@ -101,7 +101,7 @@ This is based on measurements and gives estimations useful to gauge wake-up ener
 
 <img src="../../images/log_prototype_esign_7_5.png" alt="7_5_prototype_run" width="400" style="float: right; margin-left: 15px;">
 
-This chart shows the measured energy consumption of the 7.5" prototype. 
+This chart shows the measured energy consumption of the 7.5" prototype.
 
 This is based on measurements and gives estimations useful to gauge wake-up energy relative to idle current in order to optimize runtime versus refresh cycle.
 
@@ -144,7 +144,7 @@ An oscilloscope measurement verifies the expected behavior:
 
 <img src="oscilloscope_annotated_labeled_orange_box.jpg" alt="Annotated Oscilloscope Image" width="400" style="float: right; margin-left: 15px;">
 
-Initially (high AAA voltage), VBAT closely follows the AAA level. As the AAA voltage drops and the output of the 1N4148 falls below the coin cell’s level minus the BAT54 drop, the coin cell takes over. VBAT then stabilizes around 3.1 V and becomes independent of AAA voltage. 
+Initially (high AAA voltage), VBAT closely follows the AAA level. As the AAA voltage drops and the output of the 1N4148 falls below the coin cell’s level minus the BAT54 drop, the coin cell takes over. VBAT then stabilizes around 3.1 V and becomes independent of AAA voltage.
 
 ---
 
@@ -170,7 +170,7 @@ Thus, no practical impact on battery life is expected from reverse leakage throu
 ---
 ## A few notes about some of the components
 
-- **Q1**: TSM260P02CX, P-channel MOSFET — disconnects the Pico W from the battery supply during sleep. Controlled via DS3231 and push button #0. 
+- **Q1**: TSM260P02CX, P-channel MOSFET — disconnects the Pico W from the battery supply during sleep. Controlled via DS3231 and push button #0.
 - **D1**: BAT54 Schottky diode — supplies power from the battery pack to the circuit and DS3231 VCC.
 - **D2**: BAT54 Schottky diode — connects the optional coin cell to DS3231 VBAT for backup operation.
 - **R1–R3**: Gate resistors for Q1 — control gate behavior during transitions, including pull-up (R2) and pull-down (R3).

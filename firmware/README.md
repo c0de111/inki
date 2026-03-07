@@ -1,29 +1,29 @@
-# Firmware 
+# Firmware
 
 The **inki** firmware is a compact, bare-metal C application for the **Raspberry Pi Pico W**, designed for ultra-low-power **ePaper signage**. It supports "over-the-air" WIFI firmware updates, flash-persistent configuration, and dynamic content fetched via Wi-Fi from the Seatsurfing room booking system.
 
 ## Key Features
 
-- No RTOS or dynamic memory  
-  Runs on bare metal using the official Pico SDK, cyw43_arch and lwIP for Wi-Fi web server and client queries. Minimal runtime overhead, deterministic behavior, and low power consumption. Up to 10.000s refresh per battery life, tested in daily usage with 10.000s of operations without problem. 
+- No RTOS or dynamic memory
+  Runs on bare metal using the official Pico SDK, cyw43_arch and lwIP for Wi-Fi web server and client queries. Minimal runtime overhead, deterministic behavior, and low power consumption. Up to 10.000s refresh per battery life, tested in daily usage with 10.000s of operations without problem.
 
-- Dual-slot bootloader (Slot 0 and Slot 1)  
+- Dual-slot bootloader (Slot 0 and Slot 1)
   Enables safe OTA / WIFI updates: new firmware is flashed to the inactive slot and activated only after verification by the device (magic word and crc32 check).
 
-- Power-optimized architecture  
+- Power-optimized architecture
   A P-MOSFET fully disconnects power when inactive. Wakeups are triggered by RTC (DS3231) or pushbutton.
 
-- Configuration in flash  
+- Configuration in flash
   Wi-Fi credentials, Seatsurfing settings, and display behavior are stored in dedicated flash regions, separate from firmware.
 
-- Web-based configuration portal  
+- Web-based configuration portal
   Device features an access point mode (enter by holding all pushbuttons during startup). Configuration is done via browser (Wi-Fi, API, room, clock, ...).
 
-- Seatsurfing API integration  
-  Fetches live booking data and displays current room status. Multiple spaces per display supported. 
+- Seatsurfing API integration
+  Fetches live booking data and displays current room status. Multiple spaces per display supported.
 
-- Flexible build system  
-  Bootloader, lot-specific binaries and "factory"-setting binaries are generated automatically via `build.sh`, flashing is supported via `flash.sh`. 
+- Flexible build system
+  Bootloader, lot-specific binaries and "factory"-setting binaries are generated automatically via `build.sh`, flashing is supported via `flash.sh`.
 hare 4.2″ or 7.5″ ePaper displays. The content persists without power.
 
 
@@ -53,7 +53,7 @@ The firmware supports multiple use cases that can be selected at build time:
 # SeatSurfing room booking (default)
 ./build.sh --seatsurfing
 
-# Historian time-series data visualization  
+# Historian time-series data visualization
 ./build.sh --historian
 
 # Template for new use cases
@@ -69,13 +69,13 @@ This should give you (among others) the following files (numbers show approximat
 ```bash
 46552   inki_bootloader.bin
  8332   inki_default_config.bin
-680012  inki_slot0.bin          # Size varies by use case: SeatSurfing ~681KB, Historian ~689KB  
+680012  inki_slot0.bin          # Size varies by use case: SeatSurfing ~681KB, Historian ~689KB
 680012  inki_slot1.bin
 ```
 
 ## 3. Write the firmware
 
-At least the very first time you have to write the bootloader, initial config and one firmware slot - see flash.sh. After initial flashing you can use the web interface. 
+At least the very first time you have to write the bootloader, initial config and one firmware slot - see flash.sh. After initial flashing you can use the web interface.
 
 ```bash
 flash.sh
@@ -125,7 +125,7 @@ Content-Length: 338
 [12184 ms] EPD_Display called for epaper type: 2
 [14530 ms] Entering ePaper sleep mode for type: 2
 [14930 ms] Shutting down the ePaper module...
-[14930 ms] ...System shutting down.  
+[14930 ms] ...System shutting down.
 [14932 ms] Alarm2 set for 00:24 (RTC time)
 ```
 

@@ -1,22 +1,22 @@
 #ifndef HTTP_CLIENT_H
 #define HTTP_CLIENT_H
 
-#include <stdint.h>
+#include "lwip/altcp.h"
+#include "lwip/err.h"
+#include "lwip/ip_addr.h"
+#include "lwip/pbuf.h"
+#include "wifi.h"
 #include <stdbool.h>
 #include <stddef.h>
-#include "lwip/altcp.h"
-#include "lwip/pbuf.h"
-#include "lwip/ip_addr.h"
-#include "lwip/err.h"
-#include "wifi.h"
+#include <stdint.h>
 
 // Tunable limits and buffer sizes
 #ifndef HTTP_RECV_SLICE
-#define HTTP_RECV_SLICE 1500   // bytes processed per pbuf slice (approx. MTU)
+#define HTTP_RECV_SLICE 1500 // bytes processed per pbuf slice (approx. MTU)
 #endif
 
 #ifndef HTTP_HEADER_MAX
-#define HTTP_HEADER_MAX 4096   // max accumulated header size before CRLFCRLF
+#define HTTP_HEADER_MAX 4096 // max accumulated header size before CRLFCRLF
 #endif
 
 #ifndef HTTP_JSON_BODY_MAX
@@ -24,7 +24,7 @@
 #endif
 
 #ifndef HTTP_REQUEST_MAX
-#define HTTP_REQUEST_MAX 2048  // max HTTP request length we build (room for multicall)
+#define HTTP_REQUEST_MAX 2048 // max HTTP request length we build (room for multicall)
 #endif
 
 // HTTP session states
@@ -49,38 +49,39 @@ typedef struct {
     bool no_store_body; // if true, do not allocate body; only count bytes
     bool use_tls;       // opt-in TLS for this session
     bool stream_mode;   // if true, invoke streaming callbacks instead of accumulating body
-    
+
     // Header processing
     char header_buffer[HTTP_HEADER_MAX];
     size_t header_length;
-    
+
     // Body processing - dynamic allocation
-    char* body_buffer;
+    char *body_buffer;
     size_t body_buffer_size;
     size_t expected_length;
     size_t total_received;
-    
+
     // Request data
-    char* request_data;
+    char *request_data;
     size_t request_length;
-    
+
     // Connection management
-    struct altcp_pcb* pcb;
+    struct altcp_pcb *pcb;
     char server_hostname[96]; // optional SNI hostname (for TLS)
-    
+
     // Callback for completion
-    void (*completion_callback)(const char* body, size_t length, bool success, void* arg);
-    void* callback_arg;
+    void (*completion_callback)(const char *body, size_t length, bool success, void *arg);
+    void *callback_arg;
 
     // Streaming callbacks (enabled when stream_mode==true)
-    void (*stream_on_header)(const char* header, size_t header_len, int status_code, int content_length, void* arg);
-    void (*stream_on_data)(const uint8_t* data, size_t len, void* arg);
-    void (*stream_on_complete)(bool success, void* arg);
-    void* stream_arg;
-    
+    void (*stream_on_header)(const char *header, size_t header_len, int status_code,
+                             int content_length, void *arg);
+    void (*stream_on_data)(const uint8_t *data, size_t len, void *arg);
+    void (*stream_on_complete)(bool success, void *arg);
+    void *stream_arg;
+
     // Error tracking
     err_t last_error;
-    
+
 } http_session_t;
 
 // Result codes for HTTP operations
@@ -101,35 +102,34 @@ typedef enum {
 bool http_client_init(void);
 
 // manages wifi communication and requests
-WifiResult wifi_server_communication(float voltage);
+WifiResult wifi_server_communication(float battery_voltage, float coin_cell_voltage);
 
 // Main HTTP request function
-http_result_t http_request_async(const ip_addr_t* server_ip, uint16_t port, 
-                                const char* request_data,
-                                void (*callback)(const char* body, size_t length, bool success, void* arg),
-                                void* callback_arg);
+http_result_t
+http_request_async(const ip_addr_t *server_ip, uint16_t port, const char *request_data,
+                   void (*callback)(const char *body, size_t length, bool success, void *arg),
+                   void *callback_arg);
 
 // Same as http_request_async but does not store the response body in RAM; only counts bytes.
-http_result_t http_request_async_count_only(const ip_addr_t* server_ip, uint16_t port,
-                                const char* request_data,
-                                void (*callback)(const char* body, size_t length, bool success, void* arg),
-                                void* callback_arg);
+http_result_t http_request_async_count_only(
+    const ip_addr_t *server_ip, uint16_t port, const char *request_data,
+    void (*callback)(const char *body, size_t length, bool success, void *arg), void *callback_arg);
 
 // Streaming request: does not store body; calls header/data/complete callbacks as data arrives.
-http_result_t http_request_async_stream(const ip_addr_t* server_ip, uint16_t port,
-                                const char* request_data,
-                                void (*on_header)(const char* header, size_t header_len, int status_code, int content_length, void* arg),
-                                void (*on_data)(const uint8_t* data, size_t len, void* arg),
-                                void (*on_complete)(bool success, void* arg),
-                                void* cb_arg);
+http_result_t
+http_request_async_stream(const ip_addr_t *server_ip, uint16_t port, const char *request_data,
+                          void (*on_header)(const char *header, size_t header_len, int status_code,
+                                            int content_length, void *arg),
+                          void (*on_data)(const uint8_t *data, size_t len, void *arg),
+                          void (*on_complete)(bool success, void *arg), void *cb_arg);
 
 // Session management
 bool http_session_is_active(void);
 
 // Universal callback system for all use cases
-typedef void (*data_callback_fn)(const char* response_data, size_t length, void* arg);
+typedef void (*data_callback_fn)(const char *response_data, size_t length, void *arg);
 
 // Set callback for data processing (unified API for all use cases)
-void set_data_callback(data_callback_fn callback, void* arg);
+void set_data_callback(data_callback_fn callback, void *arg);
 
 #endif // HTTP_CLIENT_H
