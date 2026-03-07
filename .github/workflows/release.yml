@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.14.1)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        use_case:
+          - seatsurfing
+          - historian
+          - homematic
+
+    steps:
+      - name: Checkout repository at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Install Pico SDK 2.1.0
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 2.1.0 https://github.com/raspberrypi/pico-sdk.git "$HOME/pico-sdk"
+          git -C "$HOME/pico-sdk" submodule update --init --depth 1
+
+      - name: Build host crc32 helper
+        run: |
+          cd firmware/c
+          gcc -O2 -Wall -Wextra -o crc32sum crc32sum.c
+
+      - name: Build firmware (${{ matrix.use_case }})
+        run: |
+          set -euo pipefail
+          export PICO_SDK_PATH="$HOME/pico-sdk"
+          cd firmware/c
+          chmod +x ./build.sh ./create_uf2.sh
+          ./build.sh --${{ matrix.use_case }}
+          ./create_uf2.sh
+
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uf2-${{ matrix.use_case }}
+          path: firmware/c/build/inki_${{ matrix.use_case }}.uf2
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Download all UF2 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: uf2-*
+          merge-multiple: true
+
+      - name: Build release body from tag message and template
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          # Extract tag annotation body (skip first line which is the tag name)
+          TAG_MSG=$(git tag -l --format='%(contents:body)' "$TAG")
+          if [ -z "$TAG_MSG" ]; then
+            TAG_MSG=$(git tag -l --format='%(contents:subject)' "$TAG")
+          fi
+          TEMPLATE=$(cat scripts/release-notes-template.md)
+          {
+            echo "## Highlights"
+            echo ""
+            echo "$TAG_MSG"
+            echo ""
+            echo "$TEMPLATE"
+          } > release-body.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          gh release create "$TAG" \
+            --title "inki $TAG" \
+            --notes-file release-body.md \
+            artifacts/inki_*.uf2
