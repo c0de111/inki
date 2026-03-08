@@ -34,8 +34,67 @@ body {
   font-size: 0.85rem;
 }
 
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 h1, h2 {
   margin: 0 0 0.75rem;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-toggle {
+  font-size: 1.2rem;
+  padding: 0.2rem 0.45rem;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.settings-toggle:hover {
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+.settings-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  white-space: nowrap;
+  z-index: 100;
+  font-size: 0.88rem;
+}
+
+.settings-menu.open .settings-dropdown {
+  display: block;
+}
+
+.settings-dropdown label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: default;
+}
+
+.settings-dropdown input[type="number"] {
+  padding: 0.15rem 0.3rem;
+  font-size: 0.88rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
 }
 
 .card {
@@ -85,6 +144,13 @@ button.device-tile {
   line-height: 1.05;
 }
 
+.device-tile-mac {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-weight: 400;
+  font-size: 0.7rem;
+  opacity: 0.4;
+}
+
 .device-tile-submeta {
   display: block;
   font-size: 0.72rem;
@@ -96,6 +162,39 @@ button.device-tile {
   display: block;
   font-size: 0.82rem;
   line-height: 1.05;
+}
+
+button.device-tile--active {
+  background: #eef2fb;
+}
+
+button.device-tile--stale {
+  background: #fff3e0;
+  border-color: #e0c08a;
+}
+
+button.device-tile--relocated {
+  background: #eceff1;
+  border-color: #b0bec5;
+  opacity: 0.75;
+  color: #546e7a;
+}
+
+button.device-tile--retired {
+  background: #e8e8e8;
+  border-color: #bbb;
+  opacity: 0.55;
+  color: #888;
+}
+
+.retired-section {
+  margin-top: 1rem;
+}
+
+.retired-summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.3rem 0;
 }
 
 button {
@@ -192,6 +291,23 @@ button:hover {
   font-size: 0.93rem;
 }
 
+.window-presets {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.window-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.82rem;
+  border-radius: 4px;
+}
+
+.window-btn--active {
+  background: #d0dff8;
+  border-color: #6a9be0;
+  font-weight: 600;
+}
+
 .plot {
   width: 100%;
   height: auto;
@@ -206,10 +322,17 @@ button:hover {
   background: transparent;
 }
 
+.plotly-chart .modebar-container {
+  top: 8px !important;
+  right: 8px !important;
+}
+
 .plot-card {
   background: transparent;
   border: 0;
   padding: 0;
+  overflow: visible;
+  position: relative;
 }
 
 .plot-width-card {
@@ -229,6 +352,48 @@ button:hover {
 
 a {
   color: var(--accent);
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+.events-table th,
+.events-table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid #ddd;
+}
+.events-table th {
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.btn-delete {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #999;
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+}
+.btn-delete:hover {
+  color: #c62828;
+  border-color: #c62828;
+}
+.add-event-form {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+.add-event-form select,
+.add-event-form input,
+.add-event-form button {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 980px) {

@@ -195,15 +195,109 @@ def get_device(db_path: str | Path, device_id: str) -> sqlite3.Row | None:
     return row
 
 
-def get_device_samples(db_path: str | Path, device_id: str) -> list[sqlite3.Row]:
+def get_device_samples(
+    db_path: str | Path, device_id: str, since: int | None = None
+) -> list[sqlite3.Row]:
+    if since is not None:
+        query = """
+            SELECT * FROM samples
+            WHERE device_id = ? AND received_at_unix_s >= ?
+            ORDER BY received_at_unix_s ASC, id ASC
+        """
+        params: tuple = (device_id, since)
+    else:
+        query = """
+            SELECT * FROM samples
+            WHERE device_id = ?
+            ORDER BY received_at_unix_s ASC, id ASC
+        """
+        params = (device_id,)
+    with _connect(db_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return rows
+
+
+def insert_event(
+    db_path: str | Path,
+    device_id: str,
+    event_type: str,
+    payload: str = "{}",
+    author: str | None = None,
+    created_at: int | None = None,
+) -> int:
+    import time as _time
+
+    ts = created_at if created_at is not None else int(_time.time())
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO events (device_id, created_at, event_type, payload, author)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (device_id, ts, event_type, payload, author),
+        )
+        return cur.lastrowid  # type: ignore[return-value]
+
+
+def get_events(
+    db_path: str | Path,
+    device_id: str,
+    event_type: str | None = None,
+    since: int | None = None,
+) -> list[sqlite3.Row]:
+    clauses = ["device_id = ?"]
+    params: list[Any] = [device_id]
+    if event_type is not None:
+        clauses.append("event_type = ?")
+        params.append(event_type)
+    if since is not None:
+        clauses.append("created_at >= ?")
+        params.append(since)
+    where = " AND ".join(clauses)
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM events WHERE {where} ORDER BY created_at ASC, id ASC",
+            params,
+        ).fetchall()
+    return rows
+
+
+def get_latest_event(
+    db_path: str | Path, device_id: str, event_type: str
+) -> sqlite3.Row | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM events
+            WHERE device_id = ? AND event_type = ?
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (device_id, event_type),
+        ).fetchone()
+    return row
+
+
+def delete_event(db_path: str | Path, event_id: int) -> bool:
+    with _connect(db_path) as conn:
+        cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        return cur.rowcount > 0
+
+
+def get_latest_lifecycle_events(db_path: str | Path) -> dict[str, sqlite3.Row]:
+    """Return the latest lifecycle event (retired/relocated) per device."""
     with _connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT *
-            FROM samples
-            WHERE device_id = ?
-            ORDER BY received_at_unix_s ASC, id ASC
-            """,
-            (device_id,),
+            SELECT e.*
+            FROM events e
+            INNER JOIN (
+                SELECT device_id, MAX(created_at) AS max_ts
+                FROM events
+                WHERE event_type IN ('retired', 'relocated')
+                GROUP BY device_id
+            ) latest ON e.device_id = latest.device_id
+                    AND e.created_at = latest.max_ts
+                    AND e.event_type IN ('retired', 'relocated')
+            """
         ).fetchall()
-    return rows
+    return {row["device_id"]: row for row in rows}

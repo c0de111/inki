@@ -317,18 +317,117 @@ def create_app() -> Flask:
             }
         )
 
+    @app.post("/api/v1/event")
+    def create_event() -> Response:
+        cfg = app.config["INKI_MONITOR_CONFIG"]
+        token_expected = str(_cfg_get(cfg, ["auth", "ingest_token"], ""))
+        token_got = _get_bearer_token()
+        if not token_expected or token_got != token_expected:
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"ok": False, "error": "invalid JSON"}), 400
+
+        device_id = payload.get("device_id", "")
+        if not isinstance(device_id, str) or not DEVICE_ID_RE.fullmatch(device_id):
+            return jsonify({"ok": False, "error": "device_id missing or invalid"}), 400
+
+        event_type = payload.get("event_type", "")
+        if not isinstance(event_type, str) or not event_type:
+            return jsonify({"ok": False, "error": "event_type required"}), 400
+
+        event_payload = json.dumps(payload.get("payload", {}), separators=(",", ":"))
+        author = payload.get("author")
+        created_at = payload.get("created_at")
+        if created_at is not None:
+            try:
+                created_at = int(created_at)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "created_at must be unix timestamp"}), 400
+
+        event_id = db.insert_event(
+            app.config["INKI_MONITOR_DB_PATH"],
+            device_id,
+            event_type,
+            event_payload,
+            author,
+            created_at=created_at,
+        )
+        return jsonify({"ok": True, "event_id": event_id})
+
+    @app.get("/api/v1/events/<device_id>")
+    def list_events(device_id: str) -> Response:
+        if not DEVICE_ID_RE.fullmatch(device_id):
+            abort(404)
+        event_type = request.args.get("type")
+        since = request.args.get("since")
+        since_int = int(since) if since and since.isdigit() else None
+        rows = db.get_events(
+            app.config["INKI_MONITOR_DB_PATH"], device_id, event_type, since_int
+        )
+        return jsonify(
+            [
+                {
+                    "id": row["id"],
+                    "device_id": row["device_id"],
+                    "created_at": row["created_at"],
+                    "event_type": row["event_type"],
+                    "payload": json.loads(row["payload"]),
+                    "author": row["author"],
+                }
+                for row in rows
+            ]
+        )
+
+    @app.delete("/api/v1/event/<int:event_id>")
+    def remove_event(event_id: int) -> Response:
+        cfg = app.config["INKI_MONITOR_CONFIG"]
+        token_expected = str(_cfg_get(cfg, ["auth", "ingest_token"], ""))
+        token_got = _get_bearer_token()
+        if not token_expected or token_got != token_expected:
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+        deleted = db.delete_event(app.config["INKI_MONITOR_DB_PATH"], event_id)
+        if not deleted:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        return jsonify({"ok": True})
+
     @app.get("/")
     def index() -> str:
-        rows = db.list_devices(app.config["INKI_MONITOR_DB_PATH"])
+        db_path = app.config["INKI_MONITOR_DB_PATH"]
+        rows = db.list_devices(db_path)
+        lifecycle = db.get_latest_lifecycle_events(db_path)
         now_unix_s = int(time.time())
+        stale_hours_default = int(_cfg_get(config, ["ui", "stale_threshold_hours"], 2))
+        stale_hours = _safe_int(request.args.get("stale_hours"), stale_hours_default)
+        if stale_hours < 1:
+            stale_hours = stale_hours_default
+        stale_threshold_s = stale_hours * 3600
+
+        status_order = {"active": 0, "stale": 1, "relocated": 2, "retired": 3}
         devices = []
         for row in rows:
             item = dict(row)
             item["last_seen_ago"] = _format_last_seen_ago(item.get("last_seen_unix_s"), now_unix_s)
+
+            lc = lifecycle.get(item["device_id"])
+            if lc and lc["event_type"] == "retired":
+                item["status"] = "retired"
+            elif lc and lc["event_type"] == "relocated":
+                item["status"] = "relocated"
+            elif item.get("last_seen_unix_s") and (now_unix_s - int(item["last_seen_unix_s"])) > stale_threshold_s:
+                item["status"] = "stale"
+            else:
+                item["status"] = "active"
             devices.append(item)
+
+        devices.sort(key=lambda d: (status_order.get(d["status"], 9), d.get("label") or d["device_id"]))
+
         return render_template(
             "index.html",
             devices=devices,
+            stale_threshold_hours=stale_hours,
             title=_cfg_get(config, ["ui", "title"], "inki-monitor"),
             repo_info=app.config["INKI_MONITOR_REPO_INFO"],
         )
@@ -341,6 +440,7 @@ def create_app() -> Flask:
         if device is None:
             abort(404)
 
+        window = request.args.get("window", "battery")
         l_param = request.args.get("l", "0")
         s_param = request.args.get("s", "0")
         show_battery_post = _query_flag("show_battery_post")
@@ -350,9 +450,12 @@ def create_app() -> Flask:
         show_pico_temp = _query_flag("show_pico_temp")
         show_query_ok = _query_flag("show_query_ok")
         show_wifi_rssi = _query_flag("show_wifi_rssi")
+        show_events = _query_flag("show_events")
+        ingest_token = str(_cfg_get(config, ["auth", "ingest_token"], ""))
         return render_template(
             "device.html",
             device=device,
+            window=window,
             l_param=l_param,
             s_param=s_param,
             show_battery_post=show_battery_post,
@@ -362,36 +465,60 @@ def create_app() -> Flask:
             show_pico_temp=show_pico_temp,
             show_query_ok=show_query_ok,
             show_wifi_rssi=show_wifi_rssi,
+            show_events=show_events,
             title=_cfg_get(config, ["ui", "title"], "inki-monitor"),
             repo_info=app.config["INKI_MONITOR_REPO_INFO"],
+            ingest_token=ingest_token,
         )
 
     @app.get("/api/v1/device/<device_id>/plot-data")
     def device_plot_data(device_id: str) -> Response:
         if not DEVICE_ID_RE.fullmatch(device_id):
             abort(404)
-        device = db.get_device(app.config["INKI_MONITOR_DB_PATH"], device_id)
+        db_path = app.config["INKI_MONITOR_DB_PATH"]
+        device = db.get_device(db_path, device_id)
         if device is None:
             abort(404)
-        rows = db.get_device_samples(app.config["INKI_MONITOR_DB_PATH"], device_id)
 
-        cfg = app.config["INKI_MONITOR_CONFIG"]
-        l_param = request.args.get("l", _cfg_get(cfg, ["plot", "default_l"], 0))
-        s_param = request.args.get("s", _cfg_get(cfg, ["plot", "default_s"], 0))
-        window_rows, start_idx, end_idx = _apply_legacy_window(rows, l_param, s_param)
+        window = request.args.get("window", "")
+        now_unix_s = int(time.time())
+        since: int | None = None
+        window_label = "all"
+
+        if window == "battery":
+            ev = db.get_latest_event(db_path, device_id, "battery_change")
+            if ev:
+                since = int(ev["created_at"])
+                window_label = "battery"
+            else:
+                window_label = "all"
+        elif window.endswith("h") and window[:-1].isdigit():
+            since = now_unix_s - int(window[:-1]) * 3600
+            window_label = window
+        elif window.endswith("d") and window[:-1].isdigit():
+            since = now_unix_s - int(window[:-1]) * 86400
+            window_label = window
+        elif window == "all" or window == "":
+            since = None
+            window_label = "all"
+
+        # Legacy l/s support (only if no window param)
+        l_param = request.args.get("l", "0")
+        s_param = request.args.get("s", "0")
+        use_legacy = (not window) and (l_param != "0" or s_param != "0")
+
+        if use_legacy:
+            rows = db.get_device_samples(db_path, device_id)
+            window_rows, start_idx, end_idx = _apply_legacy_window(rows, l_param, s_param)
+        else:
+            window_rows = db.get_device_samples(db_path, device_id, since=since)
 
         return jsonify(
             {
                 "device_id": device_id,
                 "label": device["label"],
-                "total_count": len(rows),
-                "window": {
-                    "start_index": start_idx,
-                    "end_index": end_idx,
-                    "count": len(window_rows),
-                    "l": str(l_param),
-                    "s": str(s_param),
-                },
+                "window": window_label,
+                "count": len(window_rows),
                 "samples": [_plot_sample_row_to_dict(row) for row in window_rows],
             }
         )

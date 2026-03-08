@@ -16,13 +16,16 @@
       <div id="device-plot-error" class="plot-error" hidden></div>
     </section>
 
-    <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get">
+    <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get" id="controls-form">
+      <input type="hidden" name="window" value="{{ window }}">
       <section class="card controls-card plot-width-card">
         <div class="controls">
           <span class="muted mono controls-id">{{ device['device_id'] }}</span>
-          <label>length <input type="number" name="l" min="0" value="{{ l_param }}"></label>
-          <label>start <input type="number" name="s" min="0" value="{{ s_param }}"></label>
-          <button type="submit">Update</button>
+          <span class="window-presets">
+            {% for val, label in [("2h","2h"), ("24h","24h"), ("7d","7d"), ("30d","30d"), ("all","All"), ("battery","Battery")] %}
+              <button type="button" class="window-btn{% if window == val %} window-btn--active{% endif %}" data-window="{{ val }}">{{ label }}</button>
+            {% endfor %}
+          </span>
         </div>
       </section>
 
@@ -40,8 +43,13 @@
         </label>
 
         <label class="metric-toggle">
-          <input type="checkbox" name="show_coin_cell" value="1" {% if show_coin_cell %}checked{% endif %} onchange="this.form.submit()">
-          <span><strong>Coin Cell</strong><br>{{ '%.3f'|format(device['last_coin_cell_v']) }} V</span>
+          <input type="checkbox" name="show_events" value="1" {% if show_events %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Events</strong><br>on chart</span>
+        </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_wifi_rssi" value="1" {% if show_wifi_rssi %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Wi-Fi RSSI</strong><br>{% if device['last_wifi_rssi_dbm'] is none %}n/a{% else %}{{ device['last_wifi_rssi_dbm'] }} dBm{% endif %}</span>
         </label>
 
         <label class="metric-toggle">
@@ -63,11 +71,38 @@
         </label>
 
         <label class="metric-toggle">
-          <input type="checkbox" name="show_wifi_rssi" value="1" {% if show_wifi_rssi %}checked{% endif %} onchange="this.form.submit()">
-          <span><strong>Wi-Fi RSSI</strong><br>{% if device['last_wifi_rssi_dbm'] is none %}n/a{% else %}{{ device['last_wifi_rssi_dbm'] }} dBm{% endif %}</span>
+          <input type="checkbox" name="show_coin_cell" value="1" {% if show_coin_cell %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Coin Cell</strong><br>{{ '%.3f'|format(device['last_coin_cell_v']) }} V</span>
         </label>
       </section>
     </form>
+
+    <section class="card plot-width-card events-card">
+      <details open>
+        <summary><strong>Events &amp; Annotations</strong></summary>
+        <table class="events-table" id="events-table">
+          <thead>
+            <tr><th>Date</th><th>Type</th><th>Note</th><th>Author</th><th></th></tr>
+          </thead>
+          <tbody id="events-tbody">
+            <tr><td colspan="5" class="muted">Loading...</td></tr>
+          </tbody>
+        </table>
+        <form id="add-event-form" class="add-event-form">
+          <select name="event_type" required>
+            <option value="annotation">annotation</option>
+            <option value="battery_change">battery change</option>
+            <option value="relocated">relocated</option>
+            <option value="retired">retired</option>
+            <option value="maintenance">maintenance</option>
+          </select>
+          <input type="datetime-local" name="created_at" title="Leave empty for now">
+          <input type="text" name="text" placeholder="Note..." style="flex:1">
+          <input type="text" name="author" placeholder="Author" style="width:80px">
+          <button type="submit">Add</button>
+        </form>
+      </details>
+    </section>
 
     <div class="repo-signature mono muted plot-left-align">
       inki-monitor @ {{ repo_info['signature'] }} ({{ repo_info['build_date'] }})
@@ -77,8 +112,7 @@
     const plotPageConfig = {{ {
       "device_id": device["device_id"],
       "label": device["label"],
-      "l": l_param,
-      "s": s_param,
+      "window": window,
       "show_battery_post": show_battery_post,
       "show_battery_sag": show_battery_sag,
       "show_coin_cell": show_coin_cell,
@@ -86,7 +120,9 @@
       "show_pico_temp": show_pico_temp,
       "show_query_ok": show_query_ok,
       "show_wifi_rssi": show_wifi_rssi,
+      "show_events": show_events,
       "plot_data_url": url_for("device_plot_data", device_id=device["device_id"]),
+      "ingest_token": ingest_token,
     } | tojson }};
 
     function fmtLocalDateTime(tsSec) {
@@ -243,7 +279,7 @@
       const layout = {
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
-        margin: {l: 70, r: 70, t: 16, b: 54},
+        margin: {l: 70, r: 90, t: 40, b: 54},
         font: {size: 13, color: "#2e2e2e"},
         showlegend: false,
         annotations: [],
@@ -547,22 +583,64 @@
       return {data, layout};
     }
 
+    const EVENT_COLORS = {
+      battery_change: "#e65100",
+      annotation: "#1565c0",
+      relocated: "#6a1b9a",
+      retired: "#424242",
+      maintenance: "#2e7d32",
+    };
+
+    function addEventMarkers(layout, events) {
+      if (!events || !events.length) return;
+      if (!layout.shapes) layout.shapes = [];
+      for (const ev of events) {
+        const dt = new Date(ev.created_at * 1000);
+        const color = EVENT_COLORS[ev.event_type] || "#888";
+        const text = (ev.payload && ev.payload.text) || ev.event_type;
+        const label = `${ev.event_type}: ${text}`;
+        layout.shapes.push({
+          type: "line",
+          x0: dt, x1: dt,
+          y0: 0, y1: 1,
+          yref: "paper",
+          line: {color: color, width: 1.5, dash: "dash"},
+        });
+        layout.annotations.push({
+          x: dt, y: 0.5, yref: "paper",
+          text: text.length > 25 ? text.substring(0, 25) + "..." : text,
+          showarrow: false,
+          textangle: -90,
+          font: {size: 9, color: color},
+          bgcolor: "rgba(255,255,255,0.85)",
+          bordercolor: color, borderwidth: 1, borderpad: 2,
+          xanchor: "left", yanchor: "middle",
+        });
+      }
+    }
+
     async function loadPlot() {
       const div = document.getElementById("device-plot");
       const errorDiv = document.getElementById("device-plot-error");
-      const params = new URLSearchParams({l: String(plotPageConfig.l), s: String(plotPageConfig.s)});
+      const params = new URLSearchParams({window: plotPageConfig.window});
       try {
         errorDiv.hidden = true;
-        const resp = await fetch(`${plotPageConfig.plot_data_url}?${params.toString()}`, {cache: "no-store"});
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}`);
-        }
-        const payload = await resp.json();
+        const [plotResp, eventsResp] = await Promise.all([
+          fetch(`${plotPageConfig.plot_data_url}?${params.toString()}`, {cache: "no-store"}),
+          fetch(`/api/v1/events/${plotPageConfig.device_id}`, {cache: "no-store"}),
+        ]);
+        if (!plotResp.ok) throw new Error(`HTTP ${plotResp.status}`);
+        const payload = await plotResp.json();
+        const events = eventsResp.ok ? await eventsResp.json() : [];
         const fig = buildPlotFigure(payload);
+        if (plotPageConfig.show_events) {
+          addEventMarkers(fig.layout, events);
+        }
         await Plotly.newPlot(div, fig.data, fig.layout, {
           responsive: true,
           displaylogo: false,
           displayModeBar: true,
+          modeBarButtonsToRemove: ["lasso2d", "select2d"],
         });
       } catch (err) {
         errorDiv.textContent = `Failed to load plot data: ${err}`;
@@ -570,7 +648,94 @@
       }
     }
 
-    window.addEventListener("DOMContentLoaded", loadPlot);
+    let eventsCache = [];
+
+    async function loadEvents() {
+      const tbody = document.getElementById("events-tbody");
+      try {
+        const resp = await fetch(`/api/v1/events/${plotPageConfig.device_id}`, {cache: "no-store"});
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        eventsCache = await resp.json();
+        if (!eventsCache.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="muted">No events yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = eventsCache.map(ev => {
+          const text = (ev.payload && ev.payload.text) || "";
+          return `<tr>
+            <td class="mono">${fmtLocalDateTime(ev.created_at)}</td>
+            <td>${ev.event_type}</td>
+            <td>${text}</td>
+            <td>${ev.author || ""}</td>
+            <td><button class="btn-delete" onclick="deleteEvent(${ev.id})">x</button></td>
+          </tr>`;
+        }).join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="muted">Failed to load events: ${err}</td></tr>`;
+      }
+    }
+
+    async function deleteEvent(eventId) {
+      try {
+        const resp = await fetch(`/api/v1/event/${eventId}`, {
+          method: "DELETE",
+          headers: {"Authorization": "Bearer " + (plotPageConfig.ingest_token || "")},
+        });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          alert(body.error || `Delete failed: HTTP ${resp.status}`);
+          return;
+        }
+        loadEvents();
+      } catch (err) {
+        alert(`Delete failed: ${err}`);
+      }
+    }
+
+    document.getElementById("add-event-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const body = {
+        device_id: plotPageConfig.device_id,
+        event_type: form.event_type.value,
+        payload: {text: form.text.value},
+        author: form.author.value || null,
+      };
+      if (form.created_at.value) {
+        let val = form.created_at.value;
+        if (val.length === 10) val += "T12:00";
+        body.created_at = Math.floor(new Date(val).getTime() / 1000);
+      }
+      try {
+        const resp = await fetch("/api/v1/event", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (plotPageConfig.ingest_token || ""),
+          },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          alert(data.error || `Failed: HTTP ${resp.status}`);
+          return;
+        }
+        form.text.value = "";
+        loadEvents();
+      } catch (err) {
+        alert(`Failed: ${err}`);
+      }
+    });
+
+    document.querySelectorAll(".window-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const form = document.getElementById("controls-form");
+        form.querySelector("[name=window]").value = btn.dataset.window;
+        form.submit();
+      });
+    });
+
+    window.addEventListener("DOMContentLoaded", () => { loadPlot(); loadEvents(); });
     window.addEventListener("resize", () => {
       const div = document.getElementById("device-plot");
       if (div && div.data) {

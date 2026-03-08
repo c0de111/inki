@@ -8,16 +8,29 @@
 </head>
 <body>
   <main class="page">
-    <h1>{{ title }}</h1>
+    <div class="page-header">
+      <h1>{{ title }}</h1>
+      <div class="settings-menu">
+        <button type="button" class="settings-toggle" aria-label="Settings" onclick="this.parentElement.classList.toggle('open')">&#9776;</button>
+        <div class="settings-dropdown">
+          <label><input type="number" id="stale-hours" value="{{ stale_threshold_hours }}" min="1" max="8760" style="width:4rem"> h stale threshold</label>
+        </div>
+      </div>
+    </div>
 
     <section class="card">
       <h2>Devices</h2>
-      {% if devices %}
+      {% set active_devices = devices | selectattr('status', 'equalto', 'active') | list %}
+      {% set stale_devices = devices | selectattr('status', 'equalto', 'stale') | list %}
+      {% set relocated_devices = devices | selectattr('status', 'equalto', 'relocated') | list %}
+      {% set retired_devices = devices | selectattr('status', 'equalto', 'retired') | list %}
+      {% set visible_devices = active_devices + stale_devices + relocated_devices %}
+      {% if visible_devices %}
         <div class="device-grid">
-          {% for device in devices %}
+          {% for device in visible_devices %}
             <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get" class="device-tile-form">
-              <button type="submit" title="{{ device['device_id'] }}" class="device-tile">
-                <span class="device-tile-name">{{ device['label'] or device['device_id'] }}</span>
+              <button type="submit" title="{{ device['device_id'] }}" class="device-tile device-tile--{{ device['status'] }}">
+                <span class="device-tile-name">{{ device['label'] or device['device_id'] }} <span class="device-tile-mac">·{{ device['device_id'][-4:] }}</span></span>
                 {% if device['last_fw_version'] or device['last_fw_build_date'] %}
                   <span class="device-tile-submeta muted">
                     {% if device['last_fw_version'] %}{{ device['last_fw_version'] }}{% endif %}
@@ -34,11 +47,47 @@
       {% else %}
         <p class="muted">No telemetry data received yet.</p>
       {% endif %}
+
+      {% if retired_devices %}
+        <details class="retired-section">
+          <summary class="retired-summary muted">Retired ({{ retired_devices | length }})</summary>
+          <div class="device-grid" style="margin-top: 0.5rem">
+            {% for device in retired_devices %}
+              <form action="{{ url_for('device_page', device_id=device['device_id']) }}" method="get" class="device-tile-form">
+                <button type="submit" title="{{ device['device_id'] }}" class="device-tile device-tile--retired">
+                  <span class="device-tile-name">{{ device['label'] or device['device_id'] }} <span class="device-tile-mac">·{{ device['device_id'][-4:] }}</span></span>
+                  {% if device['last_fw_version'] or device['last_fw_build_date'] %}
+                    <span class="device-tile-submeta muted">
+                      {% if device['last_fw_version'] %}{{ device['last_fw_version'] }}{% endif %}
+                      {% if device['last_fw_build_date'] %}
+                        {% if device['last_fw_version'] %} {% endif %}({{ device['last_fw_build_date'] }})
+                      {% endif %}
+                    </span>
+                  {% endif %}
+                  <span class="device-tile-meta muted">last seen {{ device['last_seen_ago'] }}</span>
+                </button>
+              </form>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
     </section>
 
     <div class="repo-signature mono muted">
       inki-monitor @ {{ repo_info['signature'] }} ({{ repo_info['build_date'] }})
     </div>
   </main>
+<script>
+  document.getElementById("stale-hours").addEventListener("change", function () {
+    const url = new URL(window.location);
+    url.searchParams.set("stale_hours", this.value);
+    window.location = url;
+  });
+  document.addEventListener("click", function (e) {
+    document.querySelectorAll(".settings-menu.open").forEach(function (m) {
+      if (!m.contains(e.target)) m.classList.remove("open");
+    });
+  });
+</script>
 </body>
 </html>

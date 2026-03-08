@@ -52,3 +52,18 @@ CREATE INDEX IF NOT EXISTS idx_samples_time
 
 CREATE INDEX IF NOT EXISTS idx_devices_label
     ON devices(label);
+
+CREATE TABLE IF NOT EXISTS events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id   TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    event_type  TEXT NOT NULL,
+    payload     TEXT NOT NULL DEFAULT '{}',
+    author      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_device_time
+    ON events(device_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_events_type
+    ON events(device_id, event_type);
