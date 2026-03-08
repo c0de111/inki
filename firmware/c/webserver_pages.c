@@ -1663,7 +1663,7 @@ void send_device_config_page(struct tcp_pcb *tpcb, const char *message) {
              "<label class=\"inline\"><input type=\"checkbox\" name=\"show_query_date\" "
              "value=\"1\" %s> Show query timestamp</label><br>"
              "<label class=\"inline\"><input type=\"checkbox\" name=\"query_only_at_officehours\" "
-             "value=\"1\" %s> Query only during office hours</label><br>"
+             "value=\"1\" %s> Query only during office hours (Mon–Fri 7–19h)</label><br>"
              "</div>",
              (device_config_flash.data.show_query_date ? "checked" : ""),
              (device_config_flash.data.query_only_at_officehours ? "checked" : ""));
