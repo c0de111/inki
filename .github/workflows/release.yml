@@ -47,7 +47,6 @@ jobs:
           set -euo pipefail
           export PICO_SDK_PATH="$HOME/pico-sdk"
           cd firmware/c
-          chmod +x ./build.sh ./create_uf2.sh
           ./build.sh --${{ matrix.use_case }}
           ./create_uf2.sh
 

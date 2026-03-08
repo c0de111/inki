@@ -58,6 +58,7 @@
           <input type="checkbox" name="show_query_ok" value="1" {% if show_query_ok %}checked{% endif %} onchange="this.form.submit()">
           <span><strong>Query OK</strong><br>
             {% if device['last_query_ok'] is none %}n/a{% elif device['last_query_ok'] %}yes{% else %}no{% endif %}
+            <br><small class="muted">(Mon–Fri 7–19h)</small>
           </span>
         </label>
 
