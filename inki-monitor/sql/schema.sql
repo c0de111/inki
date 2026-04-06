@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS devices (
     last_battery_sag_v REAL,
     last_coin_cell_v REAL,
     last_pico_temp_c REAL,
+    last_wake_source TEXT,
     updated_at_unix_s INTEGER NOT NULL
 );
 
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS samples (
     battery_sag_v REAL,
     coin_cell_v REAL,
     pico_temp_c REAL,
+    wake_source TEXT,
     payload_json TEXT NOT NULL,
     remote_addr TEXT
 );

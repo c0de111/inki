@@ -85,9 +85,13 @@ ds3231_clock_setup/
 _autosave-*.kicad_pcb
 _autosave-*.kicad_sch
 *.bak
+*.FCBak
 **/fp-info-cache
 
-.claude/
+.claude/*
+!.claude/memory/
+!.claude/settings.local.json
+skills-lock.json
 # External UF2 tools (auto-downloaded by create_uf2.sh)
 firmware/c/uf2conv.py
 firmware/c/uf2families.json
@@ -115,3 +119,9 @@ inki-monitor/config.yaml
 inki-monitor/data/
 inki-monitor/__pycache__/
 inki-monitor/*.pyc
+
+# FreeCAD autosave backups
+*.FCBak
+
+# Claude Code
+skills-lock.json

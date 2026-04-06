@@ -180,6 +180,7 @@ def _normalize_payload(payload: dict[str, Any], received_at_unix_s: int) -> dict
         "fw_version": _as_optional_str(payload.get("fw_version")),
         "fw_build_date": _as_optional_str(payload.get("fw_build_date")),
         "rtc_backend": _as_optional_str(payload.get("rtc_backend")),
+        "wake_source": _as_optional_str(payload.get("wake_source")),
         "use_case": _as_optional_str(payload.get("use_case")),
         "room_type": _as_optional_str(payload.get("room_type")),
         "telemetry_send_elapsed_ms": telemetry_send_elapsed_ms,
@@ -203,6 +204,7 @@ def _plot_sample_row_to_dict(row: Any) -> dict[str, Any]:
         "pico_temp_c": row["pico_temp_c"],
         "query_ok": row["query_ok"],
         "wifi_rssi_dbm": row["wifi_rssi_dbm"],
+        "wake_source": row["wake_source"] if "wake_source" in row.keys() else None,
     }
 
 
@@ -450,6 +452,7 @@ def create_app() -> Flask:
         show_pico_temp = _query_flag("show_pico_temp")
         show_query_ok = _query_flag("show_query_ok")
         show_wifi_rssi = _query_flag("show_wifi_rssi")
+        show_wake_source = _query_flag("show_wake_source")
         show_events = _query_flag("show_events")
         ingest_token = str(_cfg_get(config, ["auth", "ingest_token"], ""))
         return render_template(
@@ -465,6 +468,7 @@ def create_app() -> Flask:
             show_pico_temp=show_pico_temp,
             show_query_ok=show_query_ok,
             show_wifi_rssi=show_wifi_rssi,
+            show_wake_source=show_wake_source,
             show_events=show_events,
             title=_cfg_get(config, ["ui", "title"], "inki-monitor"),
             repo_info=app.config["INKI_MONITOR_REPO_INFO"],

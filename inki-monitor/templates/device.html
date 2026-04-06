@@ -74,6 +74,11 @@
           <input type="checkbox" name="show_coin_cell" value="1" {% if show_coin_cell %}checked{% endif %} onchange="this.form.submit()">
           <span><strong>Coin Cell</strong><br>{{ '%.3f'|format(device['last_coin_cell_v']) }} V</span>
         </label>
+
+        <label class="metric-toggle">
+          <input type="checkbox" name="show_wake_source" value="1" {% if show_wake_source %}checked{% endif %} onchange="this.form.submit()">
+          <span><strong>Wake Source</strong><br>{{ device['last_wake_source'] or 'n/a' }}</span>
+        </label>
       </section>
     </form>
 
@@ -120,6 +125,7 @@
       "show_pico_temp": show_pico_temp,
       "show_query_ok": show_query_ok,
       "show_wifi_rssi": show_wifi_rssi,
+      "show_wake_source": show_wake_source,
       "show_events": show_events,
       "plot_data_url": url_for("device_plot_data", device_id=device["device_id"]),
       "ingest_token": ingest_token,
@@ -215,11 +221,15 @@
     function rowDomains(count) {
       const bottom = 0.08;
       const top = 0.98;
-      const height = (top - bottom) / count;
+      const usable = top - bottom;
+      if (count === 1) return [[bottom, top]];
+      const gap = 0.04;
+      const totalGap = gap * (count - 1);
+      const rowHeight = (usable - totalGap) / count;
       const domains = [];
       for (let i = 0; i < count; i += 1) {
-        const d0 = top - (i + 1) * height;
-        const d1 = top - i * height;
+        const d1 = top - i * (rowHeight + gap);
+        const d0 = d1 - rowHeight;
         domains.push([d0, d1]);
       }
       return domains;
@@ -264,6 +274,15 @@
       const picoTemp = samples.map((s) => s.pico_temp_c === null ? null : Number(s.pico_temp_c));
       const queryOk = samples.map((s) => s.query_ok === null ? null : Number(s.query_ok));
       const wifiRssi = samples.map((s) => s.wifi_rssi_dbm === null ? null : Number(s.wifi_rssi_dbm));
+      function wakeSourceCategory(ws) {
+        if (!ws) return null;
+        if (ws.startsWith("button")) return 0;
+        if (ws === "rtc") return 1;
+        if (ws.startsWith("nfc")) return 2;
+        return null;
+      }
+      const wakeSource = samples.map((s) => wakeSourceCategory(s.wake_source));
+      const wakeSourceLabel = samples.map((s) => s.wake_source || "");
 
       const rows = [];
       rows.push({kind: "top"});
@@ -271,8 +290,10 @@
                             (plotPageConfig.show_pico_temp && picoTemp.some((v) => v !== null));
       const bottomHasData = (plotPageConfig.show_query_ok && queryOk.some((v) => v !== null)) ||
                             (plotPageConfig.show_wifi_rssi && wifiRssi.some((v) => v !== null));
+      const wakeHasData = plotPageConfig.show_wake_source && wakeSource.some((v) => v !== null);
       if (middleHasData) rows.push({kind: "middle"});
       if (bottomHasData) rows.push({kind: "bottom"});
+      if (wakeHasData) rows.push({kind: "wake"});
 
       const domains = rowDomains(rows.length);
       const data = [];
@@ -577,6 +598,41 @@
           title: hasRight ? {text: "wifi rssi / dBm", font: {color: "#c27c0e"}} : {text: ""},
           showticklabels: hasRight,
           ticks: hasRight ? undefined : "",
+        };
+      }
+
+      if (wakeHasData) {
+        const wakeRowIndex = rows.findIndex((r) => r.kind === "wake");
+        const axes = axisNamesForRow(wakeRowIndex);
+        const wakePairs = finitePairs(x, wakeSource);
+        const wakeLabels = [];
+        for (let i = 0; i < x.length; i++) {
+          if (wakeSource[i] !== null) wakeLabels.push(wakeSourceLabel[i]);
+        }
+        if (wakePairs.x.length) {
+          data.push({
+            x: wakePairs.x, y: wakePairs.y, type: "scatter", mode: "markers",
+            marker: {color: "#2e7d32", size: 6},
+            xaxis: axes.xRef, yaxis: axes.yLeftRef,
+            text: wakeLabels,
+            hovertemplate: "Wake: %{text}<br>%{x}<extra></extra>",
+          });
+          layout[axes.yLeftKey].range = [-0.5, 2.5];
+          layout[axes.yLeftKey].tickvals = [0, 1, 2];
+          layout[axes.yLeftKey].ticktext = ["button", "rtc", "nfc"];
+          layout[axes.yLeftKey].title = {text: "wake source", font: {color: "#2e7d32"}};
+          layout[axes.yLeftKey].tickfont = {color: "#2e7d32"};
+        }
+        layout[axes.yRightKey] = {
+          anchor: axes.xRef,
+          overlaying: axes.yLeftRef,
+          side: "right",
+          showgrid: false,
+          zeroline: false,
+          showline: false,
+          showticklabels: false,
+          ticks: "",
+          title: {text: ""},
         };
       }
 

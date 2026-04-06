@@ -130,8 +130,124 @@ Content-Length: 338
 ```
 
 ---
-## Display the doxygen html documentation
 
-~/pico/esign/html $ python3 -m http.server 9999 &
+## ST25 NFC Integration
+
+Optional NFC wake and command interface using the ST25DV04KC passive NFC tag (I2C + RF dual interface). Present on the L2 PCB; auto-detected at runtime via I2C probe — boards without ST25 are unaffected.
+
+### Hardware
+
+| Signal     | GPIO | Function                                          |
+|------------|------|---------------------------------------------------|
+| VCC_ST25   | GP18 | Enables 3.3V to ST25 (off during sleep = 0A)     |
+| V_EH_ST25  | GP28 | ADC2 — RF energy harvesting voltage (tune/sense)  |
+| SDA / SCL  | GP20 / GP21 | Shared I2C bus (with RTC)                  |
+| GPO        | —    | Wired to GATE circuit via Schottky diode          |
+
+**Power architecture:** ST25 VCC is hard off during sleep (GP18 floats). The tag is powered exclusively by the phone's RF field. GPO fires RF-powered on EEPROM write, pulling GATE low through the shared wake circuit (same path as RTC alarm). Standby draw: 0A.
+
+### Wake Source Detection
+
+All wake sources (RTC alarm, button press, NFC GPO) share the same GATE line via Schottky OR. Once the MCU boots, the original trigger signal is gone. The firmware determines the wake source from four independent latched signals read at boot:
+
+| Signal | Source | Latched? | Meaning |
+|--------|--------|----------|---------|
+| `IT_STS_Dyn` | ST25DV register | Read-clears | Any recent RF activity (e.g. `0x10` = FIELDRISING) |
+| INKI magic in EEPROM | ST25DV EEPROM | Until firmware clears | Valid 16-byte command from Android app |
+| Pushbutton GPIOs | Hardware straps | Held by user | Button bitmask 0-7 (0 = no button) |
+| RTC alarm flag | RV-3028 / DS3231 | Set by RTC hardware | Scheduled wake from previous cycle |
+
+**Decision tree (implemented in `main()`):**
+
+```
+st25.request_valid?
+├── YES → intentional NFC wake → handle opcode, proceed with page
+└── NO
+    ├── pushbutton != 0 → button wake → normal cycle (page selected by button)
+    │   (includes AP mode: pushbutton==4, all-buttons: pushbutton==7)
+    └── pushbutton == 0
+        ├── it_sts != 0 AND !alarm_flag → spurious NFC (generic tap, no payload)
+        │   → LED 3x blink, power off immediately
+        ├── alarm_flag set → RTC scheduled wake → normal cycle (page 0)
+        └── it_sts == 0, !alarm_flag → default wake → normal cycle (page 0)
+```
+
+**NFC EEPROM read with retry:** When `it_sts != 0` (RF activity detected), the firmware retries the EEPROM read up to 10 times at 100ms intervals (~1 second window). This compensates for the timing gap between RF field detection (~0ms) and the phone completing the EEPROM write (~200-400ms for NFC negotiation + write). When `it_sts == 0` (button/RTC wake), a single read is performed with zero delay.
+
+### NFC Wake Flow
+
+1. Phone taps antenna → RF field powers ST25
+2. ST25 GPO fires → pulls GATE low → Pico powers on
+3. Firmware holds GP22 HIGH, enables ST25 VCC via GP18
+4. Reads `IT_STS_Dyn` (RF activity flags) and `EH_CTRL_Dyn` (field state)
+5. Retries EEPROM read (up to 1s) while phone completes NFC write
+6. Validates INKI magic + payload fields
+7. Proceeds with requested operation (currently: default page cycle)
+8. At shutdown: clears EEPROM request slot (zeros), powers off ST25
+9. Sets RTC alarm, releases GP22 → system powers down
+
+### INKI Request Format (16 bytes)
+
+| Offset | Size | Field          | Description                    |
+|--------|------|----------------|--------------------------------|
+| 0-3    | 4    | magic          | ASCII `"INKI"`                 |
+| 4      | 1    | version        | Must be `1`                    |
+| 5      | 1    | opcode         | Command code                   |
+| 6-7    | 2    | duration_min   | Little-endian, 1-1440 minutes  |
+| 8-11   | 4    | unix_seconds   | Little-endian UNIX timestamp   |
+| 12-15  | 4    | nonce          | Little-endian random value     |
+
+**Opcodes:**
+- `0x01` — Immediate refresh (page 0)
+- `0x11` — LED slow blink (test)
+- `0x12` — LED fast blink (test)
+
+The Android app from the [NFC_exploration](https://codeberg.org/c0de111/NFC_exploration) project produces this format.
+
+### ST25 Antenna Tuning Helper
+
+Standalone firmware for characterizing RF coupling during antenna matching. Measures V_EH via ADC and renders a live ANSI terminal graph over USB serial.
+
+```bash
+# Build
+cd firmware/c
+./build.sh --st25-tune
+
+# Flash via UF2 (hold BOOTSEL + plug USB, then copy)
+cp build/inki_st25_tune.uf2 /media/$USER/RPI-RP2/
+
+# Monitor
+sudo tio /dev/ttyACM0
+```
+
+**Workflow:**
+1. Wait for baseline capture (~4 seconds, keep RF away)
+2. Tap phone to antenna → live bar graph shows V_EH delta in mV
+3. Adjust trimmer capacitors to maximize peak voltage
+4. Color-coded bars: blue (baseline) → green → yellow → red (strong coupling)
+5. Session peak tracking shows maximum delta per phone tap
+
+**Note:** The tune firmware overwrites the entire flash (no bootloader layout). Flash the normal inki firmware back when done.
+
+### Source Files
+
+| File | Purpose |
+|------|---------|
+| `c/third_party/st25dv/` | ST25DV driver (register I/O, from NFC_exploration) |
+| `c/st25_io.c / .h` | Boot check, bus adapter, GPO config, request read/clear, retry logic |
+| `c/st25_tune_main.c` | Standalone antenna tuning firmware |
+| `c/config.h` | Pin definitions (ST25_VCC_EN_PIN, ST25_VEH_ADC_INPUT) |
+
+### Implementation Status
+
+- [x] ST25 driver ported and integrated
+- [x] Standalone antenna tune firmware (`--st25-tune`)
+- [x] Wake source detection (IT_STS_Dyn + EEPROM + buttons + RTC alarm flag)
+- [x] EEPROM read with retry for NFC write timing compensation
+- [x] Spurious NFC rejection (generic tap → 3x blink, power off)
+- [x] EEPROM request clearing after processing
+- [x] AP mode safety (RTC alarm disabled, debug mode switch)
+- [ ] NFC opcode routing (soft pushbutton / page selection from app)
+- [ ] Webserver V_EH live feed
 
 ---

@@ -68,6 +68,10 @@ def _ensure_additive_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE samples ADD COLUMN fw_build_date TEXT")
     if "last_fw_build_date" not in devices_cols:
         conn.execute("ALTER TABLE devices ADD COLUMN last_fw_build_date TEXT")
+    if "wake_source" not in samples_cols:
+        conn.execute("ALTER TABLE samples ADD COLUMN wake_source TEXT")
+    if "last_wake_source" not in devices_cols:
+        conn.execute("ALTER TABLE devices ADD COLUMN last_wake_source TEXT")
 
 
 def init_db(db_path: str | Path, schema_path: str | Path) -> None:
@@ -96,8 +100,8 @@ def insert_sample_and_update_device(
                 device_id, received_at_unix_s, label, use_case, room_type,
                 rtc_backend, fw_version, fw_build_date, query_ok, wifi_rssi_dbm, telemetry_send_elapsed_ms,
                 battery_before_wifi_v, battery_after_wifi_v, battery_sag_v,
-                coin_cell_v, pico_temp_c, payload_json, remote_addr
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                coin_cell_v, pico_temp_c, wake_source, payload_json, remote_addr
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sample["device_id"],
@@ -116,6 +120,7 @@ def insert_sample_and_update_device(
                 sample.get("battery_sag_v"),
                 sample.get("coin_cell_v"),
                 sample.get("pico_temp_c"),
+                sample.get("wake_source"),
                 payload_json,
                 remote_addr,
             ),
@@ -128,8 +133,8 @@ def insert_sample_and_update_device(
                 last_use_case, last_room_type, last_rtc_backend,
                 last_fw_version, last_fw_build_date, last_query_ok, last_wifi_rssi_dbm, last_telemetry_send_elapsed_ms,
                 last_battery_before_wifi_v, last_battery_after_wifi_v, last_battery_sag_v,
-                last_coin_cell_v, last_pico_temp_c, updated_at_unix_s
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                last_coin_cell_v, last_pico_temp_c, last_wake_source, updated_at_unix_s
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(device_id) DO UPDATE SET
                 label = excluded.label,
                 last_seen_unix_s = excluded.last_seen_unix_s,
@@ -146,6 +151,7 @@ def insert_sample_and_update_device(
                 last_battery_sag_v = excluded.last_battery_sag_v,
                 last_coin_cell_v = excluded.last_coin_cell_v,
                 last_pico_temp_c = excluded.last_pico_temp_c,
+                last_wake_source = excluded.last_wake_source,
                 updated_at_unix_s = excluded.updated_at_unix_s
             """,
             (
@@ -166,6 +172,7 @@ def insert_sample_and_update_device(
                 sample.get("battery_sag_v"),
                 sample.get("coin_cell_v"),
                 sample.get("pico_temp_c"),
+                sample.get("wake_source"),
                 sample["received_at_unix_s"],
             ),
         )
