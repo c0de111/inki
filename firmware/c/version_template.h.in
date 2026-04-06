@@ -1,0 +1,16 @@
+#ifndef VERSION_H
+#define VERSION_H
+
+/**
+ * @file version.h
+ * @brief Contains metadata about the firmware build.
+ *
+ * This header is automatically generated during build and should not be edited manually.
+ * It declares external variables for build identification and traceability.
+ */
+
+extern char *program_name;   /**< Firmware identifier (e.g. "esign"). */
+extern char *version;        /**< Full Git version string (e.g. v1.0.5-14-gabcde). */
+extern char *build_date;     /**< Build timestamp in "YYYY-MM-DD HH:MM:SS" format. */
+
+#endif /* VERSION_H */

@@ -1,0 +1,39 @@
+MEMORY
+{
+    WIFI_FLASH        (rx) : ORIGIN = 0x101E7000, LENGTH = 4K
+    SEATSURFING_FLASH (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
+    HISTORIAN_FLASH   (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
+    HOMEMATIC_FLASH   (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
+    WEATHERMAP_FLASH  (rx) : ORIGIN = 0x101E8000, LENGTH = 4K
+    DEVICE_FLASH      (rx) : ORIGIN = 0x101E9000, LENGTH = 4K
+}
+
+SECTIONS
+{
+    .wifi_config 0x101E7000 : ALIGN(4096) {
+        KEEP(*(.wifi_config))
+    } > WIFI_FLASH
+
+    .seatsurfing_config 0x101E8000 : ALIGN(4096) {
+        KEEP(*(.seatsurfing_config))
+    } > SEATSURFING_FLASH
+
+    /* Historian config occupies the same flash window when built with USE_CASE_HISTORIAN */
+    .historian_config 0x101E8000 : ALIGN(4096) {
+        KEEP(*(.historian_config))
+    } > HISTORIAN_FLASH
+
+    /* Homematic config occupies the same flash window when built with USE_CASE_HOMEMATIC */
+    .homematic_config 0x101E8000 : ALIGN(4096) {
+        KEEP(*(.homematic_config))
+    } > HOMEMATIC_FLASH
+
+    /* Weathermap config occupies the same flash window when built with USE_CASE_WEATHERMAP */
+    .weathermap_config 0x101E8000 : ALIGN(4096) {
+        KEEP(*(.weathermap_config))
+    } > WEATHERMAP_FLASH
+
+    .device_config 0x101E9000 : ALIGN(4096) {
+        KEEP(*(.device_config))
+    } > DEVICE_FLASH
+}
