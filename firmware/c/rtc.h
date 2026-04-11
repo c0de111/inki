@@ -28,7 +28,12 @@ float rtc_read_temperature_c(void);
 bool rtc_is_dst_europe(const rtc_time_t *t);
 void rtc_format_time(const rtc_time_t *t, char *buffer, size_t buffer_size);
 void rtc_format_time_short(const rtc_time_t *t, char *buffer, size_t buffer_size);
+// Format as ISO 8601 UTC: "2026-04-08T09:30:00Z" (buffer must be >= 21 bytes)
+void rtc_to_iso8601(const rtc_time_t *t, char *buffer, size_t buffer_size);
 const char *rtc_day_name(int day);
 const char *rtc_month_name(int month);
+// Parse HTTP Date header (RFC 7231) into rtc_time_t (UTC). Returns false if header
+// absent/malformed.
+bool rtc_parse_http_date(const char *header, rtc_time_t *out);
 
 #endif

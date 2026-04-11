@@ -20,6 +20,7 @@ typedef struct page_def {
 // Sentinel / special values
 #define PAGE_ACTION_SETUP (-1)
 #define INPUT_MAP_END (-2)
+#define PAGE_WIFI_ERROR (-3)
 
 typedef struct {
     int source;
@@ -37,7 +38,7 @@ typedef struct {
     int default_page;
 
     // Lifecycle: use case owns data fetch and render
-    void *(*run)(float battery_voltage, float coin_cell_voltage);
+    void *(*run)(void);
     void (*render)(uint8_t *image, float battery_voltage, int page, const void *data);
     void (*free_data)(void *data);
 } use_case_t;

@@ -1,4 +1,5 @@
 #include "sensors.h"
+#define LOG_MODULE LOG_MOD_SENSORS
 #include "debug.h"
 #include "hardware/adc.h"
 #include "hardware/gpio.h"
@@ -13,7 +14,7 @@ float read_battery_voltage(float conversion_factor) {
     uint16_t adc_result = adc_read();
     float voltage = (float)adc_result * conversion_factor;
 
-    debug_log("Battery voltage: %.3f V\n", voltage);
+    dlog("Battery voltage: %.3f V\n", voltage);
     return voltage;
 }
 
@@ -35,7 +36,7 @@ float read_coin_cell_voltage(float conversion_factor) {
 
     gpio_put(gpio_mosfet, 0);
 
-    debug_log("Coin cell voltage: %.3f V\n", voltage);
+    dlog("Coin cell voltage: %.3f V\n", voltage);
     return voltage;
 }
 
@@ -59,7 +60,7 @@ float read_onchip_temperature_c(void) {
     float v_sense = avg_raw * 3.3f / 4096.0f;
     float temp_c = 27.0f - (v_sense - 0.706f) / 0.001721f;
 
-    debug_log("On-chip temperature: %.1f C\n", temp_c);
+    dlog("On-chip temperature: %.1f C\n", temp_c);
     return temp_c;
 }
 
@@ -78,8 +79,8 @@ uint8_t read_strap_pins(void) {
         gpio_disable_pulls(pin);
     }
 
-    debug_log("Strap read GP3..GP0 = %d%d%d%d (mask=0x%02X)\n", (strap_bits >> 3) & 1,
-              (strap_bits >> 2) & 1, (strap_bits >> 1) & 1, strap_bits & 1, strap_bits);
+    dlog("Strap read GP3..GP0 = %d%d%d%d (mask=0x%02X)\n", (strap_bits >> 3) & 1,
+         (strap_bits >> 2) & 1, (strap_bits >> 1) & 1, strap_bits & 1, strap_bits);
 
     return strap_bits;
 }

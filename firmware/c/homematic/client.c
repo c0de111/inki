@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "epaper_pages_shared.h"
 #include "flash.h"
+#include "hardware/watchdog.h"
 #include "homematic/config.h"
 #include "homematic/epaper_pages.h"
 #include "http_client.h"
@@ -244,17 +245,16 @@ static void homematic_data_received(const char *body, size_t length, void *arg) 
 
                     snprintf(homematic_service_msgs[homematic_service_count],
                              sizeof(homematic_service_msgs[0]), "%s", msg);
-                    debug_log("[HOMEMATIC] Service[%d] addr=%s type=%s -> '%s'\n",
-                              homematic_service_count,
-                              homematic_service_addr[homematic_service_count], typebuf,
-                              homematic_service_msgs[homematic_service_count]);
+                    dlog("[HOMEMATIC] Service[%d] addr=%s type=%s -> '%s'\n",
+                         homematic_service_count, homematic_service_addr[homematic_service_count],
+                         typebuf, homematic_service_msgs[homematic_service_count]);
                     homematic_service_count++;
                 }
 
                 p = state_tag + 7;
             }
         }
-        debug_log("[HOMEMATIC] Parsed %d service messages\n", homematic_service_count);
+        dlog("[HOMEMATIC] Parsed %d service messages\n", homematic_service_count);
         return;
     }
 
@@ -326,6 +326,7 @@ enum {
     HM_PAGE_DECISION_MAKER,
     HM_PAGE_WIFI_SETUP,
     HM_PAGE_NFC_TEXT,
+    HM_PAGE_NFC_IMAGE,
     HM_PAGE_COUNT
 };
 
@@ -335,6 +336,7 @@ static const page_def_t *hm_pages[] = {
     [HM_PAGE_DECISION_MAKER] = &page_decision_maker,
     [HM_PAGE_WIFI_SETUP] = &page_wifi_setup,
     [HM_PAGE_NFC_TEXT] = &page_nfc_text,
+    [HM_PAGE_NFC_IMAGE] = &page_nfc_image,
     NULL,
 };
 
@@ -351,6 +353,7 @@ static const input_map_entry_t hm_input_map[] = {
     {INPUT_NFC(ST25_OPCODE_REFRESH), HM_PAGE_HOMEMATIC},
     {INPUT_NFC(ST25_OPCODE_PAGE_2), HM_PAGE_DECISION_MAKER},
     {INPUT_NFC(ST25_OPCODE_TEXT), HM_PAGE_NFC_TEXT},
+    {INPUT_NFC(ST25_OPCODE_DRAW_IMAGE), HM_PAGE_NFC_IMAGE},
     {INPUT_BUTTON(16), HM_PAGE_NFC_TEXT},
     {INPUT_MAP_END, 0},
 };
@@ -359,27 +362,22 @@ static const input_map_entry_t hm_input_map[] = {
 
 typedef struct {
     homematic_config_t eff;
-    uint8_t next_idx;
     uint8_t total;
-    bool had_failure;
-    bool ready_for_next;
-    uint8_t attempts[HOMEMATIC_MAX_ITEMS];
-    bool had_success;
     bool unit_known[HOMEMATIC_MAX_ITEMS];
     char unit[HOMEMATIC_MAX_ITEMS][8];
     enum { HM_PHASE_UNIT, HM_PHASE_VALUE, HM_PHASE_SERVICE } phase;
 } homematic_seq_t;
 
 static homematic_seq_t g_hm_seq;
+static volatile bool g_hm_step_done = false;
+static volatile bool g_hm_step_ok = false;
 
 static bool homematic_issue_single(uint8_t idx);
 static bool homematic_issue_unit(uint8_t idx);
 static bool homematic_issue_service(void);
-static void homematic_on_closed(void *arg);
 
 static void homematic_single_completion(const char *body, size_t length, bool success, void *arg) {
     uint8_t idx = (uint8_t)(uintptr_t)arg;
-    bool retry = false;
 
     if (g_hm_seq.phase == HM_PHASE_UNIT) {
         char unit[8] = {0};
@@ -445,74 +443,19 @@ static void homematic_single_completion(const char *body, size_t length, bool su
     } else if (g_hm_seq.phase == HM_PHASE_VALUE) {
         if (success && body && length > 0) {
             http_invoke_data_callback(body, length, (void *)(uintptr_t)idx);
-            g_hm_seq.had_success = true;
         } else {
             http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)idx);
         }
     } else if (g_hm_seq.phase == HM_PHASE_SERVICE) {
         if (success && body && length > 0) {
             http_invoke_data_callback(body, length, (void *)(uintptr_t)0x9000);
-            g_hm_seq.had_success = true;
         } else {
             http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)0x9000);
         }
-        g_hm_seq.ready_for_next = false;
-        http_sync_signal(g_hm_seq.had_success);
-        return;
     }
 
-    if (!success || !body || length == 0 || strstr(body, "<fault>")) {
-        if (g_hm_seq.attempts[idx] < 1) {
-            g_hm_seq.attempts[idx]++;
-            retry = true;
-        } else {
-            g_hm_seq.had_failure = true;
-        }
-    }
-
-    uint8_t next_idx = idx;
-    int next_phase = g_hm_seq.phase;
-    if (retry) {
-        /* keep same idx and phase */
-    } else if (g_hm_seq.phase == HM_PHASE_UNIT) {
-        next_phase = HM_PHASE_VALUE;
-    } else if (g_hm_seq.phase == HM_PHASE_VALUE) {
-        next_idx = (uint8_t)(idx + 1);
-        if (next_idx < g_hm_seq.total)
-            next_phase = HM_PHASE_UNIT;
-        else
-            next_phase = HM_PHASE_SERVICE;
-    } else {
-        next_idx = g_hm_seq.total;
-    }
-    g_hm_seq.next_idx = next_idx;
-    g_hm_seq.phase = next_phase;
-    g_hm_seq.ready_for_next = true;
-}
-
-static void homematic_on_closed(void *arg) {
-    (void)arg;
-    if (!g_hm_seq.ready_for_next)
-        return;
-    if (g_hm_seq.next_idx < g_hm_seq.total || g_hm_seq.phase == HM_PHASE_SERVICE) {
-        g_hm_seq.ready_for_next = false;
-        http_set_after_close(homematic_on_closed, NULL);
-        bool ok;
-        if (g_hm_seq.phase == HM_PHASE_UNIT)
-            ok = homematic_issue_unit(g_hm_seq.next_idx);
-        else if (g_hm_seq.phase == HM_PHASE_VALUE)
-            ok = homematic_issue_single(g_hm_seq.next_idx);
-        else
-            ok = homematic_issue_service();
-        if (!ok) {
-            g_hm_seq.had_failure = true;
-            g_hm_seq.ready_for_next = false;
-            http_sync_signal(g_hm_seq.had_success);
-        }
-    } else {
-        g_hm_seq.ready_for_next = false;
-        http_sync_signal(g_hm_seq.had_success);
-    }
+    g_hm_step_done = true;
+    g_hm_step_ok = success && body && length > 0 && !(body && strstr(body, "<fault>"));
 }
 
 static bool homematic_issue_single(uint8_t idx) {
@@ -608,65 +551,86 @@ static bool homematic_issue_service(void) {
     return (result == HTTP_SUCCESS);
 }
 
-static bool homematic_make_request(void) {
+// --- Lifecycle: run (fetch) and render ---
+
+static bool hm_wait_step(int timeout_ms) {
+    int waited = 0;
+    while (!g_hm_step_done && waited < timeout_ms) {
+        sleep_ms(50);
+        watchdog_update();
+        waited += 50;
+    }
+    bool ok = g_hm_step_done && g_hm_step_ok;
+    g_hm_step_done = false;
+    g_hm_step_ok = false;
+    return ok;
+}
+
+static void *hm_run(void) {
     memset(&g_hm_seq, 0, sizeof(g_hm_seq));
-    for (uint8_t i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
-        if (i >= homematic_config_flash.data.count)
-            break;
+    for (uint8_t i = 0;
+         i < homematic_config_flash.data.count && g_hm_seq.total < HOMEMATIC_MAX_ITEMS; i++) {
         const char *a = homematic_config_flash.data.items[i].address;
         const char *k = homematic_config_flash.data.items[i].key;
         if (a && *a && k && *k) {
-            g_hm_seq.eff.data.items[g_hm_seq.eff.data.count] = homematic_config_flash.data.items[i];
-            g_hm_seq.eff.data.count++;
+            g_hm_seq.eff.data.items[g_hm_seq.total] = homematic_config_flash.data.items[i];
+            g_hm_seq.total++;
         }
     }
+    g_hm_seq.eff.data.count = g_hm_seq.total;
     g_hm_seq.eff.data.add_interface_prefix = false;
-    g_hm_seq.total = g_hm_seq.eff.data.count;
 
-    debug_log("[HOMEMATIC] Sequential mode with %u items\n", g_hm_seq.total);
-
-    // Reset values in consumer via special reset call
     http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)0xFFFF);
+    set_data_callback(homematic_data_received, NULL);
+    dlog("[HOMEMATIC] Sequential mode with %u items\n", g_hm_seq.total);
 
-    http_sync_reset();
-    g_hm_seq.had_failure = false;
-    g_hm_seq.ready_for_next = false;
-    g_hm_seq.had_success = false;
-    memset(g_hm_seq.attempts, 0, sizeof(g_hm_seq.attempts));
-    g_hm_seq.next_idx = 0;
-    memset(g_hm_seq.unit_known, 0, sizeof(g_hm_seq.unit_known));
-    for (uint8_t i = 0; i < HOMEMATIC_MAX_ITEMS; i++)
-        g_hm_seq.unit[i][0] = '\0';
-    g_hm_seq.phase = HM_PHASE_UNIT;
+    int timeout_ms = device_config_flash.data.max_wait_data_wifi * 50;
+    bool had_success = false;
 
-    if (g_hm_seq.total == 0) {
-        http_sync_signal(true);
-        return true;
+    for (uint8_t i = 0; i < g_hm_seq.total; i++) {
+        g_hm_seq.phase = HM_PHASE_UNIT;
+        g_hm_step_done = false;
+        g_hm_step_ok = false;
+        if (homematic_issue_unit(i))
+            hm_wait_step(timeout_ms); // unit always proceeds regardless of result
+
+        g_hm_seq.phase = HM_PHASE_VALUE;
+        g_hm_step_done = false;
+        g_hm_step_ok = false;
+        if (!homematic_issue_single(i))
+            continue;
+        bool ok = hm_wait_step(timeout_ms);
+        if (!ok) {
+            g_hm_step_done = false;
+            g_hm_step_ok = false;
+            if (homematic_issue_single(i))
+                ok = hm_wait_step(timeout_ms);
+        }
+        if (ok)
+            had_success = true;
     }
 
-    http_set_after_close(homematic_on_closed, NULL);
-    return homematic_issue_unit(0);
-}
+    g_hm_seq.phase = HM_PHASE_SERVICE;
+    g_hm_step_done = false;
+    g_hm_step_ok = false;
+    if (homematic_issue_service()) {
+        bool svc_ok = hm_wait_step(timeout_ms);
+        if (svc_ok)
+            had_success = true;
+    }
 
-// --- Lifecycle: run (fetch) and render ---
-
-static WifiResult hm_last_wifi_result;
-
-static void *hm_run(float battery_voltage, float coin_cell_voltage) {
-    set_data_callback(homematic_data_received, NULL);
-    hm_last_wifi_result =
-        http_run_with_wifi(homematic_make_request, battery_voltage, coin_cell_voltage);
-    return (hm_last_wifi_result == WIFI_SUCCESS) ? homematic_values : NULL;
+    return had_success ? homematic_values : NULL;
 }
 
 static void hm_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+    if (page == PAGE_WIFI_ERROR) {
+        render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
+                          "Please check the WiFi settings.");
+        return;
+    }
     if (!data && page >= 0 && hm_pages[page] && hm_pages[page]->needs_wifi) {
-        if (hm_last_wifi_result == WIFI_ERROR_CONNECTION)
-            render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                              "Please check the WiFi settings.");
-        else
-            render_page_error(image, "Server Error!", "Unable to reach the server",
-                              "Please check the server status.");
+        render_page_error(image, "Server Error!", "Unable to reach the server",
+                          "Please check the server status.");
         return;
     }
 

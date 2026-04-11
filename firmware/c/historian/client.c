@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "cJSON.h"
+#define LOG_MODULE LOG_MOD_HISTORIAN
 #include "debug.h"
 #include "epaper_pages_shared.h"
 #include "flash.h"
@@ -24,28 +25,28 @@ TimeSeries historian_data = {0};
 // Callback for Historian HTTP response
 static void historian_data_received(const char *json_data, size_t length, void *arg) {
     if (!json_data || length == 0) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] Transfer failed or incomplete\n");
+        dlog("[HISTORIAN] Transfer failed or incomplete\n");
         return;
     }
 
-    debug_log_with_color(COLOR_GREEN, "[HISTORIAN] Received %d bytes of JSON data\n", (int)length);
+    dlog("[HISTORIAN] Received %d bytes of JSON data\n", (int)length);
 
     // Parse JSON into TimeSeries
     if (historian_parse_timeseries(json_data, &historian_data)) {
-        debug_log("[HISTORIAN] Successfully parsed %d data points\n", historian_data.count);
-        debug_log("[HISTORIAN] Temperature range: %.2f - %.2f °C\n", historian_data.min_value,
-                  historian_data.max_value);
+        dlog("[HISTORIAN] Successfully parsed %d data points\n", historian_data.count);
+        dlog("[HISTORIAN] Temperature range: %.2f - %.2f °C\n", historian_data.min_value,
+             historian_data.max_value);
 
         // Debug: Print first few data points like esign
         for (int i = 0; i < historian_data.count && i < 10; i++) {
-            debug_log("[HISTORIAN] #%03d: timestamp=%llu ms UTC, "
-                      "value=%.2f %s, state=%u\n",
-                      i, (unsigned long long)historian_data.points[i].timestamp,
-                      historian_data.points[i].value, historian_data.unit,
-                      historian_data.points[i].state);
+            dlog("[HISTORIAN] #%03d: timestamp=%llu ms UTC, "
+                 "value=%.2f %s, state=%u\n",
+                 i, (unsigned long long)historian_data.points[i].timestamp,
+                 historian_data.points[i].value, historian_data.unit,
+                 historian_data.points[i].state);
         }
     } else {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to parse JSON\n");
+        dlog("[HISTORIAN] Failed to parse JSON\n");
     }
 }
 
@@ -70,7 +71,7 @@ static uint64_t historian_rtc_to_unix_ms(const rtc_time_t *rtc_time) {
 static uint64_t historian_get_current_unix_ms(void) {
     rtc_time_t current_time;
     if (rtc_read_time(&current_time) != 0) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] RTC read failed, returning 0 timestamp\n");
+        dlog("[HISTORIAN] RTC read failed, returning 0 timestamp\n");
         return 0;
     }
     return historian_rtc_to_unix_ms(&current_time);
@@ -98,7 +99,7 @@ static int historian_build_http_request(char *buffer, size_t buffer_size, const 
                  datapoint_id, (unsigned long long)start_time_ms, (unsigned long long)end_time_ms);
 
     if (json_len >= (int)sizeof(json_body)) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] JSON body too large\n");
+        dlog("[HISTORIAN] JSON body too large\n");
         return -1;
     }
 
@@ -112,7 +113,7 @@ static int historian_build_http_request(char *buffer, size_t buffer_size, const 
                                host, json_len, json_body);
 
     if (request_len >= (int)buffer_size) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request too large\n");
+        dlog("[HISTORIAN] HTTP request too large\n");
         return -1;
     }
 
@@ -126,13 +127,13 @@ static bool historian_parse_timeseries(const char *json, TimeSeries *result) {
 
     cJSON *root = cJSON_Parse(json);
     if (!root) {
-        debug_log("[HISTORIAN] JSON parse failed\n");
+        dlog("[HISTORIAN] JSON parse failed\n");
         return false;
     }
 
     cJSON *res = cJSON_GetObjectItem(root, "result");
     if (!res) {
-        debug_log("[HISTORIAN] No 'result' in JSON\n");
+        dlog("[HISTORIAN] No 'result' in JSON\n");
         cJSON_Delete(root);
         return false;
     }
@@ -161,7 +162,7 @@ static bool historian_parse_timeseries(const char *json, TimeSeries *result) {
     cJSON *states = cJSON_GetObjectItem(res, "states");
 
     if (!timestamps || !values) {
-        debug_log("[HISTORIAN] Missing timestamps or values\n");
+        dlog("[HISTORIAN] Missing timestamps or values\n");
         cJSON_Delete(root);
         return false;
     }
@@ -206,8 +207,8 @@ static bool historian_parse_timeseries(const char *json, TimeSeries *result) {
 
     cJSON_Delete(root);
 
-    debug_log("[HISTORIAN] Parsed %d data points (min=%.2f, max=%.2f)\n", count, result->min_value,
-              result->max_value);
+    dlog("[HISTORIAN] Parsed %d data points (min=%.2f, max=%.2f)\n", count, result->min_value,
+         result->max_value);
 
     return true;
 }
@@ -224,6 +225,7 @@ enum {
     HIST_PAGE_DECISION_MAKER,
     HIST_PAGE_WIFI_SETUP,
     HIST_PAGE_NFC_TEXT,
+    HIST_PAGE_NFC_IMAGE,
     HIST_PAGE_COUNT
 };
 
@@ -233,6 +235,7 @@ static const page_def_t *hist_pages[] = {
     [HIST_PAGE_DECISION_MAKER] = &page_decision_maker,
     [HIST_PAGE_WIFI_SETUP] = &page_wifi_setup,
     [HIST_PAGE_NFC_TEXT] = &page_nfc_text,
+    [HIST_PAGE_NFC_IMAGE] = &page_nfc_image,
     NULL,
 };
 
@@ -249,13 +252,12 @@ static const input_map_entry_t hist_input_map[] = {
     {INPUT_NFC(ST25_OPCODE_REFRESH), HIST_PAGE_GRAPH},
     {INPUT_NFC(ST25_OPCODE_PAGE_2), HIST_PAGE_DECISION_MAKER},
     {INPUT_NFC(ST25_OPCODE_TEXT), HIST_PAGE_NFC_TEXT},
+    {INPUT_NFC(ST25_OPCODE_DRAW_IMAGE), HIST_PAGE_NFC_IMAGE},
     {INPUT_BUTTON(16), HIST_PAGE_NFC_TEXT},
     {INPUT_MAP_END, 0},
 };
 
 // --- Lifecycle: run (fetch) and render ---
-
-static WifiResult hist_last_wifi_result;
 
 static bool historian_make_request(void) {
     static char http_request[HTTP_REQUEST_MAX];
@@ -273,42 +275,36 @@ static bool historian_make_request(void) {
     int request_len = historian_build_http_request(
         http_request, sizeof(http_request), historian_host, datapoint_id, start_time, end_time);
     if (request_len < 0) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] Failed to build HTTP request\n");
+        dlog("[HISTORIAN] Failed to build HTTP request\n");
         return false;
     }
 
-    debug_log("[HISTORIAN] Constructed HTTP request:\n%s\n", http_request);
+    dlog("[HISTORIAN] Constructed HTTP request:\n%s\n", http_request);
     watchdog_update();
 
     ip_addr_t ip;
     IP4_ADDR(&ip, historian_config_flash.data.ip[0], historian_config_flash.data.ip[1],
              historian_config_flash.data.ip[2], historian_config_flash.data.ip[3]);
 
-    http_sync_reset();
-    http_result_t result = http_request_async(&ip, historian_config_flash.data.port, http_request,
-                                              http_default_completion, NULL);
-    if (result != HTTP_SUCCESS) {
-        debug_log_with_color(COLOR_RED, "[HISTORIAN] HTTP request failed to start: %d\n", result);
-        return false;
-    }
-    return true;
+    return http_request_sync(&ip, historian_config_flash.data.port, http_request,
+                             device_config_flash.data.max_wait_data_wifi * 50);
 }
 
-static void *hist_run(float battery_voltage, float coin_cell_voltage) {
+static void *hist_run(void) {
     set_data_callback(historian_data_received, NULL);
-    hist_last_wifi_result =
-        http_run_with_wifi(historian_make_request, battery_voltage, coin_cell_voltage);
-    return (hist_last_wifi_result == WIFI_SUCCESS) ? &historian_data : NULL;
+    bool ok = historian_make_request();
+    return ok ? &historian_data : NULL;
 }
 
 static void hist_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+    if (page == PAGE_WIFI_ERROR) {
+        render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
+                          "Please check the WiFi settings.");
+        return;
+    }
     if (!data && page >= 0 && hist_pages[page] && hist_pages[page]->needs_wifi) {
-        if (hist_last_wifi_result == WIFI_ERROR_CONNECTION)
-            render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                              "Please check the WiFi settings.");
-        else
-            render_page_error(image, "Server Error!", "Unable to reach the server",
-                              "Please check the server status.");
+        render_page_error(image, "Server Error!", "Unable to reach the server",
+                          "Please check the server status.");
         return;
     }
 

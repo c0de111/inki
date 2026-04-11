@@ -132,30 +132,13 @@ void debug_module_log(uint32_t module, log_level_t level, const char *format, ..
         return;
     if (level >= LOG_DEBUG && !(module & current_module_mask))
         return;
-
-    va_list args;
-    va_start(args, format);
-    emit("", "", format, args);
-    va_end(args);
-}
-
-// --- Legacy API (gradual migration) ---
-
-void debug_log(const char *format, ...) {
-    if (current_verbosity < LOG_DEBUG)
+    /* Legacy calls use LOG_MOD_ALL — suppress them when a specific mask is active */
+    if (level >= LOG_DEBUG && module == LOG_MOD_ALL && current_module_mask != LOG_MOD_ALL)
         return;
 
     va_list args;
     va_start(args, format);
     emit("", "", format, args);
-    va_end(args);
-}
-
-void debug_log_with_color(const char *color_code, const char *format, ...) {
-    // Legacy: no level filtering — always shown (preserves existing behavior)
-    va_list args;
-    va_start(args, format);
-    emit(color_code, COLOR_RESET, format, args);
     va_end(args);
 }
 

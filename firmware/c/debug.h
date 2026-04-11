@@ -72,10 +72,6 @@ void debug_info(const char *format, ...);                    // LOG_INFO
 void debug_module_log(uint32_t module, log_level_t level, const char *format,
                       ...); // LOG_DEBUG/TRACE
 
-// Legacy API (kept for gradual migration, treated as LOG_DEBUG + LOG_MOD_ALL)
-void debug_log(const char *format, ...);
-void debug_log_with_color(const char *color_code, const char *format, ...);
-
 // Flush buffered logs to USB serial
 void debug_flush(void);
 

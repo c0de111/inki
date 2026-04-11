@@ -16,6 +16,7 @@
 #include "webserver_pages.h"
 #include "GUI_Paint.h"
 #include "config.h"
+#define LOG_MODULE LOG_MOD_WEBSERVER
 #include "debug.h"
 #include "epaper.h"
 #include "flash.h"
@@ -169,7 +170,7 @@ void send_landing_page(struct tcp_pcb *tpcb) {
 
     snprintf(page + strlen(page), sizeof(page) - strlen(page), "<p>%s</p></body></html>",
              timeout_info);
-    debug_log("Landing page length: %d\n", strlen(page));
+    dlog("Landing page length: %d\n", strlen(page));
 
     send_response(tpcb, page);
 }
@@ -889,7 +890,7 @@ void send_upload_logo_page(struct tcp_pcb *tpcb, const char *message) {
 
     snprintf(page + strlen(page), sizeof(page) - strlen(page), "<p>%s</p></body></html>",
              timeout_info);
-    debug_log("upload_logo page length: %d\n", strlen(page));
+    dlog("upload_logo page length: %d\n", strlen(page));
 
     send_response(tpcb, page);
 }
@@ -906,7 +907,7 @@ void send_firmware_update_page(struct tcp_pcb *tpcb, const char *message) {
     // If `message` starts with "<div" or "<h2", send only the fragment
     if (message && *message &&
         (strncmp(message, "<div", 4) == 0 || strncmp(message, "<h2", 3) == 0)) {
-        debug_log("Sending short message only (HTML fragment)\n");
+        dlog("Sending short message only (HTML fragment)\n");
         send_response(tpcb, message);
         return;
     }
@@ -1049,7 +1050,7 @@ void send_firmware_update_page(struct tcp_pcb *tpcb, const char *message) {
     snprintf(page + strlen(page), sizeof(page) - strlen(page), "<p>%s</p></body></html>",
              timeout_info);
 
-    debug_log("firmware_update page length: %d\n", strlen(page));
+    dlog("firmware_update page length: %d\n", strlen(page));
     send_response(tpcb, page);
 }
 
@@ -1118,10 +1119,19 @@ void send_seatsurfing_config_page(struct tcp_pcb *tpcb, const char *message) {
     char timeout_info[64];
     add_timeout_info(timeout_info, sizeof(timeout_info));
 
-    char ip_string[16];
-    snprintf(ip_string, sizeof(ip_string), "%d.%d.%d.%d", seatsurfing_config_flash.data.ip[0],
-             seatsurfing_config_flash.data.ip[1], seatsurfing_config_flash.data.ip[2],
-             seatsurfing_config_flash.data.ip[3]);
+    // Show blank when ip==0.0.0.0 so the placeholder hint is visible (DNS+HTTPS mode)
+    char ip_string[16] = "";
+    if (seatsurfing_config_flash.data.ip[0] || seatsurfing_config_flash.data.ip[1] ||
+        seatsurfing_config_flash.data.ip[2] || seatsurfing_config_flash.data.ip[3]) {
+        snprintf(ip_string, sizeof(ip_string), "%d.%d.%d.%d", seatsurfing_config_flash.data.ip[0],
+                 seatsurfing_config_flash.data.ip[1], seatsurfing_config_flash.data.ip[2],
+                 seatsurfing_config_flash.data.ip[3]);
+    }
+
+    i2c_probe_result_t i2c_probe = {0};
+    i2c_probe_expected_devices(&i2c_probe);
+    const bool st25_present = i2c_probe.st25_user_present || i2c_probe.st25_system_present;
+    const char *nfc_fieldset_attr = st25_present ? "" : " disabled";
 
     snprintf(page, sizeof(page),
              "<!DOCTYPE html><html><head>"
@@ -1143,6 +1153,7 @@ void send_seatsurfing_config_page(struct tcp_pcb *tpcb, const char *message) {
              "45%%; max-width: 150px; }"
              "a { display: inline-block; margin-top: 1.5em; font-size: 0.9em; text-decoration: "
              "none; color: #0066cc; }"
+             "fieldset[disabled] { opacity: 0.45; }"
              "</style></head><body>"
              "<h1>Seatsurfing Konfiguration</h1>");
 
@@ -1174,7 +1185,8 @@ void send_seatsurfing_config_page(struct tcp_pcb *tpcb, const char *message) {
         "<label>API Host:<br><input type=\"text\" name=\"text1\" value=\"%s\"></label>"
         "<label>Benutzername:<br><input type=\"text\" name=\"text2\" value=\"%s\"></label>"
         "<label>Passwort:<br><input type=\"text\" name=\"text3\" value=\"%s\"></label>"
-        "<label>IP-Adresse:<br><input type=\"text\" name=\"text4\" value=\"%s\"></label>"
+        "<label>IP-Adresse:<br><input type=\"text\" name=\"text4\" value=\"%s\" placeholder=\"leer "
+        "lassen f&uuml;r DNS+HTTPS\"></label>"
         "<label>Port:<br><input type=\"text\" name=\"text5\" value=\"%d\"></label>"
         "<label>Location ID:<br><input type=\"text\" name=\"text6\" value=\"%s\"></label>"
         "<label>Space Name 1:<br><input type=\"text\" name=\"text7\" value=\"%s\" "
@@ -1185,6 +1197,12 @@ void send_seatsurfing_config_page(struct tcp_pcb *tpcb, const char *message) {
         "oninput=\"updateDerivedSeats()\"></label>"
         "<label>Space Name 4:<br><input type=\"text\" name=\"text10\" value=\"%s\" "
         "oninput=\"updateDerivedSeats()\"></label>"
+        "</fieldset>"
+        "<fieldset%s><legend>NFC Booking</legend>"
+        "<small>SpaceAdmin account used to book seats via NFC tap (opcode 0x40).</small>"
+        "<label style=\"margin-top:0.8em\">Admin E-Mail:<br><input type=\"text\" name=\"text11\" "
+        "value=\"%s\"></label>"
+        "<label>Admin Password:<br><input type=\"text\" name=\"text12\" value=\"%s\"></label>"
         "</fieldset>"
         "<small>Seats are derived from filled Space Name fields and stored "
         "automatically.</small><br>"
@@ -1214,7 +1232,8 @@ void send_seatsurfing_config_page(struct tcp_pcb *tpcb, const char *message) {
         seatsurfing_config_flash.data.port, seatsurfing_config_flash.data.location_id,
         seatsurfing_config_flash.data.space_ids[0], seatsurfing_config_flash.data.space_ids[1],
         seatsurfing_config_flash.data.space_ids[2], seatsurfing_config_flash.data.space_ids[3],
-        timeout_info);
+        nfc_fieldset_attr, seatsurfing_config_flash.data.booking_email,
+        seatsurfing_config_flash.data.booking_password, timeout_info);
 
     send_response(tpcb, page);
 }
@@ -1448,7 +1467,7 @@ void send_clock_page(struct tcp_pcb *tpcb, const char *message) {
         current_raw, current_dst, (message && *message) ? "<div class='message'>" : "",
         (message && *message) ? message : "", (message && *message) ? "</div>" : "", timeout_info);
 
-    debug_log("device settings page length: %d\n", strlen(page));
+    dlog("device settings page length: %d\n", strlen(page));
     send_response(tpcb, page);
 }
 
@@ -1824,7 +1843,7 @@ void send_device_config_page(struct tcp_pcb *tpcb, const char *message) {
         "</body></html>",
         timeout_info, LOGO_FLASH_SIZE);
 
-    debug_log("device settings page length: %d\n", strlen(page));
+    dlog("device settings page length: %d\n", strlen(page));
     send_response(tpcb, page);
 }
 
@@ -2257,6 +2276,10 @@ void send_settings_export_txt(struct tcp_pcb *tpcb) {
                             seatsurfing_config_flash.data.space_ids[2]);
     off += (size_t)snprintf(out + off, sizeof(out) - off, "seatsurfing.space4=%s\n",
                             seatsurfing_config_flash.data.space_ids[3]);
+    off += (size_t)snprintf(out + off, sizeof(out) - off, "seatsurfing.booking_email=%s\n",
+                            seatsurfing_config_flash.data.booking_email);
+    off += (size_t)snprintf(out + off, sizeof(out) - off, "seatsurfing.booking_password=%s\n",
+                            seatsurfing_config_flash.data.booking_password);
 #elif defined(USE_CASE_HISTORIAN)
     off += (size_t)snprintf(out + off, sizeof(out) - off, "historian.ip=%u.%u.%u.%u\n",
                             historian_config_flash.data.ip[0], historian_config_flash.data.ip[1],
@@ -2326,9 +2349,9 @@ void handle_form_wifi(struct tcp_pcb *tpcb, const char *body, size_t len) {
     send_wifi_config_page(tpcb, "✔ WiFi data saved");
 
     if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "SSID & password saved\n");
+        dlog("SSID & password saved\n");
     } else {
-        debug_log_with_color(COLOR_RED, "Error saving data\n");
+        dlog("Error saving data\n");
     }
 }
 
@@ -2365,7 +2388,11 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
         new_cfg.data.ip[2] = (uint8_t)ip2;
         new_cfg.data.ip[3] = (uint8_t)ip3;
     } else {
-        debug_log_with_color(COLOR_RED, "Invalid IP address: %s\n", result.text[3]);
+        // Blank or invalid → DNS+HTTPS mode (ip=0.0.0.0, port should be 443)
+        new_cfg.data.ip[0] = 0;
+        new_cfg.data.ip[1] = 0;
+        new_cfg.data.ip[2] = 0;
+        new_cfg.data.ip[3] = 0;
     }
 
     new_cfg.data.port = (uint16_t)atoi(result.text[4]);
@@ -2391,11 +2418,16 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
     }
     new_cfg.data.seat_count = seat_count;
 
+    // NFC booking credentials (text11, text12)
+    strncpy(new_cfg.data.booking_email, result.text[10], sizeof(new_cfg.data.booking_email) - 1);
+    strncpy(new_cfg.data.booking_password, result.text[11],
+            sizeof(new_cfg.data.booking_password) - 1);
+
     bool ok = save_seatsurfing_config(&new_cfg);
     if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "Seatsurfing-Konfiguration gespeichert.\n");
+        dlog("Seatsurfing-Konfiguration gespeichert.\n");
     } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Seatsurfing-Konfiguration.\n");
+        dlog("Fehler beim Speichern der Seatsurfing-Konfiguration.\n");
     }
 
     // Keep device-config room settings in sync for SeatSurfing rendering
@@ -2409,7 +2441,7 @@ void handle_form_seatsurfing(struct tcp_pcb *tpcb, const char *body, size_t len)
     }
     dev_cfg.data.number_of_seats = seat_count;
     if (!save_device_config(&dev_cfg)) {
-        debug_log_with_color(COLOR_RED, "Error syncing SeatSurfing-derived room settings.\n");
+        dlog("Error syncing SeatSurfing-derived room settings.\n");
     }
 
     send_seatsurfing_config_page(tpcb, "✔ seatsurfing settings stored");
@@ -2457,9 +2489,9 @@ void handle_form_historian(struct tcp_pcb *tpcb, const char *body, size_t len) {
 
     bool ok = save_historian_config(&new_cfg);
     if (ok) {
-        debug_log_with_color(COLOR_YELLOW, "Historian-Konfiguration gespeichert.\n");
+        dlog("Historian-Konfiguration gespeichert.\n");
     } else {
-        debug_log_with_color(COLOR_RED, "Fehler beim Speichern der Historian-Konfiguration.\n");
+        dlog("Fehler beim Speichern der Historian-Konfiguration.\n");
     }
     send_historian_config_page(tpcb, "✔ historian settings stored");
 }
@@ -2539,12 +2571,10 @@ void handle_form_weathermap(struct tcp_pcb *tpcb, const char *body, size_t len) 
     bool ok = save_weathermap_config(&cfg);
     if (ok) {
         clear_weathermap_meta();
-        debug_log_with_color(COLOR_YELLOW,
-                             "[WEATHERMAP] Config saved: lat=%.6f lon=%.6f half_width=%.1fm\n", lat,
-                             lon, half_m);
+        dlog("[WEATHERMAP] Config saved: lat=%.6f lon=%.6f half_width=%.1fm\n", lat, lon, half_m);
         send_weathermap_page(tpcb, "✔ settings saved. Cached map cleared.");
     } else {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Failed to save config\n");
+        dlog("[WEATHERMAP] Failed to save config\n");
         send_weathermap_page(tpcb, "⚠ Failed to save settings.");
     }
 }
@@ -2687,13 +2717,13 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
     send_device_config_page(tpcb, msg);
 
     if (ok_dev && ok_wifi) {
-        debug_log_with_color(COLOR_GREEN, "Device and WiFi configuration saved\n");
+        dlog("Device and WiFi configuration saved\n");
     } else {
         if (!ok_dev) {
-            debug_log_with_color(COLOR_RED, "Error saving device configuration\n");
+            dlog("Error saving device configuration\n");
         }
         if (!ok_wifi) {
-            debug_log_with_color(COLOR_RED, "Error saving WiFi configuration\n");
+            dlog("Error saving WiFi configuration\n");
         }
     }
 }
@@ -2710,7 +2740,7 @@ void handle_form_device_config(struct tcp_pcb *tpcb, const char *body, size_t le
 void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len) {
     const char *line_param = strstr(body, "line=");
     if (!line_param) {
-        debug_log_with_color(COLOR_RED, "POST /clock: Kein line= Parameter\n");
+        dlog("POST /clock: Kein line= Parameter\n");
         send_clock_page(tpcb, "❌ Kein line= Parameter.");
         return;
     }
@@ -2720,9 +2750,9 @@ void handle_form_clock(struct tcp_pcb *tpcb, const char *body, size_t len) {
     sscanf(line_param + 5, "%127[^&\r\n]", raw_line); // robust
     url_decode(decoded_line, raw_line, sizeof(decoded_line));
 
-    debug_log("POST /clock: line = ");
-    debug_log(decoded_line);
-    debug_log("\n");
+    dlog("POST /clock: line = ");
+    dlog(decoded_line);
+    dlog("\n");
 
     rtc_time_t old_time, new_time;
 
@@ -3042,6 +3072,12 @@ void handle_form_settings_import(struct tcp_pcb *tpcb, const char *body, size_t 
         } else if (strcmp(key, "seatsurfing.space4") == 0) {
             strncpy(new_use.data.space_ids[3], val, sizeof(new_use.data.space_ids[3]) - 1);
             new_use.data.space_ids[3][sizeof(new_use.data.space_ids[3]) - 1] = '\0';
+        } else if (strcmp(key, "seatsurfing.booking_email") == 0) {
+            strncpy(new_use.data.booking_email, val, sizeof(new_use.data.booking_email) - 1);
+            new_use.data.booking_email[sizeof(new_use.data.booking_email) - 1] = '\0';
+        } else if (strcmp(key, "seatsurfing.booking_password") == 0) {
+            strncpy(new_use.data.booking_password, val, sizeof(new_use.data.booking_password) - 1);
+            new_use.data.booking_password[sizeof(new_use.data.booking_password) - 1] = '\0';
 #elif defined(USE_CASE_HISTORIAN)
         } else if (strcmp(key, "historian.ip") == 0) {
             if (!parse_ipv4_value(val, new_use.data.ip)) {

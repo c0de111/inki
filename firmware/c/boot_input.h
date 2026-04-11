@@ -17,8 +17,10 @@ typedef struct {
 // Call after I2C bus is initialized.
 boot_input_t read_boot_input(void);
 
-// Module state — read by telemetry (http_client.c) and NFC text renderer
+// Module state — read by telemetry (http_client.c) and NFC renderers
 extern const char *wake_source;
 extern char nfc_text_buf[];
+extern uint8_t nfc_image_buf[];
+extern char nfc_booking_email[]; // populated on ST25_OPCODE_BOOK_SEAT (0x40)
 
 #endif // BOOT_INPUT_H

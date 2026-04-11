@@ -8,6 +8,7 @@
 #include "GUI_Paint.h" // For painting functions (e.g., Paint_NewImage)
 #include "ImageResources.h"
 #include "ImageResources.h" // For image-related data
+#define LOG_MODULE LOG_MOD_FLASH
 #include "debug.h"
 #include "flash.h"
 #include "fonts.h" // Fonts, falls nicht via GUI_Paint.h
@@ -174,7 +175,7 @@ bool weathermap_flash_write_image_2bpp(const uint8_t *packed_data, size_t packed
         return false;
     if ((WEATHERMAP_IMG_FLASH_OFFSET + sizeof(weathermap_image_header_t) + packed_len) >
         (CONFIG_FLASH_OFFSET + 0x19000)) {
-        debug_log_with_color(COLOR_RED, "[WMAP] Image too large for reserved flash\n");
+        dlog("[WMAP] Image too large for reserved flash\n");
         return false;
     }
 
@@ -625,12 +626,12 @@ void flash_log_status(void) {
 
 bool save_uploaded_logo_to_flash(const uint8_t *data, size_t len) {
     if (len < 18) {
-        debug_log_with_color(COLOR_RED, "Logo upload failed: data too short (%d bytes)\n", len);
+        dlog("Logo upload failed: data too short (%d bytes)\n", len);
         return false;
     }
 
     if (memcmp(data, "LOGO", 4) != 0) {
-        debug_log_with_color(COLOR_RED, "Logo upload failed: invalid magic header\n");
+        dlog("Logo upload failed: invalid magic header\n");
         return false;
     }
 
@@ -640,19 +641,16 @@ bool save_uploaded_logo_to_flash(const uint8_t *data, size_t len) {
     size_t expected = datalen + 18;
 
     if (expected != len) {
-        debug_log_with_color(COLOR_RED, "Logo upload failed: datalen mismatch (%d + 18 != %d)\n",
-                             datalen, len);
+        dlog("Logo upload failed: datalen mismatch (%d + 18 != %d)\n", datalen, len);
         return false;
     }
 
     if (len > LOGO_FLASH_SIZE) {
-        debug_log_with_color(COLOR_RED, "Logo upload failed: file too large (%d > %d bytes)\n", len,
-                             LOGO_FLASH_SIZE);
+        dlog("Logo upload failed: file too large (%d > %d bytes)\n", len, LOGO_FLASH_SIZE);
         return false;
     }
 
-    debug_log_with_color(COLOR_GREEN, "Logo upload OK: %dx%d px, %d bytes total\n", width, height,
-                         len);
+    dlog("Logo upload OK: %dx%d px, %d bytes total\n", width, height, len);
 
     // optional: round up to 256-byte alignment
     uint8_t padded[LOGO_FLASH_SIZE] = {0};
@@ -663,7 +661,7 @@ bool save_uploaded_logo_to_flash(const uint8_t *data, size_t len) {
     flash_range_program(LOGO_FLASH_OFFSET, padded, LOGO_FLASH_SIZE);
     restore_interrupts(ints);
 
-    debug_log_with_color(COLOR_YELLOW, "Logo written to Flash at offset 0x%X\n", LOGO_FLASH_OFFSET);
+    dlog("Logo written to Flash at offset 0x%X\n", LOGO_FLASH_OFFSET);
     return true;
 }
 
@@ -806,25 +804,23 @@ bool load_weathermap_config(weathermap_config_t *out_config) {
 
     uint32_t expected_crc = calc_crc32(&out_config->data, sizeof(weathermap_config_data_t));
     if (expected_crc != out_config->crc32) {
-        debug_log_with_color(COLOR_YELLOW, "[WMAP CONFIG] CRC mismatch\n");
+        dlog("[WMAP CONFIG] CRC mismatch\n");
         return false;
     }
     if (out_config->data.flags != WEATHERMAP_CONFIG_VERSION) {
-        debug_log_with_color(COLOR_YELLOW, "[WMAP CONFIG] Version mismatch (0x%08X)\n",
-                             out_config->data.flags);
+        dlog("[WMAP CONFIG] Version mismatch (0x%08X)\n", out_config->data.flags);
         return false;
     }
     if ((out_config->data.center_lat == 0.0 && out_config->data.center_lon == 0.0) ||
         !isfinite(out_config->data.center_lat) || !isfinite(out_config->data.center_lon) ||
         out_config->data.half_width_m <= 0.0 || !isfinite(out_config->data.half_width_m)) {
-        debug_log_with_color(COLOR_YELLOW,
-                             "[WMAP CONFIG] Invalid values (lat=%.6f lon=%.6f half=%.2f)\n",
-                             out_config->data.center_lat, out_config->data.center_lon,
-                             out_config->data.half_width_m);
+        dlog("[WMAP CONFIG] Invalid values (lat=%.6f lon=%.6f half=%.2f)\n",
+             out_config->data.center_lat, out_config->data.center_lon,
+             out_config->data.half_width_m);
         return false;
     }
-    debug_log("[WMAP CONFIG] Loaded lat=%.6f lon=%.6f half=%.2f\n", out_config->data.center_lat,
-              out_config->data.center_lon, out_config->data.half_width_m);
+    dlog("[WMAP CONFIG] Loaded lat=%.6f lon=%.6f half=%.2f\n", out_config->data.center_lat,
+         out_config->data.center_lon, out_config->data.half_width_m);
     return true;
 }
 
@@ -990,7 +986,7 @@ static bool flash_mark_firmware_valid(uint32_t slot_offset) {
     flash_range_program(slot_offset, sector_buf, FLASH_SECTOR_SIZE);
     restore_interrupts(ints);
 
-    debug_log("[OTA] Slot at 0x%08X marked valid (v=%.*s)\n", slot_offset,
-              (int)sizeof(hdr->git_version), hdr->git_version);
+    dlog("[OTA] Slot at 0x%08X marked valid (v=%.*s)\n", slot_offset, (int)sizeof(hdr->git_version),
+         hdr->git_version);
     return true;
 }

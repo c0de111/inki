@@ -29,8 +29,7 @@ void epaper_draw_subimage(uint8_t *buffer, const SubImage *sub_image, int x, int
         break;
 
     default:
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n",
-                             device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
         return;
     }
 
@@ -194,8 +193,7 @@ void epaper_draw_firmware_info(float battery_voltage) {
         break;
 
     default:
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n",
-                             device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
         return;
     }
 }

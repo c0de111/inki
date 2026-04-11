@@ -1,4 +1,5 @@
 #include "boot_input.h"
+#define LOG_MODULE LOG_MOD_BOOT
 #include "debug.h"
 #include "flash.h"
 #include "hardware/gpio.h"
@@ -9,9 +10,11 @@
 #include <stdio.h>
 #include <string.h>
 
-// Module state — read by telemetry and NFC text renderer via extern
+// Module state — read by telemetry and NFC renderers via extern
 const char *wake_source = "unknown";
 char nfc_text_buf[ST25_TEXT_MAX_LEN + 1] = "";
+uint8_t nfc_image_buf[ST25_IMAGE_BYTES] = {0};
+char nfc_booking_email[64] = "";
 static char wake_source_buf[32];
 
 static int read_pushbuttons(void) {
@@ -61,12 +64,15 @@ static st25_boot_result_t read_nfc(void) {
         sleep_ms(200);
         st25_save_processed_nonce(st25.req.nonce);
         if (!st25_clear_request()) {
-            debug_log_with_color(COLOR_RED, "[ST25] early clear failed!\n");
+            dlog("[ST25] early clear failed!\n");
         }
 
-        // Read NFC text payload if text opcode
         if (st25.req.opcode == ST25_OPCODE_TEXT) {
             st25_read_text(nfc_text_buf, sizeof(nfc_text_buf));
+        } else if (st25.req.opcode == ST25_OPCODE_DRAW_IMAGE) {
+            st25_read_image(nfc_image_buf, sizeof(nfc_image_buf));
+        } else if (st25.req.opcode == ST25_OPCODE_BOOK_SEAT) {
+            st25_read_text(nfc_booking_email, sizeof(nfc_booking_email));
         }
     }
 

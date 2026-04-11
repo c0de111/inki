@@ -6,7 +6,6 @@
 #include "lwip/ip_addr.h"
 #include "lwip/pbuf.h"
 #include "rtc.h"
-#include "wifi.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -82,6 +81,7 @@ typedef struct {
 
     // Error tracking
     err_t last_error;
+    bool transfer_was_successful;
 
 } http_session_t;
 
@@ -94,8 +94,6 @@ typedef enum {
     HTTP_ERROR_INVALID_RESPONSE,
     HTTP_ERROR_BUFFER_OVERFLOW
 } http_result_t;
-
-// WifiResult type is defined in wifi.h
 
 // === Public API ===
 
@@ -112,6 +110,16 @@ http_request_async(const ip_addr_t *server_ip, uint16_t port, const char *reques
 http_result_t http_request_async_count_only(
     const ip_addr_t *server_ip, uint16_t port, const char *request_data,
     void (*callback)(const char *body, size_t length, bool success, void *arg), void *callback_arg);
+
+// Synchronous HTTP request: dispatch + poll until completion or timeout.
+// Invokes the registered data callback (set_data_callback) on body receipt.
+// timeout_ms <= 0 uses 5000 ms. Returns true on success.
+bool http_request_sync(const ip_addr_t *server_ip, uint16_t port, const char *request,
+                       int timeout_ms);
+
+// Same as http_request_sync but suppresses body storage (count-only mode).
+bool http_request_sync_count_only(const ip_addr_t *server_ip, uint16_t port, const char *request,
+                                  int timeout_ms);
 
 // Streaming request: does not store body; calls header/data/complete callbacks as data arrives.
 http_result_t
@@ -133,33 +141,6 @@ void set_data_callback(data_callback_fn callback, void *arg);
 
 // Invoke the registered data callback from use-case request chains (e.g. Homematic sequential)
 void http_invoke_data_callback(const char *data, size_t length, void *arg);
-
-// --- Sync operation control (for use-case run() implementations) ---
-
-// Reset sync flags before starting a request
-void http_sync_reset(void);
-
-// Check sync status (used in poll loops)
-bool http_sync_is_complete(void);
-bool http_sync_is_success(void);
-
-// Signal completion (used by async callbacks when a request chain finishes)
-void http_sync_signal(bool success);
-
-// Standard HTTP completion handler: sets sync flags, calls registered data_callback.
-// Pass as completion_callback to http_request_async for standard single-request patterns.
-void http_default_completion(const char *body, size_t length, bool success, void *arg);
-
-// Register a callback to be called after a TCP connection is fully closed.
-// Used by multi-request chains (Homematic sequential engine) to fire next request.
-void http_set_after_close(void (*cb)(void *), void *arg);
-
-// --- Shared run() helper ---
-
-// Generic wifi+HTTP lifecycle: connect, make_request, poll, telemetry, cleanup.
-// Returns WIFI_SUCCESS, WIFI_ERROR_CONNECTION, or WIFI_ERROR_SERVER.
-WifiResult http_run_with_wifi(bool (*make_request)(void), float battery_voltage,
-                              float coin_cell_voltage);
 
 // Returns the server time (UTC) extracted from the last HTTP Date header.
 // Returns true if a valid Date header was parsed, false otherwise.

@@ -26,5 +26,6 @@ extern const struct page_def page_dnd;
 extern const struct page_def page_decision_maker;
 extern const struct page_def page_device_info;
 extern const struct page_def page_nfc_text;
+extern const struct page_def page_nfc_image;
 extern const struct page_def page_wifi_setup;
 extern const struct page_def page_placeholder;

@@ -10,6 +10,7 @@ typedef struct {
     bool is_available;
     char user_email[64]; // empty if available
     char desk_name[32];  // "Desk 3", "Platz 1", etc.
+    char space_id[64];   // UUID from server, used for booking
 } seat_info_t;
 
 extern seat_info_t seatsurfing_data[SEATSURFING_MAX_SEATS];

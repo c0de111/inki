@@ -1,8 +1,11 @@
 #include "inki_monitor.h"
 
+#define LOG_MODULE LOG_MOD_MONITOR
+#include "boot_input.h"
 #include "debug.h"
 #include "flash.h"
 #include "http_client.h"
+#include "sensors.h"
 #include "version.h"
 
 #include "hardware/watchdog.h"
@@ -18,18 +21,6 @@
 #define INKI_MONITOR_TIMEOUT_MS_MAX 10000
 #define INKI_MONITOR_HOST_BUFSIZE TELEMETRY_HOST_MAX_LEN
 #define INKI_MONITOR_HTTP_PATH "/api/v1/telemetry"
-
-static volatile bool g_inki_monitor_done = false;
-static volatile bool g_inki_monitor_success = false;
-
-static void inki_monitor_completion_callback(const char *body, size_t length, bool success,
-                                             void *arg) {
-    (void)body;
-    (void)length;
-    (void)arg;
-    g_inki_monitor_done = true;
-    g_inki_monitor_success = success;
-}
 
 static const char *inki_monitor_use_case_name(void) {
 #ifdef USE_CASE_SEATSURFING
@@ -124,7 +115,7 @@ static bool inki_monitor_try_read_rssi(int32_t *out_rssi_dbm) {
     return ok;
 }
 
-bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
+static bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
     if (!sample) {
         return false;
     }
@@ -145,8 +136,7 @@ bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
     strncpy(server_host, device_config_flash.data.telemetry_host, sizeof(server_host) - 1);
     server_host[sizeof(server_host) - 1] = '\0';
     if (!ipaddr_aton(server_host, &server_ip)) {
-        debug_log_with_color(COLOR_YELLOW,
-                             "[INKI_MON] Invalid telemetry host (V1 expects IPv4 literal)\n");
+        dlog("[INKI_MON] Invalid telemetry host (V1 expects IPv4 literal)\n");
         return false;
     }
 
@@ -162,16 +152,14 @@ bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
         idle_wait_ms += 10;
     }
     if (http_session_is_active()) {
-        debug_log_with_color(COLOR_YELLOW,
-                             "[INKI_MON] HTTP session still active, skipping telemetry.\n");
+        dlog("[INKI_MON] HTTP session still active, skipping telemetry.\n");
         return false;
     }
 
     uint8_t mac[6] = {0};
     bool have_mac = inki_monitor_read_sta_mac(mac);
     if (!have_mac) {
-        debug_log_with_color(COLOR_YELLOW,
-                             "[INKI_MON] Failed to read STA MAC, using zeros for device_id.\n");
+        dlog("[INKI_MON] Failed to read STA MAC, using zeros for device_id.\n");
     }
 
     char device_id[sizeof("inki-") + 12] = {0};
@@ -240,7 +228,7 @@ bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
                  (double)sample->coin_cell_v, (double)sample->pico_temp_c);
 
     if (json_len <= 0 || (size_t)json_len >= sizeof(json_body)) {
-        debug_log_with_color(COLOR_YELLOW, "[INKI_MON] JSON body build failed/truncated.\n");
+        dlog("[INKI_MON] JSON body build failed/truncated.\n");
         return false;
     }
 
@@ -257,42 +245,35 @@ bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
                            server_host, (unsigned)server_port,
                            device_config_flash.data.telemetry_token, json_len, json_body);
     if (req_len <= 0 || (size_t)req_len >= sizeof(request)) {
-        debug_log_with_color(COLOR_YELLOW, "[INKI_MON] HTTP request build failed/truncated.\n");
+        dlog("[INKI_MON] HTTP request build failed/truncated.\n");
         return false;
     }
 
-    g_inki_monitor_done = false;
-    g_inki_monitor_success = false;
-
-    http_result_t result = http_request_async_count_only(&server_ip, server_port, request,
-                                                         inki_monitor_completion_callback, NULL);
-    if (result != HTTP_SUCCESS) {
-        debug_log_with_color(COLOR_YELLOW, "[INKI_MON] HTTP start failed: %d\n", result);
+    if (!http_request_sync_count_only(&server_ip, server_port, request, timeout_ms)) {
+        dlog("[INKI_MON] Telemetry request failed\n");
         return false;
     }
 
-    int waited_ms = 0;
-    while (!g_inki_monitor_done && waited_ms < timeout_ms) {
-        sleep_ms(50);
-        watchdog_update();
-        waited_ms += 50;
-    }
-
-    if (!g_inki_monitor_done) {
-        debug_log_with_color(COLOR_YELLOW, "[INKI_MON] Telemetry timeout after %d ms\n", waited_ms);
-        return false;
-    }
-
-    if (!g_inki_monitor_success) {
-        debug_log_with_color(COLOR_YELLOW, "[INKI_MON] Telemetry request failed\n");
-        return false;
-    }
-
-    debug_log("[INKI_MON] Telemetry sent: %s U=%.3fV->%.3fV coin=%.3fV T=%.1fC telemetry=%lums "
-              "query_ok=%d\n",
-              device_id, (double)sample->battery_before_wifi_v,
-              (double)sample->battery_after_wifi_v, (double)sample->coin_cell_v,
-              (double)sample->pico_temp_c, (unsigned long)sample->telemetry_send_elapsed_ms,
-              sample->query_ok ? 1 : 0);
+    dlog("[INKI_MON] Telemetry sent: %s U=%.3fV->%.3fV coin=%.3fV T=%.1fC telemetry=%lums "
+         "query_ok=%d\n",
+         device_id, (double)sample->battery_before_wifi_v, (double)sample->battery_after_wifi_v,
+         (double)sample->coin_cell_v, (double)sample->pico_temp_c,
+         (unsigned long)sample->telemetry_send_elapsed_ms, sample->query_ok ? 1 : 0);
     return true;
+}
+
+void inki_monitor_send_telemetry(float battery_before_v, float coin_cell_v, bool query_ok) {
+    const char *label =
+        device_config_flash.data.roomname[0] ? device_config_flash.data.roomname : NULL;
+    inki_monitor_sample_t sample = {
+        .battery_before_wifi_v = battery_before_v,
+        .battery_after_wifi_v = read_battery_voltage(device_config_flash.data.conversion_factor),
+        .coin_cell_v = coin_cell_v,
+        .pico_temp_c = read_onchip_temperature_c(),
+        .telemetry_send_elapsed_ms = (uint32_t)to_ms_since_boot(get_absolute_time()),
+        .query_ok = query_ok,
+        .label = label,
+        .wake_source = wake_source,
+    };
+    (void)inki_monitor_send_sample(&sample);
 }

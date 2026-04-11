@@ -1,4 +1,5 @@
 #include "weathermap/client.h"
+#define LOG_MODULE LOG_MOD_WEATHERMAP
 #include "debug.h"
 #include "epaper_pages_shared.h"
 #include "flash.h"
@@ -6,11 +7,10 @@
 #include "hardware/watchdog.h"
 #include "http_client.h"
 #include "lwip/ip_addr.h"
-#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 #include "png_stream.h"
 #include "third_party/GUI/GUI_Paint.h"
-#include "wifi.h"
+#include "tls_trust_store.h"
 
 #include "st25_io.h"
 #include "use_case.h"
@@ -228,7 +228,7 @@ bool weathermap_fetch_png(uint8_t *out_buf, size_t max_len, size_t *out_len) {
     char req[512];
     int n = bkg_build_http_get(req, sizeof(req));
     if (n <= 0 || (size_t)n >= sizeof(req)) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Request build failed\n");
+        dlog("[WEATHERMAP] Request build failed\n");
         return false;
     }
 
@@ -240,7 +240,7 @@ bool weathermap_fetch_png(uint8_t *out_buf, size_t max_len, size_t *out_len) {
 
     http_result_t r = http_request_async(&ip, BKG_PORT, req, fetch_complete_cb, &ctx);
     if (r != HTTP_SUCCESS) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] http_request_async failed: %d\n", r);
+        dlog("[WEATHERMAP] http_request_async failed: %d\n", r);
         return false;
     }
 
@@ -254,12 +254,12 @@ bool weathermap_fetch_png(uint8_t *out_buf, size_t max_len, size_t *out_len) {
 
         // Log progress every 1 second
         if (waits % 100 == 0) {
-            debug_log("[WEATHERMAP] Still waiting... (%ds elapsed)\n", waits / 100);
+            dlog("[WEATHERMAP] Still waiting... (%ds elapsed)\n", waits / 100);
         }
     }
 
     if (!ctx.complete || !ctx.success) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Fetch failed or timed out\n");
+        dlog("[WEATHERMAP] Fetch failed or timed out\n");
         return false;
     }
 
@@ -278,7 +278,7 @@ typedef struct {
 static void stream_header_cb(const char *header, size_t header_len, int status_code,
                              int content_length, void *arg) {
     stage_ctx_t *sctx = (stage_ctx_t *)arg;
-    debug_log("[WMAP] HTTP status: %d, Content-Length: %d\n", status_code, content_length);
+    dlog("[WMAP] HTTP status: %d, Content-Length: %d\n", status_code, content_length);
     if (status_code >= 200 && status_code < 300) {
         wmap_staging_begin();
         sctx->success = true;
@@ -304,7 +304,7 @@ static void stream_data_cb(const uint8_t *data, size_t len, void *arg) {
     } else {
         sctx->total += len;
         if ((sctx->total & 0x7FFF) == 0) { // log roughly every 32 KB boundary
-            debug_log("[WMAP] Streamed %u bytes...\n", (unsigned)sctx->total);
+            dlog("[WMAP] Streamed %u bytes...\n", (unsigned)sctx->total);
         }
     }
 }
@@ -357,17 +357,15 @@ static bool geodata_fetch_and_store_inline(const ip_addr_t *ip, uint16_t port, c
         }
 
         if (absolute_time_diff_us(last_progress, get_absolute_time()) / 1000 > idle_abort_ms) {
-            debug_log_with_color(COLOR_RED,
-                                 "[GEODATA] Fetch stalled: %u bytes, no progress for %u ms\n",
-                                 (unsigned)sctx.total, idle_abort_ms);
+            dlog("[GEODATA] Fetch stalled: %u bytes, no progress for %u ms\n", (unsigned)sctx.total,
+                 idle_abort_ms);
             failure_reason = "stalled";
             break;
         }
 
         if (absolute_time_diff_us(start, get_absolute_time()) / 1000 > hard_abort_ms) {
-            debug_log_with_color(COLOR_RED,
-                                 "[GEODATA] Fetch timed out after %u ms (received %u bytes)\n",
-                                 hard_abort_ms, (unsigned)sctx.total);
+            dlog("[GEODATA] Fetch timed out after %u ms (received %u bytes)\n", hard_abort_ms,
+                 (unsigned)sctx.total);
             failure_reason = "timeout";
             break;
         }
@@ -423,7 +421,7 @@ bool weathermap_fetch_count(size_t *out_len) {
         watchdog_update();
         waits++;
         if (waits % 100 == 0) {
-            debug_log("[WEATHERMAP] Count fetch still waiting... (%ds elapsed)\n", waits / 100);
+            dlog("[WEATHERMAP] Count fetch still waiting... (%ds elapsed)\n", waits / 100);
         }
     }
     if (!ctx.complete || !ctx.success)
@@ -465,14 +463,13 @@ bool weathermap_render_from_flash(void) {
     uint32_t staged_bytes = 0;
     if (!get_weathermap_meta(&staged_bytes) || staged_bytes < 64) {
         if (s_geodata_status.valid && !s_geodata_status.success) {
-            debug_log_with_color(COLOR_YELLOW,
-                                 "[WEATHERMAP] Rendering fallback: %s after %u bytes\n",
-                                 s_geodata_status.reason[0] ? s_geodata_status.reason : "error",
-                                 (unsigned)s_geodata_status.bytes);
+            dlog("[WEATHERMAP] Rendering fallback: %s after %u bytes\n",
+                 s_geodata_status.reason[0] ? s_geodata_status.reason : "error",
+                 (unsigned)s_geodata_status.bytes);
             weathermap_draw_error_page();
             return true;
         }
-        debug_log_with_color(COLOR_YELLOW, "[WEATHERMAP] No staged PNG marker; cannot draw.\n");
+        dlog("[WEATHERMAP] No staged PNG marker; cannot draw.\n");
         return false;
     }
     const uint8_t *png = (const uint8_t *)FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
@@ -544,7 +541,7 @@ bool weathermap_render_from_flash(void) {
         Paint_DrawString_EN((UWORD)x0, (UWORD)ty, label, (sFONT *)f, GRAY4, GRAY1);
     }
     if (!ok) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] png_stream_draw_to_paint failed.\n");
+        dlog("[WEATHERMAP] png_stream_draw_to_paint failed.\n");
     }
     return ok;
 }
@@ -561,18 +558,7 @@ static void geodata_fetch(void) {
     }
 
     // Always refetch on boot for now (later: schedule basemap vs radar differently)
-    debug_log_with_color(COLOR_BOLD_YELLOW, "[GEODATA] Boot fetch enabled — fetching now.\n");
-
-    // Connect Wi-Fi (STA)
-    WifiResult w = wifi_connect();
-    if (w != WIFI_SUCCESS) {
-        debug_log_with_color(COLOR_RED, "[WEATHERMAP] Wi-Fi connect failed: %d\n", w);
-        return;
-    }
-
-    // Now create TLS config after Wi-Fi is connected (pico-examples pattern)
-    extern void tls_create_config_after_wifi(void);
-    tls_create_config_after_wifi();
+    dlog("[GEODATA] Boot fetch enabled — fetching now.\n");
 
     // Try DWD radar first if IP is configured; else fall back to BKG basemap
     char req[512];
@@ -584,49 +570,41 @@ static void geodata_fetch(void) {
         if (n > 0 && (size_t)n < sizeof(req)) {
             ip_addr_t dwd_ip;
             IP4_ADDR(&dwd_ip, DWD_IP0, DWD_IP1, DWD_IP2, DWD_IP3);
-            debug_log("[GEODATA] HTTPS request (radar) to %s (%d.%d.%d.%d):\n%.*s\n", DWD_HOST,
-                      DWD_IP0, DWD_IP1, DWD_IP2, DWD_IP3, n, req);
+            dlog("[GEODATA] HTTPS request (radar) to %s (%d.%d.%d.%d):\n%.*s\n", DWD_HOST, DWD_IP0,
+                 DWD_IP1, DWD_IP2, DWD_IP3, n, req);
             ok = geodata_fetch_and_store_inline(&dwd_ip, DWD_PORT, req, &count);
         }
         if (!ok) {
-            debug_log_with_color(
-                COLOR_YELLOW,
-                "[GEODATA] DWD fetch failed or not configured — falling back to BKG basemap.\n");
+            dlog("[GEODATA] DWD fetch failed or not configured — falling back to BKG basemap.\n");
         }
     }
 
     if (!ok) {
         int n2 = bkg_build_http_get(req, sizeof(req));
         if (n2 <= 0 || (size_t)n2 >= sizeof(req)) {
-            debug_log_with_color(COLOR_RED, "[GEODATA] BKG request build failed\n");
-            cyw43_arch_deinit();
+            dlog("[GEODATA] BKG request build failed\n");
             return;
         }
         ip_addr_t bkg_ip;
         IP4_ADDR(&bkg_ip, BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3);
-        debug_log("[GEODATA] HTTPS request (basemap) to %s (%d.%d.%d.%d):\n%.*s\n", BKG_HOST,
-                  BKG_IP0, BKG_IP1, BKG_IP2, BKG_IP3, n2, req);
+        dlog("[GEODATA] HTTPS request (basemap) to %s (%d.%d.%d.%d):\n%.*s\n", BKG_HOST, BKG_IP0,
+             BKG_IP1, BKG_IP2, BKG_IP3, n2, req);
         ok = geodata_fetch_and_store_inline(&bkg_ip, BKG_PORT, req, &count);
     }
     if (!ok) {
-        debug_log_with_color(COLOR_RED, "[GEODATA] Fetch failed\n");
-        wifi_log_rssi();
-        cyw43_arch_deinit();
+        dlog("[GEODATA] Fetch failed\n");
         return;
     }
 
-    debug_log_with_color(COLOR_GREEN, "[GEODATA] TLS fetch OK, bytes=%u\n", (unsigned)count);
+    dlog("[GEODATA] TLS fetch OK, bytes=%u\n", (unsigned)count);
     set_weathermap_meta((uint32_t)count);
-    wifi_log_rssi();
-    cyw43_arch_deinit();
 
     // Do not decode to flash here. We will decode and draw directly from slot1 at render time.
     const uint8_t *data = wmap_staging_ptr();
     size_t data_len = wmap_staging_size();
     if (!(data && data_len >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' &&
           data[3] == 'G')) {
-        debug_log_with_color(COLOR_YELLOW,
-                             "[GEODATA] Staged content missing/invalid PNG signature.\n");
+        dlog("[GEODATA] Staged content missing/invalid PNG signature.\n");
     }
 }
 // --- use_case_t: Weathermap page catalog, input map, and export ---
@@ -640,17 +618,15 @@ enum {
     WM_PAGE_DEVICE_INFO,
     WM_PAGE_WIFI_SETUP,
     WM_PAGE_NFC_TEXT,
+    WM_PAGE_NFC_IMAGE,
     WM_PAGE_COUNT
 };
 
 static const page_def_t *wm_pages[] = {
-    [WM_PAGE_WEATHERMAP] = &page_weathermap_main,
-    [WM_PAGE_DND] = &page_dnd,
-    [WM_PAGE_DECISION_MAKER] = &page_decision_maker,
-    [WM_PAGE_DEVICE_INFO] = &page_device_info,
-    [WM_PAGE_WIFI_SETUP] = &page_wifi_setup,
-    [WM_PAGE_NFC_TEXT] = &page_nfc_text,
-    NULL,
+    [WM_PAGE_WEATHERMAP] = &page_weathermap_main,    [WM_PAGE_DND] = &page_dnd,
+    [WM_PAGE_DECISION_MAKER] = &page_decision_maker, [WM_PAGE_DEVICE_INFO] = &page_device_info,
+    [WM_PAGE_WIFI_SETUP] = &page_wifi_setup,         [WM_PAGE_NFC_TEXT] = &page_nfc_text,
+    [WM_PAGE_NFC_IMAGE] = &page_nfc_image,           NULL,
 };
 
 static const input_map_entry_t wm_input_map[] = {
@@ -666,41 +642,37 @@ static const input_map_entry_t wm_input_map[] = {
     {INPUT_NFC(ST25_OPCODE_REFRESH), WM_PAGE_WEATHERMAP},
     {INPUT_NFC(ST25_OPCODE_PAGE_2), WM_PAGE_DECISION_MAKER},
     {INPUT_NFC(ST25_OPCODE_TEXT), WM_PAGE_NFC_TEXT},
+    {INPUT_NFC(ST25_OPCODE_DRAW_IMAGE), WM_PAGE_NFC_IMAGE},
     {INPUT_BUTTON(16), WM_PAGE_NFC_TEXT},
     {INPUT_MAP_END, 0},
 };
 
 // --- Lifecycle: run (fetch) and render ---
 
-static WifiResult wm_last_wifi_result;
 static bool wm_fetch_ok;
 
-static void *wm_run(float battery_voltage, float coin_cell_voltage) {
-    (void)battery_voltage;
-    (void)coin_cell_voltage;
-    // geodata_fetch manages its own wifi connect/TLS/disconnect lifecycle
+static void *wm_run(void) {
+    tls_create_config_after_wifi();
     wm_fetch_ok = false;
     geodata_fetch();
-    // Check if staging area has valid PNG data
     const uint8_t *data = wmap_staging_ptr();
     size_t data_len = wmap_staging_size();
     if (data && data_len >= 8 && data[0] == 0x89 && data[1] == 'P') {
         wm_fetch_ok = true;
-        wm_last_wifi_result = WIFI_SUCCESS;
         return &wm_fetch_ok;
     }
-    wm_last_wifi_result = WIFI_ERROR_SERVER;
     return NULL;
 }
 
 static void wm_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+    if (page == PAGE_WIFI_ERROR) {
+        render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
+                          "Please check the WiFi settings.");
+        return;
+    }
     if (!data && page >= 0 && wm_pages[page] && wm_pages[page]->needs_wifi) {
-        if (wm_last_wifi_result == WIFI_ERROR_CONNECTION)
-            render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                              "Please check the WiFi settings.");
-        else
-            render_page_error(image, "Fetch Error!", "Unable to load map data",
-                              "Please check the configuration.");
+        render_page_error(image, "Fetch Error!", "Unable to load map data",
+                          "Please check the configuration.");
         return;
     }
 

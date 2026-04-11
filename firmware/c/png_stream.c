@@ -1,4 +1,5 @@
 #include "png_stream.h"
+#define LOG_MODULE LOG_MOD_PNG
 #include "debug.h"
 #include "flash.h"
 // Include full miniz header to ensure mz_size_t and tinfl types are defined
@@ -51,7 +52,7 @@ typedef struct {
 
 static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
     if (!png || len < 8 || memcmp(png, PNG_SIG, 8) != 0) {
-        debug_log_with_color(COLOR_RED, "[PNG] Bad signature\n");
+        dlog("[PNG] Bad signature\n");
         return false;
     }
     memset(out, 0, sizeof(*out));
@@ -60,7 +61,7 @@ static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
     while (off + 12 <= len) {
         uint32_t clen = be32(png + off);
         if (off + 12 + clen > len) {
-            debug_log_with_color(COLOR_RED, "[PNG] Truncated chunk\n");
+            dlog("[PNG] Truncated chunk\n");
             return false;
         }
         const uint8_t *ctype = png + off + 4;
@@ -68,7 +69,7 @@ static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
         // const uint8_t* ccrc  = png + off + 8 + clen;
         if (ctype[0] == 'I' && ctype[1] == 'H' && ctype[2] == 'D' && ctype[3] == 'R') {
             if (clen < 13) {
-                debug_log_with_color(COLOR_RED, "[PNG] IHDR short\n");
+                dlog("[PNG] IHDR short\n");
                 return false;
             }
             out->width = be32(cdata);
@@ -80,9 +81,8 @@ static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
             out->interlace = cdata[12];
             if (out->bit_depth != 8 || out->compression != 0 || out->filter != 0 ||
                 out->interlace != 0) {
-                debug_log_with_color(
-                    COLOR_RED, "[PNG] Unsupported IHDR: depth=%u comp=%u filter=%u interlace=%u\n",
-                    out->bit_depth, out->compression, out->filter, out->interlace);
+                dlog("[PNG] Unsupported IHDR: depth=%u comp=%u filter=%u interlace=%u\n",
+                     out->bit_depth, out->compression, out->filter, out->interlace);
                 return false;
             }
             switch (out->color_type) {
@@ -99,25 +99,24 @@ static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
                 out->bpp = 4;
                 break; // RGBA
             default:
-                debug_log_with_color(COLOR_RED, "[PNG] Unsupported color type: %u\n",
-                                     out->color_type);
+                dlog("[PNG] Unsupported color type: %u\n", out->color_type);
                 return false;
             }
             saw_IHDR = true;
         } else if (ctype[0] == 'P' && ctype[1] == 'L' && ctype[2] == 'T' && ctype[3] == 'E') {
             if (!saw_IHDR) {
-                debug_log_with_color(COLOR_RED, "[PNG] PLTE before IHDR\n");
+                dlog("[PNG] PLTE before IHDR\n");
                 return false;
             }
             if (clen == 0 || (clen % 3) != 0 || clen > sizeof(out->palette)) {
-                debug_log_with_color(COLOR_RED, "[PNG] Bad PLTE len=%u\n", (unsigned)clen);
+                dlog("[PNG] Bad PLTE len=%u\n", (unsigned)clen);
                 return false;
             }
             memcpy(out->palette, cdata, clen);
             out->palette_len = (int)(clen / 3u);
         } else if (ctype[0] == 'I' && ctype[1] == 'D' && ctype[2] == 'A' && ctype[3] == 'T') {
             if (!saw_IHDR) {
-                debug_log_with_color(COLOR_RED, "[PNG] IDAT before IHDR\n");
+                dlog("[PNG] IDAT before IHDR\n");
                 return false;
             }
             if (!out->idat_first)
@@ -130,15 +129,15 @@ static bool parse_png_header(const uint8_t *png, size_t len, png_info_t *out) {
         off += 12 + clen;
     }
     if (!saw_IHDR) {
-        debug_log_with_color(COLOR_RED, "[PNG] Missing IHDR\n");
+        dlog("[PNG] Missing IHDR\n");
         return false;
     }
     if (!saw_IEND) {
-        debug_log_with_color(COLOR_RED, "[PNG] Missing IEND\n");
+        dlog("[PNG] Missing IEND\n");
         return false;
     }
     if (out->color_type == 3 && out->palette_len <= 0) {
-        debug_log_with_color(COLOR_RED, "[PNG] Indexed image without PLTE\n");
+        dlog("[PNG] Indexed image without PLTE\n");
         return false;
     }
     return true;
@@ -270,7 +269,7 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
         return false;
 
     if (!weathermap_flash_begin_image((uint16_t)info.width, (uint16_t)info.height)) {
-        debug_log_with_color(COLOR_RED, "[PNG] Failed to begin flash image\n");
+        dlog("[PNG] Failed to begin flash image\n");
         return false;
     }
 
@@ -278,7 +277,7 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
     uint8_t *prev = (uint8_t *)malloc(1 + row_bytes);
     uint8_t *cur = (uint8_t *)malloc(1 + row_bytes);
     if (!prev || !cur) {
-        debug_log_with_color(COLOR_RED, "[PNG] OOM rows\n");
+        dlog("[PNG] OOM rows\n");
         if (prev)
             free(prev);
         if (cur)
@@ -318,8 +317,7 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
                     idat_reader_pull(&reader, &in_ptr, &in_avail);
                     if (!in_ptr || in_avail == 0) {
                         // No more input and no output: error
-                        debug_log_with_color(COLOR_RED, "[PNG] Unexpected end of IDAT at row %u\n",
-                                             (unsigned)y);
+                        dlog("[PNG] Unexpected end of IDAT at row %u\n", (unsigned)y);
                         free(prev);
                         free(cur);
                         return false;
@@ -334,9 +332,7 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
                     produced = (size_t)out_sz;
                     if (produced == 0) {
                         if (st == TINFL_STATUS_DONE) {
-                            debug_log_with_color(COLOR_RED,
-                                                 "[PNG] Inflator finished early at row %u\n",
-                                                 (unsigned)y);
+                            dlog("[PNG] Inflator finished early at row %u\n", (unsigned)y);
                             free(prev);
                             free(cur);
                             return false;
@@ -425,7 +421,7 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
             free(packed);
             free(prev);
             free(cur);
-            debug_log_with_color(COLOR_RED, "[PNG] Flash append failed at row %u\n", (unsigned)y);
+            dlog("[PNG] Flash append failed at row %u\n", (unsigned)y);
             return false;
         }
         free(packed);
@@ -438,10 +434,10 @@ bool png_stream_decode_to_flash_from_xip(const uint8_t *png, size_t png_len) {
     free(prev);
     free(cur);
     if (!weathermap_flash_end_image()) {
-        debug_log_with_color(COLOR_RED, "[PNG] Flash finalize failed\n");
+        dlog("[PNG] Flash finalize failed\n");
         return false;
     }
-    debug_log_with_color(COLOR_GREEN, "[PNG] Decode complete and stored to flash\n");
+    dlog("[PNG] Decode complete and stored to flash\n");
     return true;
 }
 

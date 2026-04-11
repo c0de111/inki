@@ -14,7 +14,7 @@
 uint8_t *epaper_init(void) {
 
     if (device_config_flash.data.epapertype == EPAPER_NONE) {
-        debug_log("No ePaper configured for this room.\n");
+        dlog("No ePaper configured for this room.\n");
         return NULL;
     }
 
@@ -22,7 +22,7 @@ uint8_t *epaper_init(void) {
 
     // Initialize the hardware module for the ePaper
     if (DEV_Module_Init() != 0) {
-        debug_log("Error initializing ePaper hardware module.\n");
+        dlog("Error initializing ePaper hardware module.\n");
         return NULL;
     }
 
@@ -34,7 +34,7 @@ uint8_t *epaper_init(void) {
     // Initialize and clear the ePaper based on the configured type
     switch (device_config_flash.data.epapertype) {
     case EPAPER_WAVESHARE_7IN5_V2:
-        debug_log("Initializing Waveshare 7.5-inch V2 ePaper...\n");
+        dlog("Initializing Waveshare 7.5-inch V2 ePaper...\n");
 #ifdef USE_CASE_WEATHERMAP
         EPD_7IN5_V2_Init_4Gray();
         EPD_7IN5_V2_Clear(); // Clear is needed to reset display content
@@ -51,7 +51,7 @@ uint8_t *epaper_init(void) {
         break;
 
     case EPAPER_WAVESHARE_4IN2_V2:
-        debug_log("Initializing Waveshare 4.2-inch ePaper...\n");
+        dlog("Initializing Waveshare 4.2-inch ePaper...\n");
 #ifdef USE_CASE_WEATHERMAP
         // Waveshare official pattern: First clear in regular mode, then switch to 4Gray
         EPD_4IN2_V2_Init();
@@ -71,7 +71,7 @@ uint8_t *epaper_init(void) {
         break;
 
     case EPAPER_WAVESHARE_2IN9_V2:
-        debug_log("Initializing Waveshare 2.9-inch V2 ePaper...\n");
+        dlog("Initializing Waveshare 2.9-inch V2 ePaper...\n");
         EPD_2IN9_V2_Init();
         EPD_2IN9_V2_Clear();
         buffer_size =
@@ -80,7 +80,7 @@ uint8_t *epaper_init(void) {
         break;
 
     default:
-        debug_log("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
         hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS); // Re-enable watchdog
         return NULL;
     }
@@ -124,7 +124,7 @@ uint8_t *epaper_init(void) {
 
 void epaper_flush_and_sleep(uint8_t *image) {
     if (image == NULL) {
-        debug_log("No valid image buffer to display. Skipping ePaper operations.\n");
+        dlog("No valid image buffer to display. Skipping ePaper operations.\n");
         return;
     }
 
@@ -153,8 +153,7 @@ void epaper_flush_and_sleep(uint8_t *image) {
         break;
 
     default:
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type: %d\n",
-                             device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
         free(image);
         return;
     }
@@ -178,8 +177,7 @@ void epaper_flush_and_sleep(uint8_t *image) {
         break;
 
     default:
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type during sleep: %d\n",
-                             device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type during sleep: %d\n", device_config_flash.data.epapertype);
         return;
     }
 

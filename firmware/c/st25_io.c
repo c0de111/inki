@@ -1,10 +1,12 @@
 #include "st25_io.h"
 #include "config.h"
+#define LOG_MODULE LOG_MOD_ST25
 #include "debug.h"
 #include "i2c_bus.h"
 #include "st25dv.h"
 
 #include "hardware/i2c.h"
+#include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
 #include <stdio.h>
@@ -141,17 +143,17 @@ static bool configure_wake_gpo(ST25DV_Object_t *st) {
     bool ok = true;
 
     if (write_itpulse_retry(st, ST25DV_302_US, timeout) == NFCTAG_OK) {
-        debug_log("[ST25] GPO pulse: 302 us\n");
+        dlog("[ST25] GPO pulse: 302 us\n");
     } else {
-        debug_log("[ST25] GPO pulse config failed\n");
+        dlog("[ST25] GPO pulse config failed\n");
         ok = false;
     }
 
     const uint16_t wake_conf = (uint16_t)(ST25DV_GPO_ENABLE_MASK | ST25DV_GPO_RFWRITE_MASK);
     if (config_it_retry(st, wake_conf, timeout) == NFCTAG_OK) {
-        debug_log("[ST25] GPO sources: ENABLE + RF_WRITE\n");
+        dlog("[ST25] GPO sources: ENABLE + RF_WRITE\n");
     } else {
-        debug_log("[ST25] GPO source config failed\n");
+        dlog("[ST25] GPO source config failed\n");
         ok = false;
     }
 
@@ -180,8 +182,11 @@ static bool validate_request(const st25_inki_request_t *req) {
         return false;
     if (req->opcode == 0u)
         return false;
-    if (req->duration_min == 0u || req->duration_min > 1440u)
-        return false;
+    /* bytes 6/7 are width/height for DRAW_IMAGE, not duration — skip range check */
+    if (req->opcode != ST25_OPCODE_DRAW_IMAGE) {
+        if (req->duration_min == 0u || req->duration_min > 1440u)
+            return false;
+    }
     if (req->unix_seconds == 0u)
         return false;
     if (req->nonce == 0u)
@@ -208,14 +213,14 @@ st25_boot_result_t st25_boot_check(void) {
         .GetTick = bus_get_tick,
     };
     if (ST25DV_RegisterBusIO(&st25_obj, &io) != NFCTAG_OK) {
-        debug_log("[ST25] RegisterBusIO failed\n");
+        dlog("[ST25] RegisterBusIO failed\n");
         st25_power_off();
         return result;
     }
 
     /* Init driver */
     if (St25Dv_Drv.Init(&st25_obj) != NFCTAG_OK) {
-        debug_log("[ST25] driver init failed\n");
+        dlog("[ST25] driver init failed\n");
         st25_power_off();
         return result;
     }
@@ -223,9 +228,9 @@ st25_boot_result_t st25_boot_check(void) {
     /* Read ICREF */
     uint8_t icref = 0;
     if (St25Dv_Drv.ReadID(&st25_obj, &icref) == NFCTAG_OK) {
-        debug_log("[ST25] ICREF=0x%02X\n", icref);
+        dlog("[ST25] ICREF=0x%02X\n", icref);
     } else {
-        debug_log("[ST25] ReadID failed\n");
+        dlog("[ST25] ReadID failed\n");
         st25_power_off();
         return result;
     }
@@ -239,7 +244,7 @@ st25_boot_result_t st25_boot_check(void) {
         const uint32_t blocks = (uint32_t)mem.Mem_Size + 1u;
         const uint32_t bpb = (uint32_t)mem.BlockSize + 1u;
         const uint32_t total = blocks * bpb;
-        debug_log("[ST25] memory: %lu bytes\n", (unsigned long)total);
+        dlog("[ST25] memory: %lu bytes\n", (unsigned long)total);
 
         /* Request lives in last 16 bytes, aligned to block boundary */
         if (total >= 16u) {
@@ -249,8 +254,7 @@ st25_boot_result_t st25_boot_check(void) {
             if (st25_request_len > 64u) {
                 st25_request_len = 64u;
             }
-            debug_log("[ST25] request slot: addr=0x%04X len=%u\n", st25_request_addr,
-                      st25_request_len);
+            dlog("[ST25] request slot: addr=0x%04X len=%u\n", st25_request_addr, st25_request_len);
         }
     }
 
@@ -258,14 +262,14 @@ st25_boot_result_t st25_boot_check(void) {
     uint8_t it_sts = 0;
     if (ST25DV_ReadITSTStatus_Dyn(&st25_obj, &it_sts) == NFCTAG_OK) {
         result.it_sts = it_sts;
-        debug_log("[ST25] IT_STS_Dyn: 0x%02X\n", it_sts);
+        dlog("[ST25] IT_STS_Dyn: 0x%02X\n", it_sts);
     }
 
     /* Check RF field state */
     ST25DV_EH_CTRL eh = {0};
     if (ST25DV_ReadEHCtrl_Dyn(&st25_obj, &eh) == NFCTAG_OK) {
         result.rf_field_on = (eh.Field_on == ST25DV_ENABLE);
-        debug_log("[ST25] RF field: %s\n", result.rf_field_on ? "ON" : "OFF");
+        dlog("[ST25] RF field: %s\n", result.rf_field_on ? "ON" : "OFF");
     }
 
     /* Read last-processed nonce for stale request deduplication */
@@ -276,7 +280,7 @@ st25_boot_result_t st25_boot_check(void) {
             prev_nonce = (uint32_t)nb[0] | ((uint32_t)nb[1] << 8) | ((uint32_t)nb[2] << 16) |
                          ((uint32_t)nb[3] << 24);
         }
-        debug_log("[ST25] prev_nonce: %lu\n", (unsigned long)prev_nonce);
+        dlog("[ST25] prev_nonce: %lu\n", (unsigned long)prev_nonce);
     }
 
     /* If no RF field and no RF activity flags, there's no phone — skip the
@@ -290,45 +294,51 @@ st25_boot_result_t st25_boot_check(void) {
     }
 
     /* Read request from EEPROM with retries if phone is present. */
-    const int max_attempts = phone_present ? 5 : 1;
+    const int max_attempts = phone_present ? 50 : 1; /* 300ms + 49×200ms ≈ 10s window */
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         if (attempt > 0)
             sleep_ms(200);
+        watchdog_update();
 
         uint8_t req_buf[64] = {0};
         uint16_t read_len = st25_request_len < 64u ? st25_request_len : 64u;
         if (St25Dv_Drv.ReadData(&st25_obj, req_buf, st25_request_addr, read_len) != NFCTAG_OK) {
-            debug_log("[ST25] request read failed\n");
-            break;
+            dlog("[ST25] request read failed (attempt %d)\n", attempt + 1);
+            continue; /* transient NACK during active RF write — keep retrying */
         }
 
         const uint8_t *req16 = &req_buf[read_len >= 16u ? read_len - 16u : 0u];
-        debug_log("[ST25] raw @0x%04X: %02X%02X%02X%02X %02X%02X%02X%02X "
-                  "%02X%02X%02X%02X %02X%02X%02X%02X (attempt %d)\n",
-                  st25_request_addr, req16[0], req16[1], req16[2], req16[3], req16[4], req16[5],
-                  req16[6], req16[7], req16[8], req16[9], req16[10], req16[11], req16[12],
-                  req16[13], req16[14], req16[15], attempt + 1);
+        dlog("[ST25] raw @0x%04X: %02X%02X%02X%02X %02X%02X%02X%02X "
+             "%02X%02X%02X%02X %02X%02X%02X%02X (attempt %d)\n",
+             st25_request_addr, req16[0], req16[1], req16[2], req16[3], req16[4], req16[5],
+             req16[6], req16[7], req16[8], req16[9], req16[10], req16[11], req16[12], req16[13],
+             req16[14], req16[15], attempt + 1);
         if (is_inki_magic(req16)) {
             decode_request(req16, &result.req);
             result.request_valid = validate_request(&result.req);
-            debug_log("[ST25] request: opcode=0x%02X dur=%u unix=%lu nonce=%lu valid=%d "
-                      "(attempt %d)\n",
-                      result.req.opcode, result.req.duration_min,
-                      (unsigned long)result.req.unix_seconds, (unsigned long)result.req.nonce,
-                      result.request_valid, attempt + 1);
+            dlog("[ST25] request: opcode=0x%02X dur=%u unix=%lu nonce=%lu valid=%d "
+                 "(attempt %d)\n",
+                 result.req.opcode, result.req.duration_min, (unsigned long)result.req.unix_seconds,
+                 (unsigned long)result.req.nonce, result.request_valid, attempt + 1);
 
             if (result.request_valid) {
                 if (result.req.nonce == prev_nonce) {
-                    /* Same nonce as last processed request — stale, keep waiting
-                     * for the phone to overwrite with a new request */
-                    debug_log("[ST25] stale request (nonce matches previous), retrying...\n");
+                    dlog("[ST25] stale request (nonce matches previous), retrying...\n");
                     result.request_valid = false;
                     continue;
                 }
                 break;
             }
         } else {
-            debug_log("[ST25] no INKI request in EEPROM (attempt %d)\n", attempt + 1);
+            dlog("[ST25] no INKI request in EEPROM (attempt %d)\n", attempt + 1);
+        }
+
+        /* Phone left mid-write — no point spinning the full 10 s */
+        ST25DV_EH_CTRL eh_check = {0};
+        if (ST25DV_ReadEHCtrl_Dyn(&st25_obj, &eh_check) == NFCTAG_OK &&
+            eh_check.Field_on != ST25DV_ENABLE) {
+            dlog("[ST25] RF field gone after attempt %d, exiting retry loop\n", attempt + 1);
+            break;
         }
     }
 
@@ -353,7 +363,7 @@ int st25_read_text(char *buf, size_t buf_size) {
         read_len = (uint16_t)(buf_size - 1);
 
     if (St25Dv_Drv.ReadData(&st25_obj, (uint8_t *)buf, ST25_TEXT_ADDR, read_len) != NFCTAG_OK) {
-        debug_log("[ST25] text read failed\n");
+        dlog("[ST25] text read failed\n");
         buf[0] = '\0';
         return 0;
     }
@@ -367,8 +377,25 @@ int st25_read_text(char *buf, size_t buf_size) {
     }
     buf[len] = '\0';
 
-    debug_log("[ST25] text read: %d bytes\n", len);
+    dlog("[ST25] text read: %d bytes\n", len);
     return len;
+}
+
+int st25_read_image(uint8_t *buf, size_t buf_size) {
+    if (!st25_initialized || buf_size == 0)
+        return 0;
+
+    uint16_t read_len = ST25_IMAGE_BYTES;
+    if (read_len > (uint16_t)buf_size)
+        read_len = (uint16_t)buf_size;
+
+    if (St25Dv_Drv.ReadData(&st25_obj, buf, ST25_IMAGE_ADDR, read_len) != NFCTAG_OK) {
+        dlog("[ST25] image read failed\n");
+        return 0;
+    }
+
+    dlog("[ST25] image read: %u bytes\n", (unsigned)read_len);
+    return (int)read_len;
 }
 
 bool st25_save_processed_nonce(uint32_t nonce) {
@@ -394,12 +421,12 @@ bool st25_save_processed_nonce(uint32_t nonce) {
     } while ((get_tick() - t0) < timeout);
 
     if (ret != NFCTAG_OK) {
-        debug_log("[ST25] save nonce failed\n");
+        dlog("[ST25] save nonce failed\n");
         return false;
     }
 
     sleep_ms(6);
-    debug_log("[ST25] nonce saved: %lu\n", (unsigned long)nonce);
+    dlog("[ST25] nonce saved: %lu\n", (unsigned long)nonce);
     return true;
 }
 
@@ -429,7 +456,7 @@ bool st25_clear_request(void) {
         } while ((get_tick() - t0) < timeout);
 
         if (ret != NFCTAG_OK) {
-            debug_log("[ST25] clear request failed at offset %u\n", i);
+            dlog("[ST25] clear request failed at offset %u\n", i);
             return false;
         }
     }
@@ -437,6 +464,6 @@ bool st25_clear_request(void) {
     /* Wait for last EEPROM write cycle to complete before caller cuts VCC */
     sleep_ms(6);
 
-    debug_log("[ST25] request cleared\n");
+    dlog("[ST25] request cleared\n");
     return true;
 }

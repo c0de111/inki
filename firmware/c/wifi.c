@@ -7,11 +7,14 @@
  */
 
 #include "wifi.h"
+#define LOG_MODULE LOG_MOD_WIFI
 #include "debug.h"
 #include "flash.h"
 #include "hardware/watchdog.h"
+#include "lwip/dns.h"
 #include "lwip/netif.h"
 #include "pico/cyw43_arch.h" // Pico SDK header for Wi-Fi country and auth definitions
+#include "pico/stdlib.h"
 #include <string.h>
 
 /**
@@ -33,13 +36,17 @@ uint32_t auth = CYW43_AUTH_WPA2_MIXED_PSK;
  */
 uint8_t mac_address[6] = {0}; // Initialize with zeros
 
-WifiResult wifi_connect(void) {
-    debug_info("Initializing Wi-Fi...\n");
+static uint64_t s_cyw43_on_us = 0;
 
+WifiResult wifi_connect(void) {
+    dlog("Initializing Wi-Fi...\n");
+
+    s_cyw43_on_us = time_us_64();
     if (cyw43_arch_init_with_country(country)) {
         debug_status("ERROR", "WiFi: CYW43 init failed\n");
         return WIFI_ERROR_CONNECTION;
     }
+    debug_status("OK", "CYW43: chip on\n");
     cyw43_arch_enable_sta_mode();
 
     if (device_config_flash.data.roomname[0] != '\0') {
@@ -56,8 +63,8 @@ WifiResult wifi_connect(void) {
             cyw43_arch_wifi_connect_timeout_ms(wifi_config_flash.ssid, wifi_config_flash.password,
                                                auth, device_config_flash.data.wifi_timeout);
         watchdog_update();
-        debug_log("Trying to connect to %s ... Attempt %d\n", wifi_config_flash.ssid,
-                  wifi_attempt_count);
+        dlog("Trying to connect to %s ... Attempt %d\n", wifi_config_flash.ssid,
+             wifi_attempt_count);
     }
     uint32_t elapsed_ms = (uint32_t)((time_us_64() - t0) / 1000);
 
@@ -89,16 +96,22 @@ void wifi_log_rssi(void) {
         int32_t rssi = 0;
         if (cyw43_wifi_get_rssi(&cyw43_state, &rssi) == 0) {
             cyw43_arch_lwip_end();
-            debug_log("Wi-Fi RSSI: %ld dBm\n", (long)rssi);
+            dlog("Wi-Fi RSSI: %ld dBm\n", (long)rssi);
             return;
         } else {
             cyw43_arch_lwip_end();
-            debug_log("Wi-Fi RSSI: unknown (driver error)\n");
+            dlog("Wi-Fi RSSI: unknown (driver error)\n");
             return;
         }
     }
     cyw43_arch_lwip_end();
-    debug_log("Wi-Fi RSSI: N/A (link=%d)\n", link);
+    dlog("Wi-Fi RSSI: N/A (link=%d)\n", link);
+}
+
+void wifi_deinit(void) {
+    uint32_t on_ms = (uint32_t)((time_us_64() - s_cyw43_on_us) / 1000);
+    debug_status("OK", "CYW43: chip off (on for %.1fs)\n", on_ms / 1000.0f);
+    cyw43_arch_deinit();
 }
 
 bool wifi_start_ap(void) {
@@ -106,6 +119,60 @@ bool wifi_start_ap(void) {
         debug_status("ERROR", "WiFi: CYW43 init failed (AP mode)\n");
         return false;
     }
+    return true;
+}
+
+typedef struct {
+    volatile bool done;
+    bool success;
+    ip_addr_t ip;
+} dns_result_t;
+
+static void dns_callback(const char *name, const ip_addr_t *ipaddr, void *arg) {
+    (void)name;
+    dns_result_t *res = (dns_result_t *)arg;
+    if (ipaddr) {
+        res->ip = *ipaddr;
+        res->success = true;
+    }
+    res->done = true;
+}
+
+bool wifi_resolve_hostname(const char *hostname, ip_addr_t *out_ip, int timeout_ms) {
+    if (!hostname || !out_ip)
+        return false;
+
+    dns_result_t result = {.done = false, .success = false};
+
+    cyw43_arch_lwip_begin();
+    err_t err = dns_gethostbyname(hostname, &result.ip, dns_callback, &result);
+    cyw43_arch_lwip_end();
+
+    if (err == ERR_OK) {
+        // Cache hit — result already populated
+        *out_ip = result.ip;
+        dlog("[WIFI] DNS cache hit: %s\n", hostname);
+        return true;
+    }
+    if (err != ERR_INPROGRESS) {
+        dlog("[WIFI] DNS error %d for %s\n", (int)err, hostname);
+        return false;
+    }
+
+    // Poll until callback fires or timeout
+    uint64_t deadline = time_us_64() + (uint64_t)timeout_ms * 1000;
+    while (!result.done && time_us_64() < deadline) {
+        sleep_ms(10);
+        watchdog_update();
+    }
+
+    if (!result.done || !result.success) {
+        dlog("[WIFI] DNS timeout/failure for %s\n", hostname);
+        return false;
+    }
+
+    *out_ip = result.ip;
+    dlog("[WIFI] DNS resolved: %s\n", hostname);
     return true;
 }
 

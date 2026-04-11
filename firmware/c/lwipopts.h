@@ -45,7 +45,7 @@
 #define LWIP_IPV4 1
 #define LWIP_TCP 1
 #define LWIP_UDP 1
-#define LWIP_DNS 0
+#define LWIP_DNS 1
 #define LWIP_ALTCP 1
 #define LWIP_ALTCP_TLS 1
 #define LWIP_ALTCP_TLS_MBEDTLS 1

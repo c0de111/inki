@@ -16,17 +16,25 @@ typedef struct {
 } st25_inki_request_t;
 
 /* Opcode definitions — opcodes act as "soft pushbuttons" for page selection */
-#define ST25_OPCODE_REFRESH 0x01u /* immediate refresh (page 0) */
-#define ST25_OPCODE_PAGE_0 0x11u  /* page 0: default / seatsurfing */
-#define ST25_OPCODE_PAGE_2 0x12u  /* page 2: universal decision maker */
-#define ST25_OPCODE_TEXT 0x20u    /* display text message from NFC EEPROM */
+#define ST25_OPCODE_REFRESH 0x01u    /* immediate refresh (page 0) */
+#define ST25_OPCODE_PAGE_0 0x11u     /* page 0: default / seatsurfing */
+#define ST25_OPCODE_PAGE_2 0x12u     /* page 2: universal decision maker */
+#define ST25_OPCODE_TEXT 0x20u       /* display text message from NFC EEPROM */
+#define ST25_OPCODE_DRAW_IMAGE 0x30u /* display drawn image from NFC EEPROM */
+#define ST25_OPCODE_BOOK_SEAT 0x40u  /* book a free seat on behalf of NFC user */
 
 /* Last-processed nonce (4 bytes) — for stale request deduplication */
 #define ST25_NONCE_ADDR 0x0004u
 
-/* Text payload area in ST25 user EEPROM (before the request slot) */
+/* Text payload area in ST25 user EEPROM */
 #define ST25_TEXT_ADDR 0x0008u
 #define ST25_TEXT_MAX_LEN 232u
+
+/* Image pixel data area in ST25 user EEPROM (1-bit packed, MSB-first, row-major) */
+#define ST25_IMAGE_ADDR 0x0010u
+#define ST25_IMAGE_COLS 62u
+#define ST25_IMAGE_ROWS 62u
+#define ST25_IMAGE_BYTES ((ST25_IMAGE_COLS * ST25_IMAGE_ROWS + 7u) / 8u) /* 481 */
 
 /* Result of ST25 boot check */
 typedef struct {
@@ -45,10 +53,16 @@ typedef struct {
 st25_boot_result_t st25_boot_check(void);
 
 /*
- * Read text payload from ST25 EEPROM (text area before request slot).
+ * Read text payload from ST25 EEPROM.
  * Returns number of bytes read (0 on error). Output is null-terminated.
  */
 int st25_read_text(char *buf, size_t buf_size);
+
+/*
+ * Read image pixel data from ST25 EEPROM (ST25_IMAGE_BYTES bytes).
+ * Returns number of bytes read (0 on error).
+ */
+int st25_read_image(uint8_t *buf, size_t buf_size);
 
 /*
  * Clear the request slot in ST25 EEPROM (write zeros).

@@ -3,6 +3,7 @@
 #include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
 #include "ImageResources.h"
+#define LOG_MODULE LOG_MOD_EPAPER
 #include "debug.h"
 #include "epaper_render.h"
 #include "flash.h"
@@ -10,13 +11,15 @@
 #include "pico/rand.h"
 #include "rtc.h"
 #include "sensors.h"
+#include "st25_io.h"
 #include "use_case.h"
 #include "wifi.h"
 #include <stdio.h>
 #include <string.h>
 
-// --- NFC text buffer (owned by boot_input.c, filled during boot) ---
+// --- NFC buffers (owned by boot_input.c, filled during boot) ---
 extern char nfc_text_buf[];
+extern uint8_t nfc_image_buf[];
 
 // --- Layout arrays ---
 
@@ -167,7 +170,7 @@ static void render_page_placeholder_default(uint8_t *image_buffer, float battery
 
 void render_page_fallback(int page, uint8_t *image_buffer, float battery_voltage) {
     (void)battery_voltage;
-    debug_log("Unassigned page index: %d\n", page);
+    dlog("Unassigned page index: %d\n", page);
     epaper_draw_subimage(image_buffer, &inki_octopus_100_95, 270, 5);
 }
 
@@ -191,7 +194,7 @@ static void render_page_dnd(uint8_t *image_buffer, float battery_voltage) {
         epaper_render_layout(image_buffer, dnd_layout_42,
                              sizeof(dnd_layout_42) / sizeof(dnd_layout_42[0]), vars);
     } else {
-        debug_log("render_page_dnd is not supported for the configured ePaper type.\n");
+        dlog("render_page_dnd is not supported for the configured ePaper type.\n");
         epaper_draw_custom_logo(image_buffer, 285, 10);
     }
 }
@@ -210,7 +213,7 @@ static void render_page_decision_maker(uint8_t *image_buffer, float battery_volt
         epaper_render_layout(image_buffer, udm_layout_42,
                              sizeof(udm_layout_42) / sizeof(udm_layout_42[0]), vars);
     } else {
-        debug_log("render_page_decision_maker is not supported for the configured ePaper type.\n");
+        dlog("render_page_decision_maker is not supported for the configured ePaper type.\n");
         epaper_draw_custom_logo(image_buffer, 285, 10);
     }
 }
@@ -298,7 +301,7 @@ static void render_page_device_info(uint8_t *image_buffer, float battery_voltage
         epaper_draw_battery_icon(battery_voltage, image_buffer, 330, 190);
 
     } else {
-        debug_log("render_page_device_info is not supported for the configured ePaper type.\n");
+        dlog("render_page_device_info is not supported for the configured ePaper type.\n");
         epaper_draw_subimage(image_buffer, &inki_octopus_100_95, 270, 5);
     }
     epaper_draw_firmware_info(battery_voltage);
@@ -322,8 +325,8 @@ void render_page_error(uint8_t *image_buffer, const char *title, const char *det
         epaper_render_layout(image_buffer, error_layout_42,
                              sizeof(error_layout_42) / sizeof(error_layout_42[0]), vars);
     } else {
-        debug_log_with_color(COLOR_RED, "Unsupported ePaper type in render_page_error: %d\n",
-                             device_config_flash.data.epapertype);
+        dlog("Unsupported ePaper type in render_page_error: %d\n",
+             device_config_flash.data.epapertype);
     }
 }
 
@@ -337,9 +340,42 @@ void render_page_wifi_setup(uint8_t *image_buffer, float battery_voltage) {
         epaper_render_layout(image_buffer, wifi_setup_layout_42,
                              sizeof(wifi_setup_layout_42) / sizeof(wifi_setup_layout_42[0]), NULL);
     } else {
-        debug_log("render_page_wifi_setup is not supported for the configured ePaper type.\n");
+        dlog("render_page_wifi_setup is not supported for the configured ePaper type.\n");
     }
     epaper_draw_firmware_info(battery_voltage);
+}
+
+static void render_page_nfc_image(uint8_t *image_buffer, float battery_voltage) {
+    (void)battery_voltage;
+
+    const bool is_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
+    const int disp_w = is_75 ? 800 : 400;
+    const int disp_h = is_75 ? 480 : 300;
+    const int scale = is_75 ? 6 : 4; /* 6× → 372×372 on 7.5", 4× → 248×248 on 4.2" */
+
+    const int img_w = (int)ST25_IMAGE_COLS;
+    const int img_h = (int)ST25_IMAGE_ROWS;
+    const int px_w = img_w * scale;
+    const int px_h = img_h * scale;
+    const int x0 = (disp_w - px_w) / 2;
+    const int y0 = (disp_h - px_h) / 2;
+
+    Paint_SelectImage(image_buffer);
+    Paint_Clear(WHITE);
+
+    for (int row = 0; row < img_h; row++) {
+        for (int col = 0; col < img_w; col++) {
+            const int bit_idx = row * img_w + col;
+            const uint8_t byte = nfc_image_buf[bit_idx / 8];
+            const bool black = (byte >> (7 - (bit_idx % 8))) & 1u;
+            if (black) {
+                const int sx = x0 + col * scale;
+                const int sy = y0 + row * scale;
+                Paint_DrawRectangle(sx, sy, sx + scale - 1, sy + scale - 1, BLACK, DOT_PIXEL_1X1,
+                                    DRAW_FILL_FULL);
+            }
+        }
+    }
 }
 
 // --- Shared page_def_t constants ---
@@ -348,5 +384,6 @@ const page_def_t page_dnd = {"dnd", render_page_dnd, false};
 const page_def_t page_decision_maker = {"decision_maker", render_page_decision_maker, false};
 const page_def_t page_device_info = {"device_info", render_page_device_info, false};
 const page_def_t page_nfc_text = {"nfc_text", render_page_nfc_text, false};
+const page_def_t page_nfc_image = {"nfc_image", render_page_nfc_image, false};
 const page_def_t page_wifi_setup = {"wifi_setup", render_page_wifi_setup, false};
 const page_def_t page_placeholder = {"placeholder", render_page_placeholder_default, false};

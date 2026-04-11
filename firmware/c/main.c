@@ -6,6 +6,7 @@
 #include "hardware/watchdog.h"
 #include "http_client.h"
 #include "i2c_bus.h"
+#include "inki_monitor.h"
 #include "pico/stdlib.h"
 #include "power.h"
 #include "rtc.h"
@@ -13,6 +14,7 @@
 #include "st25_io.h"
 #include "use_case.h"
 #include "webserver.h"
+#include "wifi.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -24,9 +26,23 @@
 int main(void) {
     init_debug();
 
-    set_debug_mode(DEBUG_BUFFERED);  // BUFFERED captures all boot logs (also before USB is ready);
-                                     // flush before power down
-    debug_set_verbosity(LOG_STATUS); // log boot health checks only
+    set_debug_mode(DEBUG_BUFFERED); // BUFFERED captures all boot logs (also before USB is ready);
+                                    // flush before power down
+
+    // --- Verbosity configuration ---
+    // General   :        debug_set_verbosity(LOG_STATUS);
+    //                    → STATUS from all modules, DEBUG/TRACE suppressed globally
+    //
+    // Dev (one module):  debug_set_verbosity(LOG_TRACE);
+    //                    debug_set_module_mask(LOG_MOD_ST25);
+    //                    → TRACE from ST25, STATUS+INFO from all, DEBUG/TRACE from others
+    //                    suppressed
+    //
+    // Dev (multi):       debug_set_verbosity(LOG_TRACE);
+    //                    debug_set_module_mask(LOG_MOD_HTTP | LOG_MOD_TLS);
+    //
+    // Note: STATUS and INFO always pass regardless of module mask (they are module-agnostic).
+    debug_set_verbosity(LOG_STATUS);
 
     power_hold();
     debug_status("OK", "System initializing - inki-%s\n", use_case.name);
@@ -72,21 +88,32 @@ int main(void) {
         debug_status("INFO", "%s: launching web interface (source=0x%X)\n", use_case.name,
                      input.source);
         webserver_run();
+        // After setup (save+exit or timeout): run page 0 as a normal RTC wake cycle.
+        // Gives immediate feedback — real content on success, error page on failure.
+        page = 0;
     }
 
     // Emergency mode: if no ePaper configured, go directly to WiFi setup
     if (device_config_flash.data.epapertype == EPAPER_NONE) {
         debug_status("WARN", "No ePaper configured — entering WiFi setup mode\n");
         webserver_run();
+        page = 0;
     }
 
     void *run_data = NULL;
-    if (page >= 0 && use_case.pages[page] && use_case.pages[page]->needs_wifi && use_case.run) {
-        run_data = use_case.run(battery_voltage, coin_cell_voltage);
+    int render_page = page;
+    if (wifi_needed) {
+        if (wifi_connect() != WIFI_SUCCESS) {
+            render_page = PAGE_WIFI_ERROR;
+        } else {
+            if (use_case.run)
+                run_data = use_case.run();
+            rtc_sync_from_server();
+            inki_monitor_send_telemetry(battery_voltage, coin_cell_voltage, run_data != NULL);
+            wifi_log_rssi();
+            wifi_deinit();
+        }
     }
-
-    // Auto-set RTC from server Date header
-    rtc_sync_from_server();
 
     uint8_t *image_buf = epaper_init();
     if (image_buf == NULL) {
@@ -95,8 +122,7 @@ int main(void) {
         webserver_run();
     }
 
-    // Render: use case owns page dispatch and error handling
-    use_case.render(image_buf, battery_voltage, page, run_data);
+    use_case.render(image_buf, battery_voltage, render_page, run_data);
 
     if (use_case.free_data)
         use_case.free_data(run_data);

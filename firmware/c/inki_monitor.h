@@ -15,8 +15,8 @@ typedef struct {
     const char *wake_source; // Wake source identifier (e.g. "nfc", "rtc", "button", NULL)
 } inki_monitor_sample_t;
 
-// Sends one telemetry sample while Wi-Fi STA is already online.
-// Returns false on any error; callers must continue normal firmware flow.
-bool inki_monitor_send_sample(const inki_monitor_sample_t *sample);
+// Sends a telemetry sample. battery_before_v is read before wifi_connect; the rest are sampled
+// inside.
+void inki_monitor_send_telemetry(float battery_before_v, float coin_cell_v, bool query_ok);
 
 #endif // INKI_MONITOR_H

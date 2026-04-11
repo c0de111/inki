@@ -1,5 +1,6 @@
 #include "rtc.h"
 #include "config.h"
+#define LOG_MODULE LOG_MOD_RTC
 #include "debug.h"
 #include "ds3231.h"
 #include "flash.h"
@@ -109,6 +110,60 @@ bool rtc_is_dst_europe(const rtc_time_t *t) {
     }
 }
 
+bool rtc_parse_http_date(const char *header, rtc_time_t *out) {
+    const char *d = strstr(header, "Date:");
+    if (!d)
+        d = strstr(header, "date:");
+    if (!d)
+        return false;
+
+    d += 5;
+    while (*d == ' ')
+        d++;
+
+    // Skip day name and comma: "Fri, "
+    const char *comma = strchr(d, ',');
+    if (!comma)
+        return false;
+    d = comma + 1;
+    while (*d == ' ')
+        d++;
+
+    int day, year, hour, minute, second;
+    char mon[4] = {0};
+    if (sscanf(d, "%d %3s %d %d:%d:%d", &day, mon, &year, &hour, &minute, &second) != 6)
+        return false;
+
+    static const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    int month = 0;
+    for (int i = 0; i < 12; i++) {
+        if (strncmp(mon, months[i], 3) == 0) {
+            month = i + 1;
+            break;
+        }
+    }
+    if (month == 0)
+        return false;
+
+    // Compute weekday (ISO 8601: 1=Mon..7=Sun) using Tomohiko Sakamoto's algorithm
+    static const int t_tab[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    int y = year;
+    if (month < 3)
+        y--;
+    int dow = (y + y / 4 - y / 100 + y / 400 + t_tab[month - 1] + day) % 7;
+    int weekday = (dow == 0) ? 7 : dow; // 0=Sun → 7, else 1=Mon..6=Sat as-is
+
+    *out = (rtc_time_t){.seconds = (uint8_t)second,
+                        .minutes = (uint8_t)minute,
+                        .hours = (uint8_t)hour,
+                        .day = (uint8_t)weekday,
+                        .date = (uint8_t)day,
+                        .month = (uint8_t)month,
+                        .year = (uint8_t)(year - 2000)};
+    return true;
+}
+
 void rtc_format_time(const rtc_time_t *t, char *buffer, size_t buffer_size) {
     int display_hour = t->hours;
     if (rtc_is_dst_europe(t))
@@ -125,6 +180,11 @@ void rtc_format_time_short(const rtc_time_t *t, char *buffer, size_t buffer_size
     snprintf(buffer, buffer_size, "%02i:%02i", hour, t->minutes);
 }
 
+void rtc_to_iso8601(const rtc_time_t *t, char *buffer, size_t buffer_size) {
+    snprintf(buffer, buffer_size, "20%02u-%02u-%02uT%02u:%02u:%02uZ", t->year, t->month, t->date,
+             t->hours, t->minutes, t->seconds);
+}
+
 void rtc_init(void) {
     i2c_probe_result_t i2c_probe = {0};
     i2c_probe_expected_devices(&i2c_probe);
@@ -133,7 +193,7 @@ void rtc_init(void) {
     const bool rv3028_present = i2c_probe.rv3028_present;
 
     if (ds3231_present && rv3028_present) {
-        debug_log_with_color(COLOR_YELLOW, "Both DS3231 and RV-3028 detected, using DS3231\n");
+        dlog("Both DS3231 and RV-3028 detected, using DS3231\n");
         ds3231_init(&ds3231_ctx, i2c_default, DS3231_DEVICE_ADRESS, AT24C32_EEPROM_ADRESS_0);
         active_rtc_backend = RTC_BACKEND_DS3231;
         return;
@@ -167,10 +227,10 @@ float rtc_read_temperature_c(void) {
 
     float t = 0.0f;
     if (ds3231_read_temperature(&ds3231_ctx, &t) != 0) {
-        debug_log_with_color(COLOR_RED, "DS3231 temperature read failed\n");
+        dlog("DS3231 temperature read failed\n");
         return NAN;
     }
-    debug_log("DS3231 temperature: %.2f °C\n", t);
+    dlog("DS3231 temperature: %.2f °C\n", t);
     return t;
 }
 
@@ -283,7 +343,7 @@ static int weekday_from_name(const char *name) {
 
 void rtc_set_time_from_string(const char *line) {
     if (active_rtc_backend == RTC_BACKEND_NONE) {
-        debug_log_with_color(COLOR_YELLOW, "RTC set skipped: no RTC backend\n");
+        dlog("RTC set skipped: no RTC backend\n");
         return;
     }
 
@@ -291,32 +351,32 @@ void rtc_set_time_from_string(const char *line) {
     char month_str[4] = {0};
     int day, month, year, hour, minute;
 
-    debug_log("RTC set requested from line: ");
-    debug_log(line);
+    dlog("RTC set requested from line: ");
+    dlog(line);
 
     // Format: "Sunday, 21. Apr 2025, 13:45"
     int parsed = sscanf(line, "%9[^,], %d. %3s %d , %d:%d", weekday_str, &day, month_str, &year,
                         &hour, &minute);
 
     if (parsed != 6) {
-        debug_log("RTC time parse failed.\n");
-        debug_log("sscanf parsed items: ");
+        dlog("RTC time parse failed.\n");
+        dlog("sscanf parsed items: ");
         char buf[2];
         snprintf(buf, sizeof(buf), "%d", parsed);
-        debug_log(buf);
-        debug_log("\n");
+        dlog(buf);
+        dlog("\n");
         return;
     }
 
     int weekday = weekday_from_name(weekday_str);
     if (weekday == 0) {
-        debug_log("Invalid weekday name.\n");
+        dlog("Invalid weekday name.\n");
         return;
     }
 
     month = month_from_short_name(month_str);
     if (month == 0) {
-        debug_log("Invalid month name in RTC string.\n");
+        dlog("Invalid month name in RTC string.\n");
         return;
     }
 
@@ -328,17 +388,17 @@ void rtc_set_time_from_string(const char *line) {
         if (hour == 23) { // wrapped backwards past midnight
             day -= 1;
             if (day == 0) {
-                debug_log("DST adjustment underflowed date — skipping RTC set.\n");
+                dlog("DST adjustment underflowed date — skipping RTC set.\n");
                 return;
             }
         }
     }
 
-    debug_log("Final time to set: ");
+    dlog("Final time to set: ");
     char msg[64];
     snprintf(msg, sizeof(msg), "%02d:%02d %02d.%02d.%04d (weekday: %d)", hour, minute, day, month,
              year, weekday);
-    debug_log(msg);
+    dlog(msg);
 
     rtc_time_t new_time = {.seconds = 0,
                            .minutes = minute,
@@ -378,7 +438,7 @@ void rtc_set_alarm(int page) {
 
     if (device_config_flash.data.query_only_at_officehours) {
         if (day == 6 || day == 7) {
-            debug_log("Skipping operation: Weekend detected.\n");
+            dlog("Skipping operation: Weekend detected.\n");
             alarm_hour = 6;
             alarm_minute = 0;
         }
@@ -409,14 +469,14 @@ void rtc_set_alarm(int page) {
         if (rc != 0)
             debug_status("ERROR", "RV-3028 alarm flag clear failed (rc=%d)\n", rc);
 
-        debug_log("RV-3028 alarm set for %02d:%02d (RTC time)\n", alarm_hour, alarm_minute);
+        dlog("RV-3028 alarm set for %02d:%02d (RTC time)\n", alarm_hour, alarm_minute);
     } else {
         ds3231_alarm_2_t alarm2 = {
             .minutes = alarm_minute, .hours = alarm_hour, .date = 0, .day = 0, .am_pm = false};
 
         ds3231_enable_alarm_interrupt(&ds3231_ctx, true);
         ds3231_set_alarm_2(&ds3231_ctx, &alarm2, ON_MATCHING_MINUTE_AND_HOUR);
-        debug_log("Alarm2 set for %02d:%02d (RTC time)\n", alarm2.hours, alarm2.minutes);
+        dlog("Alarm2 set for %02d:%02d (RTC time)\n", alarm2.hours, alarm2.minutes);
 
         ds3231_clear_alarm2(&ds3231_ctx);
     }

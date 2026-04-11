@@ -252,9 +252,7 @@ static bool zero_active_use_case_settings_sector(void) {
     uint8_t zero_page[FLASH_PAGE_SIZE];
     memset(zero_page, 0x00, sizeof(zero_page));
 
-    debug_log_with_color(COLOR_YELLOW,
-                         "FIRMWARE: Use-case mismatch -> zeroing settings sector at 0x%X\n",
-                         sector_offset);
+    dlog("FIRMWARE: Use-case mismatch -> zeroing settings sector at 0x%X\n", sector_offset);
 
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(sector_offset, FLASH_SECTOR_SIZE);
@@ -263,7 +261,7 @@ static bool zero_active_use_case_settings_sector(void) {
     }
     restore_interrupts(ints);
 
-    debug_log_with_color(COLOR_YELLOW, "FIRMWARE: Settings sector zeroed.\n");
+    dlog("FIRMWARE: Settings sector zeroed.\n");
     return true;
 }
 
@@ -394,7 +392,7 @@ static bool process_form_upload_chunk(const char *buffer, int copied, struct tcp
                                         upload_session.expected_length);
             break;
         default:
-            debug_log_with_color(COLOR_RED, "Unknown form type: %d\n", upload_session.type);
+            dlog("Unknown form type: %d\n", upload_session.type);
             break;
         }
 
@@ -416,12 +414,12 @@ static void handle_shutdown_route(struct tcp_pcb *tpcb, struct pbuf *p, const ch
                                   int len) {
     static bool shutdown_triggered = false;
     if (shutdown_triggered) {
-        debug_log("Shutdown already in progress, ignoring\n");
+        dlog("Shutdown already in progress, ignoring\n");
         return;
     }
 
     shutdown_triggered = true;
-    debug_log("GET /shutdown called - redirecting and shutting down\n");
+    dlog("GET /shutdown called - redirecting and shutting down\n");
 
     send_response(tpcb, "<!DOCTYPE html><html><head>"
                         "<meta charset=\"UTF-8\">"
@@ -445,8 +443,7 @@ static void handle_delete_logo_route(struct tcp_pcb *tpcb, struct pbuf *p, const
     flash_range_erase(LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
     restore_interrupts(ints);
 
-    debug_log("UPLOAD: flash erased at address: %d , %d bytes.\n", LOGO_FLASH_OFFSET,
-              LOGO_FLASH_SIZE);
+    dlog("UPLOAD: flash erased at address: %d , %d bytes.\n", LOGO_FLASH_OFFSET, LOGO_FLASH_SIZE);
 
     send_upload_logo_page(
         tpcb, "<p style='color:orange; font-weight:bold;'>✔️ Logo successfully deleted.</p>");
@@ -696,7 +693,7 @@ static absolute_time_t shutdown_time = {0};
 static int64_t shutdown_callback(alarm_id_t id, void *user_data) {
     (void)id;
     (void)user_data;
-    debug_log("Shutdown callback invoked\n");
+    dlog("Shutdown callback invoked\n");
     power_shutdown_default();
     // watchdog_reboot(0, 0, 0);
     return 0;
@@ -735,12 +732,12 @@ void send_response_with_content_type_and_disposition(struct tcp_pcb *tpcb, const
                                                      const char *content_type,
                                                      const char *content_disposition) {
     size_t body_len = strlen(body);
-    // debug_log("send_response: body_len = %zu\n", body_len);
+    // dlog("send_response: body_len = %zu\n", body_len);
 
     // Copy HTML body to keep it valid
     char *body_copy = malloc(body_len + 1);
     if (!body_copy) {
-        // debug_log("send_response: malloc failed for body\n");
+        // dlog("send_response: malloc failed for body\n");
         return;
     }
     memcpy(body_copy, body, body_len + 1);
@@ -769,10 +766,10 @@ void send_response_with_content_type_and_disposition(struct tcp_pcb *tpcb, const
             body_len);
     }
 
-    // debug_log("send_response: sending header (%d bytes)\n", header_len);
+    // dlog("send_response: sending header (%d bytes)\n", header_len);
     err_t err = tcp_write(tpcb, header, header_len, TCP_WRITE_FLAG_COPY);
     if (err != ERR_OK) {
-        debug_log("send_response: tcp_write(header) failed with code %d\n", err);
+        dlog("send_response: tcp_write(header) failed with code %d\n", err);
         free(body_copy);
         return;
     }
@@ -780,7 +777,7 @@ void send_response_with_content_type_and_disposition(struct tcp_pcb *tpcb, const
     // Prepare state for sending
     response_state_t *state = malloc(sizeof(response_state_t));
     if (!state) {
-        debug_log("send_response: malloc failed for state\n");
+        dlog("send_response: malloc failed for state\n");
         free(body_copy);
         return;
     }
@@ -811,7 +808,7 @@ static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len) {
     response_state_t *state = (response_state_t *)arg;
 
     if (state->remaining == 0) {
-        debug_log("send_next_chunk: transfer completed.\n");
+        dlog("send_next_chunk: transfer completed.\n");
         tcp_output(tpcb);
         tcp_sent(tpcb, NULL);
         tcp_arg(tpcb, NULL);
@@ -825,15 +822,15 @@ static err_t send_next_chunk(void *arg, struct tcp_pcb *tpcb, u16_t len) {
         (state->remaining > (size_t)TCP_CHUNK_SIZE) ? TCP_CHUNK_SIZE : (u16_t)state->remaining;
     err_t err = tcp_write(tpcb, state->ptr, chunk, TCP_WRITE_FLAG_COPY);
     if (err != ERR_OK) {
-        debug_log("send_next_chunk: tcp_write chunk %d failed at %zu bytes remaining: err=%d\n",
-                  state->chunk_index, state->remaining, err);
+        dlog("send_next_chunk: tcp_write chunk %d failed at %zu bytes remaining: err=%d\n",
+             state->chunk_index, state->remaining, err);
         free(state->body_copy);
         free(state);
         return err;
     }
 
-    debug_log("send_next_chunk: chunk %d (%u bytes) written, %zu remaining\n", state->chunk_index,
-              chunk, state->remaining - chunk);
+    dlog("send_next_chunk: chunk %d (%u bytes) written, %zu remaining\n", state->chunk_index, chunk,
+         state->remaining - chunk);
 
     state->ptr += chunk;
     state->remaining -= chunk;
@@ -906,7 +903,7 @@ static void handle_post_seatsurfing(struct tcp_pcb *tpcb, struct pbuf *p, const 
                                     int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: Content-Length missing\n");
+        dlog("UPLOAD SEATSURFING CONFIG: Content-Length missing\n");
         send_seatsurfing_config_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -914,7 +911,7 @@ static void handle_post_seatsurfing(struct tcp_pcb *tpcb, struct pbuf *p, const 
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: form body too large\n");
+        dlog("UPLOAD SEATSURFING CONFIG: form body too large\n");
         send_seatsurfing_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -932,8 +929,8 @@ static void handle_post_seatsurfing(struct tcp_pcb *tpcb, struct pbuf *p, const 
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD SEATSURFING CONFIG: First POST /seatsurfing body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD SEATSURFING CONFIG: First POST /seatsurfing body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -944,7 +941,7 @@ static void handle_post_seatsurfing(struct tcp_pcb *tpcb, struct pbuf *p, const 
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD SEATSURFING CONFIG: Header body split error\n");
+        dlog("UPLOAD SEATSURFING CONFIG: Header body split error\n");
         send_seatsurfing_config_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
@@ -954,7 +951,7 @@ static void handle_post_historian(struct tcp_pcb *tpcb, struct pbuf *p, const ch
                                   int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: Content-Length missing\n");
+        dlog("UPLOAD HISTORIAN CONFIG: Content-Length missing\n");
         send_historian_config_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -962,7 +959,7 @@ static void handle_post_historian(struct tcp_pcb *tpcb, struct pbuf *p, const ch
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: form body too large\n");
+        dlog("UPLOAD HISTORIAN CONFIG: form body too large\n");
         send_historian_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -980,8 +977,8 @@ static void handle_post_historian(struct tcp_pcb *tpcb, struct pbuf *p, const ch
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD HISTORIAN CONFIG: First POST /historian body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD HISTORIAN CONFIG: First POST /historian body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -991,7 +988,7 @@ static void handle_post_historian(struct tcp_pcb *tpcb, struct pbuf *p, const ch
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD HISTORIAN CONFIG: Header body split error\n");
+        dlog("UPLOAD HISTORIAN CONFIG: Header body split error\n");
         send_historian_config_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
@@ -1001,7 +998,7 @@ static void handle_post_weathermap(struct tcp_pcb *tpcb, struct pbuf *p, const c
                                    int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: Content-Length missing\n");
+        dlog("UPLOAD WEATHERMAP CONFIG: Content-Length missing\n");
         send_weathermap_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -1009,7 +1006,7 @@ static void handle_post_weathermap(struct tcp_pcb *tpcb, struct pbuf *p, const c
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: form body too large\n");
+        dlog("UPLOAD WEATHERMAP CONFIG: form body too large\n");
         send_weathermap_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -1027,8 +1024,8 @@ static void handle_post_weathermap(struct tcp_pcb *tpcb, struct pbuf *p, const c
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD WEATHERMAP CONFIG: First POST /weathermap body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD WEATHERMAP CONFIG: First POST /weathermap body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1039,7 +1036,7 @@ static void handle_post_weathermap(struct tcp_pcb *tpcb, struct pbuf *p, const c
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD WEATHERMAP CONFIG: Header body split error\n");
+        dlog("UPLOAD WEATHERMAP CONFIG: Header body split error\n");
         send_weathermap_page(tpcb, "Form parse error");
         tcp_close(tpcb);
     }
@@ -1051,7 +1048,7 @@ static void handle_post_homematic(struct tcp_pcb *tpcb, struct pbuf *p, const ch
                                   int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: Content-Length missing\n");
+        dlog("UPLOAD HOMEMATIC CONFIG: Content-Length missing\n");
         send_homematic_config_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -1059,7 +1056,7 @@ static void handle_post_homematic(struct tcp_pcb *tpcb, struct pbuf *p, const ch
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: form body too large\n");
+        dlog("UPLOAD HOMEMATIC CONFIG: form body too large\n");
         send_homematic_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -1077,8 +1074,8 @@ static void handle_post_homematic(struct tcp_pcb *tpcb, struct pbuf *p, const ch
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD HOMEMATIC CONFIG: First POST /homematic body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD HOMEMATIC CONFIG: First POST /homematic body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1088,7 +1085,7 @@ static void handle_post_homematic(struct tcp_pcb *tpcb, struct pbuf *p, const ch
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD HOMEMATIC CONFIG: Header body split error\n");
+        dlog("UPLOAD HOMEMATIC CONFIG: Header body split error\n");
         send_homematic_config_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
@@ -1099,7 +1096,7 @@ static void handle_post_message(struct tcp_pcb *tpcb, struct pbuf *p, const char
                                 int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD MESSAGE: Content-Length missing\n");
+        dlog("UPLOAD MESSAGE: Content-Length missing\n");
         send_message_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -1107,7 +1104,7 @@ static void handle_post_message(struct tcp_pcb *tpcb, struct pbuf *p, const char
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD MESSAGE: form body too large\n");
+        dlog("UPLOAD MESSAGE: form body too large\n");
         send_message_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -1125,7 +1122,7 @@ static void handle_post_message(struct tcp_pcb *tpcb, struct pbuf *p, const char
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD MESSAGE: First POST /message body chunk (%d bytes)\n", (int)body_len);
+        dlog("UPLOAD MESSAGE: First POST /message body chunk (%d bytes)\n", (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1135,7 +1132,7 @@ static void handle_post_message(struct tcp_pcb *tpcb, struct pbuf *p, const char
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD MESSAGE: Header body split error\n");
+        dlog("UPLOAD MESSAGE: Header body split error\n");
         send_message_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
@@ -1145,7 +1142,7 @@ static void handle_post_settings_import(struct tcp_pcb *tpcb, struct pbuf *p, co
                                         int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD SETTINGS IMPORT: Content-Length missing\n");
+        dlog("UPLOAD SETTINGS IMPORT: Content-Length missing\n");
         send_settings_transfer_page(tpcb, "Missing Content-Length");
         tcp_close(tpcb);
         return;
@@ -1153,7 +1150,7 @@ static void handle_post_settings_import(struct tcp_pcb *tpcb, struct pbuf *p, co
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD SETTINGS IMPORT: form body too large\n");
+        dlog("UPLOAD SETTINGS IMPORT: form body too large\n");
         send_settings_transfer_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -1171,8 +1168,8 @@ static void handle_post_settings_import(struct tcp_pcb *tpcb, struct pbuf *p, co
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD SETTINGS IMPORT: First POST /settings_import body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD SETTINGS IMPORT: First POST /settings_import body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1183,7 +1180,7 @@ static void handle_post_settings_import(struct tcp_pcb *tpcb, struct pbuf *p, co
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD SETTINGS IMPORT: Header body split error\n");
+        dlog("UPLOAD SETTINGS IMPORT: Header body split error\n");
         send_settings_transfer_page(tpcb, "Form parse error");
         tcp_close(tpcb);
     }
@@ -1193,7 +1190,7 @@ static void handle_post_device_config(struct tcp_pcb *tpcb, struct pbuf *p, cons
                                       int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD DEVICE CONFIG: Content-Length missing\n");
+        dlog("UPLOAD DEVICE CONFIG: Content-Length missing\n");
         send_device_config_page(tpcb, "Fehlender Content-Length");
         tcp_close(tpcb);
         return;
@@ -1201,7 +1198,7 @@ static void handle_post_device_config(struct tcp_pcb *tpcb, struct pbuf *p, cons
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD DEVICE CONFIG: form body too large\n");
+        dlog("UPLOAD DEVICE CONFIG: form body too large\n");
         send_device_config_page(tpcb, "Form data too large");
         tcp_close(tpcb);
         return;
@@ -1219,8 +1216,8 @@ static void handle_post_device_config(struct tcp_pcb *tpcb, struct pbuf *p, cons
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
 
-        debug_log("UPLOAD DEVICE CONFIG: First POST /device_config body chunk (%d bytes)\n",
-                  (int)body_len);
+        dlog("UPLOAD DEVICE CONFIG: First POST /device_config body chunk (%d bytes)\n",
+             (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1231,7 +1228,7 @@ static void handle_post_device_config(struct tcp_pcb *tpcb, struct pbuf *p, cons
             upload_session.header_length = 0;
         }
     } else {
-        debug_log_with_color(COLOR_RED, "UPLOAD DEVICE CONFIG: Header body split error\n");
+        dlog("UPLOAD DEVICE CONFIG: Header body split error\n");
         send_device_config_page(tpcb, "Fehler beim Parsen des Formulars");
         tcp_close(tpcb);
     }
@@ -1241,7 +1238,7 @@ static void handle_post_upload_logo(struct tcp_pcb *tpcb, struct pbuf *p, const 
                                     int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD LOGO: Content-Length missing\n");
+        dlog("UPLOAD LOGO: Content-Length missing\n");
         send_upload_logo_page(tpcb, "missing_content_length");
         reset_upload_session();
         tcp_close(tpcb);
@@ -1249,11 +1246,11 @@ static void handle_post_upload_logo(struct tcp_pcb *tpcb, struct pbuf *p, const 
     }
 
     upload_session.expected_length = atoi(cl + 15);
-    debug_log("UPLOAD LOGO: Expected length: %d\n", (int)upload_session.expected_length);
+    dlog("UPLOAD LOGO: Expected length: %d\n", (int)upload_session.expected_length);
 
     if (upload_session.expected_length > LOGO_FLASH_SIZE) {
-        debug_log_with_color(COLOR_RED, "UPLOAD LOGO: File too large (%d > %d bytes)\n",
-                             upload_session.expected_length, LOGO_FLASH_SIZE);
+        dlog("UPLOAD LOGO: File too large (%d > %d bytes)\n", upload_session.expected_length,
+             LOGO_FLASH_SIZE);
         send_upload_logo_page(tpcb, "too_large");
         reset_upload_session();
         tcp_arg(tpcb, NULL);
@@ -1274,11 +1271,11 @@ static void handle_post_upload_logo(struct tcp_pcb *tpcb, struct pbuf *p, const 
     flash_range_erase(upload_session.flash_offset, LOGO_FLASH_SIZE);
     restore_interrupts(ints);
 
-    debug_log("UPLOAD LOGO: flash erased: %d\n", (int)upload_session.expected_length);
+    dlog("UPLOAD LOGO: flash erased: %d\n", (int)upload_session.expected_length);
 
     const char *body = strstr(upload_session.header_buffer, "\r\n\r\n");
     if (!body) {
-        debug_log_with_color(COLOR_RED, "UPLOAD LOGO: Body not found despite complete header?\n");
+        dlog("UPLOAD LOGO: Body not found despite complete header?\n");
         send_upload_logo_page(tpcb, "invalid_request");
         reset_upload_session();
         tcp_close(tpcb);
@@ -1306,7 +1303,7 @@ static void handle_post_upload_logo(struct tcp_pcb *tpcb, struct pbuf *p, const 
     }
     upload_session.total_received += body_len;
 
-    debug_log("UPLOAD LOGO: First chunk written (%d bytes)\n", (int)body_len);
+    dlog("UPLOAD LOGO: First chunk written (%d bytes)\n", (int)body_len);
     tcp_recved(tpcb, copied);
 }
 
@@ -1314,7 +1311,7 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
                                         int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Content-Length missing\n");
+        dlog("UPLOAD FIRMWARE: Content-Length missing\n");
         send_firmware_update_page(tpcb, "<h2 style='color:red'>❌ Missing Content-Length</h2>");
         reset_upload_session();
         tcp_recved(tpcb, copied);
@@ -1324,7 +1321,7 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
     char *endptr = NULL;
     unsigned long expected = strtoul(cl + 15, &endptr, 10);
     if (endptr == cl + 15 || expected == 0 || expected > FIRMWARE_FLASH_SIZE) {
-        debug_log_with_color(COLOR_RED, "UPLOAD FIRMWARE: Invalid Content-Length (%s)\n", cl + 15);
+        dlog("UPLOAD FIRMWARE: Invalid Content-Length (%s)\n", cl + 15);
         send_firmware_update_page(tpcb, "too_large");
         reset_upload_session();
         tcp_recved(tpcb, copied);
@@ -1332,7 +1329,7 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
     }
 
     upload_session.expected_length = (size_t)expected;
-    debug_log("UPLOAD FIRMWARE: Expected length: %d\n", (int)upload_session.expected_length);
+    dlog("UPLOAD FIRMWARE: Expected length: %d\n", (int)upload_session.expected_length);
     // Determine target slot based on get_active_firmware_slot_info()
     const char *slot_info = get_active_firmware_slot_info();
     uint32_t target_offset;
@@ -1358,10 +1355,10 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
     upload_session.type = UPLOAD_FIRMWARE;
     upload_session.flash_offset = target_offset;
 
-    debug_log("UPLOAD FIRMWARE: target offset 0x%08X (active=%.*s)\n", target_offset, 6, slot_info);
+    dlog("UPLOAD FIRMWARE: target offset 0x%08X (active=%.*s)\n", target_offset, 6, slot_info);
 
     if (erase_length > FIRMWARE_FLASH_SIZE) {
-        debug_log("ERROR: erase_length exceeds FIRMWARE_FLASH_SIZE, aborting\n");
+        dlog("ERROR: erase_length exceeds FIRMWARE_FLASH_SIZE, aborting\n");
         send_firmware_update_page(
             tpcb, "<h2 style='color:red'>❌ Firmware upload aborted (erase range invalid)</h2>");
         reset_upload_session();
@@ -1374,8 +1371,9 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
     size_t est_erase_ms = num_sectors * 43U;
     size_t est_write_ms =
         ((upload_session.expected_length + FLASH_PAGE_SIZE - 1) / FLASH_PAGE_SIZE) * 2U;
-    debug_status("INFO", "Upload: erase ~%dms, write ~%dms, total ~%dms\n", (int)est_erase_ms,
-                 (int)est_write_ms, (int)(est_erase_ms + est_write_ms));
+    debug_status("INFO", "Upload: %d bytes, erase ~%dms, write ~%dms, total ~%dms\n",
+                 (int)upload_session.expected_length, (int)est_erase_ms, (int)est_write_ms,
+                 (int)(est_erase_ms + est_write_ms));
 
     // Initialise OTA state machine — erase and writes happen in the event loop (Thread mode)
     flash_ota_begin(target_offset, upload_session.expected_length, erase_length);
@@ -1407,7 +1405,7 @@ static void handle_post_firmware_update(struct tcp_pcb *tpcb, struct pbuf *p, co
 static void handle_post_wifi(struct tcp_pcb *tpcb, struct pbuf *p, const char *buffer, int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD WIFI CONFIG: Content-Length missing\n");
+        dlog("UPLOAD WIFI CONFIG: Content-Length missing\n");
         send_wifi_config_page(tpcb, "");
         tcp_close(tpcb);
         return;
@@ -1416,7 +1414,7 @@ static void handle_post_wifi(struct tcp_pcb *tpcb, struct pbuf *p, const char *b
     upload_session.expected_length = atoi(cl + 15);
 
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD WIFI CONFIG: form body too large\n");
+        dlog("UPLOAD WIFI CONFIG: form body too large\n");
         send_wifi_config_page(tpcb, ""); // ggf. mit Fehlerhinweis
         tcp_close(tpcb);
         return;
@@ -1433,7 +1431,7 @@ static void handle_post_wifi(struct tcp_pcb *tpcb, struct pbuf *p, const char *b
         memcpy(upload_session.form_buffer, body, body_len);
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
-        debug_log("UPLOAD WIFI CONFIG: First POST /wifi body chunk (%d bytes)\n", (int)body_len);
+        dlog("UPLOAD WIFI CONFIG: First POST /wifi body chunk (%d bytes)\n", (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1449,7 +1447,7 @@ static void handle_post_clock(struct tcp_pcb *tpcb, struct pbuf *p, const char *
                               int copied) {
     const char *cl = strstr(upload_session.header_buffer, "Content-Length:");
     if (!cl) {
-        debug_log_with_color(COLOR_RED, "UPLOAD CLOCK: Content-Length fehlt\n");
+        dlog("UPLOAD CLOCK: Content-Length fehlt\n");
         send_clock_page(tpcb, "❌ Content-Length fehlt.");
         tcp_close(tpcb);
         return;
@@ -1457,7 +1455,7 @@ static void handle_post_clock(struct tcp_pcb *tpcb, struct pbuf *p, const char *
 
     upload_session.expected_length = atoi(cl + 15);
     if (upload_session.expected_length >= sizeof(upload_session.form_buffer)) {
-        debug_log_with_color(COLOR_RED, "UPLOAD CLOCK: body too large\n");
+        dlog("UPLOAD CLOCK: body too large\n");
         send_clock_page(tpcb, "❌ Form data too large.");
         tcp_close(tpcb);
         return;
@@ -1474,7 +1472,7 @@ static void handle_post_clock(struct tcp_pcb *tpcb, struct pbuf *p, const char *
         memcpy(upload_session.form_buffer, body, body_len);
         upload_session.total_received = body_len;
         tcp_recved(tpcb, copied);
-        debug_log("UPLOAD CLOCK: First body chunk (%d bytes)\n", (int)body_len);
+        dlog("UPLOAD CLOCK: First body chunk (%d bytes)\n", (int)body_len);
 
         if (upload_session.total_received >= upload_session.expected_length) {
             upload_session.form_buffer[upload_session.expected_length] = '\0';
@@ -1650,8 +1648,8 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             upload_session.header_length += copied;
             upload_session.header_buffer[upload_session.header_length] = '\0';
 
-            debug_log("HEADER: collected %d bytes, total %d\n", copied,
-                      (int)upload_session.header_length);
+            dlog("HEADER: collected %d bytes, total %d\n", copied,
+                 (int)upload_session.header_length);
 
             const char *end = strstr(upload_session.header_buffer, "\r\n\r\n");
             if (!end) {
@@ -1665,7 +1663,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             const char *route_line = upload_session.header_buffer;
             const char *eol = strstr(route_line, "\r\n"); // Extract only the first header line
             if (!eol) {
-                debug_log_with_color(COLOR_RED, "HEADER: malformed - no CRLF\n");
+                dlog("HEADER: malformed - no CRLF\n");
                 tcp_recved(tpcb, copied);
                 pbuf_free(p);
                 return ERR_OK;
@@ -1679,7 +1677,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
             memcpy(first_line, route_line, line_len);
             first_line[line_len] = '\0';
 
-            debug_log("HEADER LINE: %s\n", first_line);
+            dlog("HEADER LINE: %s\n", first_line);
 
             // Try route table dispatch
             char method_str[8], path_str[64];
@@ -1692,7 +1690,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                     const route_t *route = find_route(path_str, method);
                     if (route) {
                         dispatch_route(route, tpcb, p, buffer, copied);
-                        debug_log("ROUTE TABLE: Handled %s %s\n", method_str, path_str);
+                        dlog("ROUTE TABLE: Handled %s %s\n", method_str, path_str);
 
                         // Only GET routes and special POST routes need immediate cleanup
                         if (route->type == ROUTE_SIMPLE || route->type == ROUTE_INLINE) {
@@ -1710,12 +1708,12 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
                 }
             } else {
                 // Parse error - malformed request
-                debug_log_with_color(COLOR_RED, "Malformed request: %s\n", first_line);
+                dlog("Malformed request: %s\n", first_line);
                 cleanup_and_return(tpcb, p, copied);
                 return ERR_OK;
             }
         } else {
-            debug_log_with_color(COLOR_RED, "HEADER: buffer overflow\n");
+            dlog("HEADER: buffer overflow\n");
             tcp_recved(tpcb, copied);
             pbuf_free(p);
             return ERR_OK;
@@ -1723,8 +1721,8 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
     } else if (upload_session.active && upload_session.type == UPLOAD_LOGO) {
         process_binary_upload_chunk(buffer, copied, "LOGO");
         tcp_recved(tpcb, copied);
-        debug_log("UPLOAD LOGO: Additional chunk (%d bytes, total %d)\n", copied,
-                  (int)upload_session.total_received);
+        dlog("UPLOAD LOGO: Additional chunk (%d bytes, total %d)\n", copied,
+             (int)upload_session.total_received);
     } else if (upload_session.active && upload_session.type == UPLOAD_FIRMWARE) {
         // Fast path: stage data in the ring buffer, return immediately.
         // No tcp_recved — flow control is tied to flash writes in webserver_ota_tick().
@@ -1772,7 +1770,7 @@ static err_t recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 
         // FIRMWARE validation + response is handled by webserver_ota_tick() (OTA_DONE state).
         // This branch is only reached for LOGO and FORM uploads.
-        debug_log("FLASH end offset: 0x%X\n", flash_writer.flash_offset);
+        dlog("FLASH end offset: 0x%X\n", flash_writer.flash_offset);
         const char *ok_msg = "<html><body><h2>✅ Upload OK</h2><a href='/'>Back</a></body></html>";
         send_response(tpcb, ok_msg);
 
@@ -1818,8 +1816,7 @@ static bool demote_firmware_header_priority(uint32_t header_flash_offset) {
     const uint32_t sector_base = header_flash_offset & ~(FLASH_SECTOR_SIZE - 1);
     const size_t header_offset_in_sector = (size_t)(header_flash_offset - sector_base);
     if (header_offset_in_sector + sizeof(firmware_header_t) > FLASH_SECTOR_SIZE) {
-        debug_log_with_color(COLOR_RED, "DEMOTE SLOT: header crosses sector boundary at 0x%08X\n",
-                             header_flash_offset);
+        dlog("DEMOTE SLOT: header crosses sector boundary at 0x%08X\n", header_flash_offset);
         return false;
     }
 
@@ -1828,15 +1825,13 @@ static bool demote_firmware_header_priority(uint32_t header_flash_offset) {
 
     firmware_header_t *header = (firmware_header_t *)(sector_buffer + header_offset_in_sector);
     if (memcmp(header->magic, FIRMWARE_MAGIC, FIRMWARE_MAGIC_LEN) != 0 || header->valid_flag != 1) {
-        debug_log_with_color(COLOR_RED,
-                             "DEMOTE SLOT: invalid header at 0x%08X (magic/valid mismatch)\n",
-                             header_flash_offset);
+        dlog("DEMOTE SLOT: invalid header at 0x%08X (magic/valid mismatch)\n", header_flash_offset);
         return false;
     }
 
-    debug_log("DEMOTE SLOT: before slot=%u version='%.*s' build='%.*s'\n", (unsigned)header->slot,
-              (int)sizeof(header->git_version), header->git_version,
-              (int)sizeof(header->build_date), header->build_date);
+    dlog("DEMOTE SLOT: before slot=%u version='%.*s' build='%.*s'\n", (unsigned)header->slot,
+         (int)sizeof(header->git_version), header->git_version, (int)sizeof(header->build_date),
+         header->build_date);
 
     memset(header->git_version, 0, sizeof(header->git_version));
     memset(header->build_date, 0, sizeof(header->build_date));
@@ -1849,16 +1844,15 @@ static bool demote_firmware_header_priority(uint32_t header_flash_offset) {
     flash_range_program(sector_base, sector_buffer, FLASH_SECTOR_SIZE);
     restore_interrupts(ints);
 
-    debug_log(
-        "DEMOTE SLOT: after  slot=%u version='%.*s' build='%.*s' (header=0x%08X sector=0x%08X)\n",
-        (unsigned)header->slot, (int)sizeof(header->git_version), header->git_version,
-        (int)sizeof(header->build_date), header->build_date, header_flash_offset, sector_base);
+    dlog("DEMOTE SLOT: after  slot=%u version='%.*s' build='%.*s' (header=0x%08X sector=0x%08X)\n",
+         (unsigned)header->slot, (int)sizeof(header->git_version), header->git_version,
+         (int)sizeof(header->build_date), header->build_date, header_flash_offset, sector_base);
     return true;
 }
 
 static void flush_page_to_flash(void) {
     if (flash_writer.buffer_filled == 0) {
-        debug_log("FLASH: flush_page_to_flash() called, but buffer is empty – skipping\n");
+        dlog("FLASH: flush_page_to_flash() called, but buffer is empty – skipping\n");
         return;
     }
     watchdog_update();
@@ -1867,7 +1861,7 @@ static void flush_page_to_flash(void) {
     if (flash_writer.buffer_filled % FLASH_PAGE_SIZE != 0) {
         size_t pad_size = FLASH_PAGE_SIZE - flash_writer.buffer_filled;
         memset(flash_writer.buffer + flash_writer.buffer_filled, 0xFF, pad_size);
-        debug_log("FLASH: padding %u bytes with 0xFF\n", (unsigned)pad_size);
+        dlog("FLASH: padding %u bytes with 0xFF\n", (unsigned)pad_size);
     }
 
     uint32_t ints = save_and_disable_interrupts();

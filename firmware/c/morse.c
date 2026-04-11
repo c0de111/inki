@@ -1,5 +1,6 @@
 #include "morse.h"
 #include "config.h"
+#define LOG_MODULE LOG_MOD_MORSE
 #include "debug.h"
 #include "led.h"
 #include "pico/time.h"
@@ -234,7 +235,7 @@ void morse_tick(void) {
         duration = 0;
         break;
     default:
-        debug_log_with_color(COLOR_YELLOW, "morse: invalid phase=%d, resetting\n", g_phase);
+        dlog("morse: invalid phase=%d, resetting\n", g_phase);
         g_idx = 0;
         g_phase = 0;
         duration = 0;

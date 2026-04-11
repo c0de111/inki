@@ -17,7 +17,13 @@ typedef struct {
     char location_id[SEATSURFING_LOCATION_ID_LEN];
     uint8_t seat_count; // number of entries in space_ids[] to use (1..SEATSURFING_MAX_SEATS)
     char space_ids[SEATSURFING_MAX_SEATS][SEATSURFING_SPACE_ID_LEN];
+    // NFC booking (opcode 0x40) — SpaceAdmin user credentials for JWT login
+    char booking_email[64];
+    char booking_password[64];
 } seatsurfing_config_data_t;
+
+// Duration for NFC-triggered bookings (hard-coded for now, adjustable via app later)
+#define SEATSURFING_BOOKING_DURATION_S (8 * 3600)
 
 typedef struct {
     seatsurfing_config_data_t data;

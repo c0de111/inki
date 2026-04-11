@@ -1,6 +1,7 @@
 #ifndef WIFI_H
 #define WIFI_H
 
+#include "lwip/ip_addr.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -55,8 +56,15 @@ WifiResult wifi_connect(void);
 // Simple helper to log current Wi‑Fi RSSI (dBm) if connected; otherwise logs N/A.
 void wifi_log_rssi(void);
 
+// Shut down the Wi-Fi subsystem.
+void wifi_deinit(void);
+
 // Initialise CYW43 and enable AP mode.  Caller must not have called cyw43_arch_init yet.
 // Returns true on success, false if CYW43 init failed.
 bool wifi_start_ap(void);
+
+// Resolve hostname to IPv4 address using lwIP DNS (synchronous, polling).
+// Must be called after wifi_connect(). Returns true on success.
+bool wifi_resolve_hostname(const char *hostname, ip_addr_t *out_ip, int timeout_ms);
 
 #endif // WIFI_H

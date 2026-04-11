@@ -60,7 +60,7 @@ static const layout_elem_t ss_conference_75[] = {
 static const layout_elem_t ss_office_42[] = {
     {ELEM_VAR, 20, 40, &font_ubuntu_mono_11pt_bold, .var_index = 0},
     {ELEM_LOGO, 290, 10, .image = &inki_octopus_100_95},
-    {ELEM_VAR, 40, 150, &font_ubuntu_mono_14pt_bold, .var_index = 1},
+    {ELEM_VAR, 20, 150, &font_ubuntu_mono_14pt_bold, .var_index = 1},
     {ELEM_VAR, 40, 220, &font_ubuntu_mono_14pt, .var_index = 2},
 };
 
@@ -138,7 +138,7 @@ void render_page_seatsurfing(uint8_t *image_buffer, float battery_voltage) {
                 device_config_flash.data.number_of_seats >= 1) &&
                device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
-        ss_format_seat(&seatsurfing_data[0], s0, sizeof(s0), 16);
+        ss_format_seat(&seatsurfing_data[0], s0, sizeof(s0), 17);
 
         layout = ss_office_42;
         layout_count = sizeof(ss_office_42) / sizeof(ss_office_42[0]);
