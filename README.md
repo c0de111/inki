@@ -139,7 +139,7 @@ This repository provides all files, documentation, and code to build your own *i
 This animation shows the step-by-step assembly of the 4.2" enclosure.
 
 2. **Electronics**
-   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption [(schematics, pcbs, docs)](hardware/circuit/).
+   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption [(schematics, pcbs, docs)](hardware/circuit/) — [schematic PDF](hardware/circuit/inki_l2.pdf).
 
 3. **Firmware**
    C-based firmware for RTC wakeup, Wi-Fi sync, Web interface, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
