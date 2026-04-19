@@ -1,8 +1,7 @@
 #include "epaper_pages_shared.h"
-#include "EPD_4in2_V2.h"
-#include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
 #include "ImageResources.h"
+#include "epaper.h"
 #define LOG_MODULE LOG_MOD_EPAPER
 #include "debug.h"
 #include "epaper_render.h"
@@ -99,6 +98,7 @@ static const layout_elem_t error_layout_42[] = {
     {ELEM_VAR, 20, 40, &font_ubuntu_mono_18pt_bold, .var_index = 0},
     {ELEM_VAR, 20, 120, &font_ubuntu_mono_12pt_bold, .var_index = 1},
     {ELEM_VAR, 20, 180, &font_ubuntu_mono_8pt, .var_index = 2},
+    {ELEM_VAR, 20, 215, &font_ubuntu_mono_8pt, .var_index = 3},
     {ELEM_VAR, 20, 260, &font_ubuntu_mono_8pt, .var_index = 4},
 };
 
@@ -136,9 +136,8 @@ void render_page_placeholder(uint8_t *image_buffer, const char *title) {
     const sFONT *info_font = &font_ubuntu_mono_12pt;
     const sFONT *datetime_font = &font_ubuntu_mono_10pt;
 
-    const bool is_epaper_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
-    const int epd_width = is_epaper_75 ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH;
-    const int epd_height = is_epaper_75 ? EPD_7IN5_V2_HEIGHT : EPD_4IN2_V2_HEIGHT;
+    const int epd_width = epaper_get_width();
+    const int epd_height = epaper_get_height();
 
     int logo_x = epd_width - inki_octopus_100_95.width - 10;
     if (logo_x < 0)
@@ -163,19 +162,16 @@ void render_page_placeholder(uint8_t *image_buffer, const char *title) {
     Paint_DrawString_EN(30, datetime_y, datetime_buf, (sFONT *)datetime_font, WHITE, BLACK);
 }
 
-static void render_page_placeholder_default(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+static void render_page_placeholder_default(uint8_t *image_buffer) {
     render_page_placeholder(image_buffer, "inki");
 }
 
-void render_page_fallback(int page, uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+void render_page_fallback(int page, uint8_t *image_buffer) {
     dlog("Unassigned page index: %d\n", page);
     epaper_draw_subimage(image_buffer, &inki_octopus_100_95, 270, 5);
 }
 
-static void render_page_dnd(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+static void render_page_dnd(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
     rtc_time_t rtc_data;
@@ -199,8 +195,7 @@ static void render_page_dnd(uint8_t *image_buffer, float battery_voltage) {
     }
 }
 
-static void render_page_decision_maker(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+static void render_page_decision_maker(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
     const char *decision = (get_rand_32() > 127) ? "No!" : "Yes!";
@@ -218,7 +213,7 @@ static void render_page_decision_maker(uint8_t *image_buffer, float battery_volt
     }
 }
 
-static void render_page_nfc_text(uint8_t *image_buffer, float battery_voltage) {
+static void render_page_nfc_text(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
     const char *text = nfc_text_buf;
@@ -234,10 +229,10 @@ static void render_page_nfc_text(uint8_t *image_buffer, float battery_voltage) {
         epaper_render_layout(image_buffer, nfc_text_layout_42,
                              sizeof(nfc_text_layout_42) / sizeof(nfc_text_layout_42[0]), vars);
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }
 
-static void render_page_device_info(uint8_t *image_buffer, float battery_voltage) {
+static void render_page_device_info(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
@@ -278,7 +273,7 @@ static void render_page_device_info(uint8_t *image_buffer, float battery_voltage
                  mac_address[3] & 0xFF, mac_address[4] & 0xFF, mac_address[5] & 0xFF);
 
         float coin_voltage = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
-        snprintf(buf[8], sizeof(buf[8]), "Vcc: %.3fV", battery_voltage);
+        snprintf(buf[8], sizeof(buf[8]), "Vcc: %.3fV", epaper_get_battery_voltage());
         snprintf(buf[9], sizeof(buf[9]), "Vbat: %.3fV", coin_voltage);
         snprintf(buf[10], sizeof(buf[10]), "adc conv.: %.8f",
                  device_config_flash.data.conversion_factor);
@@ -298,13 +293,13 @@ static void render_page_device_info(uint8_t *image_buffer, float battery_voltage
         };
         epaper_render_layout(image_buffer, info_layout_42,
                              sizeof(info_layout_42) / sizeof(info_layout_42[0]), vars);
-        epaper_draw_battery_icon(battery_voltage, image_buffer, 330, 190);
+        epaper_draw_battery_icon(epaper_get_battery_voltage(), image_buffer, 330, 190);
 
     } else {
         dlog("render_page_device_info is not supported for the configured ePaper type.\n");
         epaper_draw_subimage(image_buffer, &inki_octopus_100_95, 270, 5);
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }
 
 void render_page_error(uint8_t *image_buffer, const char *title, const char *detail,
@@ -330,7 +325,7 @@ void render_page_error(uint8_t *image_buffer, const char *title, const char *det
     }
 }
 
-void render_page_wifi_setup(uint8_t *image_buffer, float battery_voltage) {
+void render_page_wifi_setup(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
@@ -342,11 +337,10 @@ void render_page_wifi_setup(uint8_t *image_buffer, float battery_voltage) {
     } else {
         dlog("render_page_wifi_setup is not supported for the configured ePaper type.\n");
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }
 
-static void render_page_nfc_image(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+static void render_page_nfc_image(uint8_t *image_buffer) {
 
     const bool is_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
     const int disp_w = is_75 ? 800 : 400;
@@ -371,7 +365,7 @@ static void render_page_nfc_image(uint8_t *image_buffer, float battery_voltage) 
             if (black) {
                 const int sx = x0 + col * scale;
                 const int sy = y0 + row * scale;
-                Paint_DrawRectangle(sx, sy, sx + scale - 1, sy + scale - 1, BLACK, DOT_PIXEL_1X1,
+                Paint_DrawRectangle(sx, sy, sx + scale - 1, sy + scale, BLACK, DOT_PIXEL_1X1,
                                     DRAW_FILL_FULL);
             }
         }

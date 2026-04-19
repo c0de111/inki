@@ -58,19 +58,10 @@ typedef enum {
     UPLOAD_LOGO,
     UPLOAD_FIRMWARE,
     UPLOAD_FORM_WIFI,
-#ifdef USE_CASE_SEATSURFING
-    UPLOAD_FORM_SEATSURFING,
-#elif defined(USE_CASE_HISTORIAN)
-    UPLOAD_FORM_HISTORIAN,
-#elif defined(USE_CASE_HOMEMATIC)
-    UPLOAD_FORM_HOMEMATIC,
-#elif defined(USE_CASE_WEATHERMAP)
-    UPLOAD_FORM_WEATHERMAP,
-#endif
+    UPLOAD_FORM_USECASE,
     UPLOAD_FORM_DEVICE,
     UPLOAD_FORM_CLOCK,
-    UPLOAD_FORM_SETTINGS_IMPORT,
-    UPLOAD_FORM_MESSAGE
+    UPLOAD_FORM_SETTINGS_IMPORT
 } upload_type_t;
 
 typedef struct {
@@ -94,6 +85,27 @@ extern upload_session_t upload_session;
 
 typedef void (*submission_handler_t)(const web_submission_t *data);
 
+// Route table types — used by webserver.c and use_case_t extra_routes.
+typedef enum { HTTP_GET, HTTP_POST } http_method_t;
+
+typedef enum {
+    ROUTE_PAGE,   // GET page: void (*)(tpcb)
+    ROUTE_ACTION, // GET/POST action: void (*)(tpcb)
+    ROUTE_FORM,   // POST form: dispatched generically via form_type metadata
+    ROUTE_BINARY  // POST binary: handler receives pre-parsed content_length + body
+} route_type_t;
+
+typedef struct {
+    const char *path;
+    http_method_t method;
+    route_type_t type;
+    union {
+        void (*page)(struct tcp_pcb *tpcb);
+        void (*binary)(struct tcp_pcb *tpcb, int content_length, const char *body, size_t body_len);
+        upload_type_t form_type;
+    } handler;
+} route_t;
+
 // Full setup-mode event loop: AP mode, DHCP/DNS, OTA state machine.
 // Caller must call cyw43_arch_init_with_country() first.
 // Returns when the setup timeout expires; caller handles shutdown.
@@ -105,11 +117,10 @@ void webserver_set_shutdown_time(absolute_time_t t);
 // Utility functions for HTML page generation
 void add_timeout_info(char *buf, size_t buf_size);
 void send_response(struct tcp_pcb *tpcb, const char *body);
-void send_response_with_content_type_and_disposition(struct tcp_pcb *tpcb, const char *body,
-                                                     const char *content_type,
-                                                     const char *content_disposition);
 bool webserver_upload_in_progress(void);
 bool webserver_firmware_upload_active(void);
+void send_binary_response(struct tcp_pcb *tpcb, const char *content_type, const uint8_t *data,
+                          size_t len);
 
 #ifdef __cplusplus
 }

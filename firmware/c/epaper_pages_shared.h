@@ -3,18 +3,18 @@
 #include <stdint.h>
 
 // Page renderer function signature — all page renderers conform to this type.
-typedef void (*page_renderer_t)(uint8_t *image_buffer, float battery_voltage);
+typedef void (*page_renderer_t)(uint8_t *image_buffer);
 
 // --- Shared pages (use-case independent) ---
 
 // WiFi setup instructions page
-void render_page_wifi_setup(uint8_t *image_buffer, float battery_voltage);
+void render_page_wifi_setup(uint8_t *image_buffer);
 
 // Generic placeholder with centered title
 void render_page_placeholder(uint8_t *image_buffer, const char *title);
 
 // Fallback for unassigned page index
-void render_page_fallback(int page, uint8_t *image_buffer, float battery_voltage);
+void render_page_fallback(int page, uint8_t *image_buffer);
 
 // Error pages (server error, WiFi error, etc.)
 void render_page_error(uint8_t *image_buffer, const char *title, const char *detail,

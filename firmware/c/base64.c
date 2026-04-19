@@ -1,23 +1,10 @@
-/**
- * @file base64.c
- * @brief Base64 encoding and HTTP Basic Authentication utilities
- */
-
 #include "base64.h"
 #include <stdio.h>
 #include <string.h>
 
-/** Base64 encoding table */
 static const char base64_table[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/**
- * @brief Encode binary data to Base64
- * @param data Input data to encode
- * @param input_length Length of input data
- * @param output Output buffer for Base64 string
- * @param output_size Size of output buffer
- */
 void base64_encode(const void *data, size_t input_length, char *output, size_t output_size) {
     const uint8_t *input = (const uint8_t *)data;
     size_t i = 0, j = 0;

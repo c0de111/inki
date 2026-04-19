@@ -3,6 +3,6 @@
 
 #include "DEV_Config.h"
 
-void render_page_seatsurfing(uint8_t *image_buffer, float battery_voltage);
+void render_page_seatsurfing(uint8_t *image_buffer);
 
 #endif // SEATSURFING_EPAPER_PAGES_H

@@ -10,26 +10,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "EPD_2in9_V2.h"
-#include "EPD_4in2_V2.h"
-#include "EPD_7in5_V2.h"
+#include "epaper.h"
 
 void epaper_draw_subimage(uint8_t *buffer, const SubImage *sub_image, int x, int y) {
-    int buffer_width, buffer_height;
+    int buffer_width = epaper_get_width();
+    int buffer_height = epaper_get_height();
 
-    switch (device_config_flash.data.epapertype) {
-    case EPAPER_WAVESHARE_7IN5_V2:
-        buffer_width = EPD_7IN5_V2_WIDTH;
-        buffer_height = EPD_7IN5_V2_HEIGHT;
-        break;
-
-    case EPAPER_WAVESHARE_4IN2_V2:
-        buffer_width = EPD_4IN2_V2_WIDTH;
-        buffer_height = EPD_4IN2_V2_HEIGHT;
-        break;
-
-    default:
-        dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
+    if (buffer_width == 0 || buffer_height == 0) {
+        dlog("epaper_draw_subimage: display not initialized\n");
         return;
     }
 
@@ -173,11 +161,16 @@ bool epaper_draw_custom_logo(uint8_t *buffer, int x, int y) {
     return true;
 }
 
-void epaper_draw_firmware_info(float battery_voltage) {
+static float s_battery_voltage = 0.0f;
+
+void epaper_set_battery_voltage(float v) { s_battery_voltage = v; }
+float epaper_get_battery_voltage(void) { return s_battery_voltage; }
+
+void epaper_draw_firmware_info(void) {
     char buffer[128];
 
     snprintf(buffer, sizeof(buffer), "%s %s %s, U=%.2fV", program_name, version, build_date,
-             battery_voltage);
+             s_battery_voltage);
 
     switch (device_config_flash.data.epapertype) {
     case EPAPER_WAVESHARE_7IN5_V2:

@@ -42,24 +42,32 @@ if(USE_CASE STREQUAL "seatsurfing")
     set(UC_SOURCES
         seatsurfing/client.c
         seatsurfing/epaper_pages.c
+        seatsurfing/web_config.c
+        seatsurfing/seatsurfing_flash.c
         third_party/cjson/cJSON.c
     )
 elseif(USE_CASE STREQUAL "historian")
     set(UC_SOURCES
         historian/client.c
         historian/epaper_pages.c
+        historian/web_config.c
+        historian/historian_flash.c
         third_party/cjson/cJSON.c
     )
 elseif(USE_CASE STREQUAL "homematic")
     set(UC_SOURCES
         homematic/client.c
         homematic/epaper_pages.c
+        homematic/web_config.c
+        homematic/homematic_flash.c
     )
 elseif(USE_CASE STREQUAL "weathermap")
     set(UC_SOURCES
         weathermap/client.c
         weathermap/epaper_pages.c
-        png_stream.c
+        weathermap/web_config.c
+        weathermap/weathermap_flash.c
+        weathermap/png_stream.c
         third_party/miniz/miniz_tinfl.c
     )
 else()
@@ -80,8 +88,18 @@ add_executable(inki_slot0
     debug.c         # Debug functions
     flash.c         # Persistent config handling
     webserver.c
-    webserver_utils.c   # Utility functions extracted from webserver
-    webserver_pages.c   # HTML page generation functions
+    web/webserver_utils.c   # Utility functions extracted from webserver
+    web/captive_portal.c    # Captive portal DHCP + DNS servers
+    web/ota.c               # OTA state machine + flash writer
+    web/web_logo.c          # Logo serve + delete + upload handlers
+    web/web_landing.c       # Landing page
+    web/web_status.c        # Device status page
+    web/web_wifi.c          # Wi-Fi settings page + form handler
+    web/web_clock.c         # Clock settings page + form handler
+    web/web_firmware.c      # Firmware update + logo upload pages
+    web/web_device_settings.c # Device settings page + form handler
+    web/web_export_settings.c # Settings import/export + form handler
+    web/webserver_scaffold.c # Unified page scaffold (HTML/CSS wrapper)
     i2c_bus.c         # I2C bus init + device probing
     boot_input.c        # Unified boot input (pushbuttons + NFC + RTC alarm)
     sensors.c           # ADC sensors (battery, coin cell, temperature, strap pins)
@@ -110,8 +128,18 @@ add_executable(inki_slot1
     debug.c         # Debug functions
     flash.c         # Persistent config handling
     webserver.c
-    webserver_utils.c   # Utility functions extracted from webserver
-    webserver_pages.c   # HTML page generation functions
+    web/webserver_utils.c   # Utility functions extracted from webserver
+    web/captive_portal.c    # Captive portal DHCP + DNS servers
+    web/ota.c               # OTA state machine + flash writer
+    web/web_logo.c          # Logo serve + delete + upload handlers
+    web/web_landing.c       # Landing page
+    web/web_status.c        # Device status page
+    web/web_wifi.c          # Wi-Fi settings page + form handler
+    web/web_clock.c         # Clock settings page + form handler
+    web/web_firmware.c      # Firmware update + logo upload pages
+    web/web_device_settings.c # Device settings page + form handler
+    web/web_export_settings.c # Settings import/export + form handler
+    web/webserver_scaffold.c # Unified page scaffold (HTML/CSS wrapper)
     i2c_bus.c         # I2C bus init + device probing
     boot_input.c        # Unified boot input (pushbuttons + NFC + RTC alarm)
     sensors.c           # ADC sensors (battery, coin cell, temperature, strap pins)
@@ -172,7 +200,8 @@ target_include_directories(inki_slot0 PRIVATE
     third_party/cjson                  # cJSON library
     third_party/st25dv                 # ST25DV NFC tag driver
     ${CMAKE_CURRENT_LIST_DIR} # Current project directory
-    ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
+    ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
+    ${CMAKE_CURRENT_SOURCE_DIR}/web      # Web UI page files
 )
 
 # Add include directories for the project
@@ -185,7 +214,8 @@ target_include_directories(inki_slot1 PRIVATE
     third_party/cjson                  # cJSON library
     third_party/st25dv                 # ST25DV NFC tag driver
     ${CMAKE_CURRENT_LIST_DIR} # Current project directory
-    ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
+    ${CMAKE_CURRENT_SOURCE_DIR}          # damit das Projekt-Verzeichnis (z. B. `c/`) durchsucht wird
+    ${CMAKE_CURRENT_SOURCE_DIR}/web      # Web UI page files
 )
 # --- Git version and build date for firmware metadata ---
 find_package(Git REQUIRED)

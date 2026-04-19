@@ -1,17 +1,16 @@
 #include "historian/epaper_pages.h"
 #include "DEV_Config.h"
-#include "EPD_4in2_V2.h"
-#include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
 #include "ImageResources.h"
 #include "config.h"
 #include "debug.h"
 #include "device_config.h"
+#include "epaper.h"
 #include "epaper_pages_shared.h"
 #include "epaper_render.h"
-#include "flash.h"
 #include "fonts.h"
 #include "historian/client.h"
+#include "historian/historian_flash.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -160,14 +159,14 @@ static void render_temperature_graph(uint8_t *image_buffer, int x, int y, int wi
     Paint_DrawString_EN(x, y - 20, title, &font_ubuntu_mono_8pt, WHITE, BLACK);
 }
 
-void render_page_historian(uint8_t *image_buffer, float battery_voltage) {
+void render_page_historian(uint8_t *image_buffer) {
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
         render_temperature_graph(image_buffer, 20, 20, 760, 400);
 
         char info[128];
         snprintf(info, sizeof(info), "%d data points", historian_data.count);
         Paint_DrawString_EN(50, 450, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-        int logo_x = EPD_7IN5_V2_WIDTH - inki_octopus_100_95.width - 10;
+        int logo_x = epaper_get_width() - inki_octopus_100_95.width - 10;
         if (logo_x < 0) {
             logo_x = 0;
         }
@@ -181,7 +180,7 @@ void render_page_historian(uint8_t *image_buffer, float battery_voltage) {
         char info[64];
         snprintf(info, sizeof(info), "%d points", historian_data.count);
         Paint_DrawString_EN(20, 280, info, &font_ubuntu_mono_8pt, WHITE, BLACK);
-        int logo_x = EPD_4IN2_V2_WIDTH - inki_octopus_100_95.width - 10;
+        int logo_x = epaper_get_width() - inki_octopus_100_95.width - 10;
         if (logo_x < 0) {
             logo_x = 0;
         }
@@ -189,12 +188,11 @@ void render_page_historian(uint8_t *image_buffer, float battery_voltage) {
             epaper_draw_subimage(image_buffer, &inki_octopus_100_95, logo_x, 10);
         }
     } else {
-        render_page_fallback(0, image_buffer, battery_voltage);
+        render_page_fallback(0, image_buffer);
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }
 
-void render_page_historian_placeholder(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+void render_page_historian_placeholder(uint8_t *image_buffer) {
     render_page_placeholder(image_buffer, "inki-historian");
 }

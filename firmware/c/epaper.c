@@ -4,14 +4,21 @@
 #include "EPD_4in2_V2.h"
 #include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
-#include "config.h"
 #define LOG_MODULE LOG_MOD_EPAPER
 #include "debug.h"
 #include "flash.h"
 #include "hardware/watchdog.h"
 #include <stdlib.h>
 
-uint8_t *epaper_init(void) {
+static uint16_t s_width = 0;
+static uint16_t s_height = 0;
+static bool s_is_4gray = false;
+
+uint16_t epaper_get_width(void) { return s_width; }
+uint16_t epaper_get_height(void) { return s_height; }
+bool epaper_is_4gray(void) { return s_is_4gray; }
+
+uint8_t *epaper_init(bool is_4gray) {
 
     if (device_config_flash.data.epapertype == EPAPER_NONE) {
         dlog("No ePaper configured for this room.\n");
@@ -31,47 +38,54 @@ uint8_t *epaper_init(void) {
 
     UDOUBLE buffer_size = 0;
 
-    // Initialize and clear the ePaper based on the configured type
+    s_is_4gray = is_4gray;
+
     switch (device_config_flash.data.epapertype) {
     case EPAPER_WAVESHARE_7IN5_V2:
         dlog("Initializing Waveshare 7.5-inch V2 ePaper...\n");
-#ifdef USE_CASE_WEATHERMAP
-        EPD_7IN5_V2_Init_4Gray();
-        EPD_7IN5_V2_Clear(); // Clear is needed to reset display content
-        buffer_size =
-            ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 4) : (EPD_7IN5_V2_WIDTH / 4 + 1)) *
-            EPD_7IN5_V2_HEIGHT; // 4Gray: 2 bits per pixel
-#else
-        EPD_7IN5_V2_Init();
-        EPD_7IN5_V2_Clear();
-        buffer_size =
-            ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 8) : (EPD_7IN5_V2_WIDTH / 8 + 1)) *
-            EPD_7IN5_V2_HEIGHT;
-#endif
+        s_width = EPD_7IN5_V2_WIDTH;
+        s_height = EPD_7IN5_V2_HEIGHT;
+        if (is_4gray) {
+            EPD_7IN5_V2_Init_4Gray();
+            EPD_7IN5_V2_Clear();
+            buffer_size = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 4)
+                                                        : (EPD_7IN5_V2_WIDTH / 4 + 1)) *
+                          EPD_7IN5_V2_HEIGHT;
+        } else {
+            EPD_7IN5_V2_Init();
+            EPD_7IN5_V2_Clear();
+            buffer_size = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 8)
+                                                        : (EPD_7IN5_V2_WIDTH / 8 + 1)) *
+                          EPD_7IN5_V2_HEIGHT;
+        }
         break;
 
     case EPAPER_WAVESHARE_4IN2_V2:
         dlog("Initializing Waveshare 4.2-inch ePaper...\n");
-#ifdef USE_CASE_WEATHERMAP
-        // Waveshare official pattern: First clear in regular mode, then switch to 4Gray
-        EPD_4IN2_V2_Init();
-        EPD_4IN2_V2_Clear();
-        sleep_ms(500); // Official timing from Waveshare examples
-        EPD_4IN2_V2_Init_4Gray();
-        buffer_size =
-            ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 4) : (EPD_4IN2_V2_WIDTH / 4 + 1)) *
-            EPD_4IN2_V2_HEIGHT; // 4Gray: 2 bits per pixel
-#else
-        EPD_4IN2_V2_Init();
-        EPD_4IN2_V2_Clear();
-        buffer_size =
-            ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 8) : (EPD_4IN2_V2_WIDTH / 8 + 1)) *
-            EPD_4IN2_V2_HEIGHT;
-#endif
+        s_width = EPD_4IN2_V2_WIDTH;
+        s_height = EPD_4IN2_V2_HEIGHT;
+        if (is_4gray) {
+            // Waveshare official pattern: First clear in regular mode, then switch to 4Gray
+            EPD_4IN2_V2_Init();
+            EPD_4IN2_V2_Clear();
+            sleep_ms(500); // Official timing from Waveshare examples
+            EPD_4IN2_V2_Init_4Gray();
+            buffer_size = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 4)
+                                                        : (EPD_4IN2_V2_WIDTH / 4 + 1)) *
+                          EPD_4IN2_V2_HEIGHT;
+        } else {
+            EPD_4IN2_V2_Init();
+            EPD_4IN2_V2_Clear();
+            buffer_size = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 8)
+                                                        : (EPD_4IN2_V2_WIDTH / 8 + 1)) *
+                          EPD_4IN2_V2_HEIGHT;
+        }
         break;
 
     case EPAPER_WAVESHARE_2IN9_V2:
         dlog("Initializing Waveshare 2.9-inch V2 ePaper...\n");
+        s_width = EPD_2IN9_V2_WIDTH;
+        s_height = EPD_2IN9_V2_HEIGHT;
         EPD_2IN9_V2_Init();
         EPD_2IN9_V2_Clear();
         buffer_size =
@@ -107,12 +121,12 @@ uint8_t *epaper_init(void) {
         0, WHITE);
 
     Paint_SelectImage(image_buf);
-#ifdef USE_CASE_WEATHERMAP
-    Paint_SetScale(4);  // Enable 4Gray mode for weathermap
-    Paint_Clear(GRAY4); // Clear to white background
-#else
-    Paint_Clear(WHITE);
-#endif
+    if (is_4gray) {
+        Paint_SetScale(4);
+        Paint_Clear(GRAY4);
+    } else {
+        Paint_Clear(WHITE);
+    }
 
     watchdog_update();
 
@@ -133,19 +147,17 @@ void epaper_flush_and_sleep(uint8_t *image) {
     dtrace("EPD_Display called for epaper type: %d\n", device_config_flash.data.epapertype);
     switch (device_config_flash.data.epapertype) {
     case EPAPER_WAVESHARE_7IN5_V2:
-#ifdef USE_CASE_WEATHERMAP
-        EPD_7IN5_V2_Display_4Gray(image);
-#else
-        EPD_7IN5_V2_Display(image);
-#endif
+        if (s_is_4gray)
+            EPD_7IN5_V2_Display_4Gray(image);
+        else
+            EPD_7IN5_V2_Display(image);
         break;
 
     case EPAPER_WAVESHARE_4IN2_V2:
-#ifdef USE_CASE_WEATHERMAP
-        EPD_4IN2_V2_Display_4Gray(image);
-#else
-        EPD_4IN2_V2_Display(image);
-#endif
+        if (s_is_4gray)
+            EPD_4IN2_V2_Display_4Gray(image);
+        else
+            EPD_4IN2_V2_Display(image);
         break;
 
     case EPAPER_WAVESHARE_2IN9_V2:

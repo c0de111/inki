@@ -1,34 +1,32 @@
 #include "homematic/epaper_pages.h"
 #include "DEV_Config.h"
-#include "EPD_4in2_V2.h"
-#include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
 #include "ImageResources.h"
 #include "config.h"
 #include "debug.h"
 #include "device_config.h"
+#include "epaper.h"
 #include "epaper_pages_shared.h"
 #include "epaper_render.h"
-#include "flash.h"
 #include "fonts.h"
 #include "homematic/client.h"
+#include "homematic/homematic_flash.h"
 #include <stdio.h>
 #include <string.h>
 
-void render_page_homematic(uint8_t *image_buffer, float battery_voltage) {
+void render_page_homematic(uint8_t *image_buffer) {
     const bool is_epaper_75 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2);
     const bool is_epaper_42 = (device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2);
 
     if (!is_epaper_75 && !is_epaper_42) {
-        render_page_fallback(0, image_buffer, battery_voltage);
+        render_page_fallback(0, image_buffer);
         return;
     }
 
     // Prepare clean background for the Homematic overview
     Paint_Clear(WHITE);
 
-    int logo_x =
-        (is_epaper_75 ? EPD_7IN5_V2_WIDTH : EPD_4IN2_V2_WIDTH) - inki_octopus_100_95.width - 10;
+    int logo_x = epaper_get_width() - inki_octopus_100_95.width - 10;
     if (logo_x < 0) {
         logo_x = 0;
     }
@@ -152,10 +150,9 @@ void render_page_homematic(uint8_t *image_buffer, float battery_voltage) {
                                 BLACK);
         }
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }
 
-void render_page_homematic_placeholder(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+void render_page_homematic_placeholder(uint8_t *image_buffer) {
     render_page_placeholder(image_buffer, "inki-homematic");
 }

@@ -5,10 +5,10 @@
 #include "device_config.h"
 #include "epaper_layout.h"
 #include "epaper_render.h"
-#include "flash.h"
 #include "fonts.h"
 #include "rtc.h"
 #include "seatsurfing/client.h"
+#include "seatsurfing/seatsurfing_flash.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -64,8 +64,7 @@ static const layout_elem_t ss_office_42[] = {
     {ELEM_VAR, 40, 220, &font_ubuntu_mono_14pt, .var_index = 2},
 };
 
-void render_page_seatsurfing(uint8_t *image_buffer, float battery_voltage) {
-    (void)battery_voltage;
+void render_page_seatsurfing(uint8_t *image_buffer) {
 
     const layout_elem_t *layout = NULL;
     int layout_count = 0;
@@ -134,8 +133,8 @@ void render_page_seatsurfing(uint8_t *image_buffer, float battery_voltage) {
         layout_count = sizeof(ss_conference_75) / sizeof(ss_conference_75[0]);
         vars[0] = device_config_flash.data.roomname;
 
-    } else if ((device_config_flash.data.type == ROOM_TYPE_OFFICE ||
-                device_config_flash.data.number_of_seats >= 1) &&
+    } else if (device_config_flash.data.type == ROOM_TYPE_OFFICE &&
+               device_config_flash.data.number_of_seats >= 1 &&
                device_config_flash.data.epapertype == EPAPER_WAVESHARE_4IN2_V2) {
 
         ss_format_seat(&seatsurfing_data[0], s0, sizeof(s0), 17);
@@ -150,5 +149,5 @@ void render_page_seatsurfing(uint8_t *image_buffer, float battery_voltage) {
     if (layout) {
         epaper_render_layout(image_buffer, layout, layout_count, vars);
     }
-    epaper_draw_firmware_info(battery_voltage);
+    epaper_draw_firmware_info();
 }

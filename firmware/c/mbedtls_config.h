@@ -79,11 +79,7 @@
 // The following significantly speeds up mbedtls due to NIST optimizations.
 #define MBEDTLS_ECP_NIST_OPTIM
 
-// Enable debug output for TLS troubleshooting (only for weathermap)
-#ifdef USE_CASE_WEATHERMAP
-#define MBEDTLS_DEBUG_C
-#define MBEDTLS_SSL_DEBUG_ALL
-#endif
+// TLS debug module removed: MBEDTLS_DEBUG_C added ~20KB; TLS is working, no longer needed.
 
 #include "mbedtls/check_config.h"
 

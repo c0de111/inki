@@ -1,18 +1,9 @@
 #pragma once
 #include "config.h"
 #include "device_config.h"
-#include "seatsurfing/config.h"
 #include "wifi_config.h"
 #include <stdbool.h>
 #include <stdint.h>
-
-#ifdef USE_CASE_HISTORIAN
-#include "historian/config.h"
-#elif defined(USE_CASE_HOMEMATIC)
-#include "homematic/config.h"
-#elif defined(USE_CASE_WEATHERMAP)
-#include "weathermap/config.h"
-#endif
 
 // #include "pico/flash.h"
 #include <stddef.h>
@@ -63,28 +54,9 @@ _Static_assert(FIRMWARE_MAGIC_LEN == 13, "FIRMWARE_MAGIC_LEN mismatch");
 #define WIFI_CONFIG_FLASH_OFFSET (CONFIG_FLASH_OFFSET + 0x0000) // 0x1E7000 - Wi-Fi credentials
 #define wifi_config_flash (*(const wifi_config_t *)FLASH_PTR(WIFI_CONFIG_FLASH_OFFSET))
 
-// Use case specific configuration - same flash offset for both (build-time selection)
-#ifdef USE_CASE_SEATSURFING
-#define SEATSURFING_CONFIG_FLASH_OFFSET                                                            \
-    (CONFIG_FLASH_OFFSET + 0x1000) // 0x1E8000 - Seatsurfing API settings
-#define seatsurfing_config_flash                                                                   \
-    (*(const seatsurfing_config_t *)FLASH_PTR(SEATSURFING_CONFIG_FLASH_OFFSET))
-#elif defined(USE_CASE_HISTORIAN)
-#define HISTORIAN_CONFIG_FLASH_OFFSET                                                              \
-    (CONFIG_FLASH_OFFSET + 0x1000) // 0x1E8000 - Historian API settings
-#define historian_config_flash                                                                     \
-    (*(const historian_config_t *)FLASH_PTR(HISTORIAN_CONFIG_FLASH_OFFSET))
-#elif defined(USE_CASE_HOMEMATIC)
-#define HOMEMATIC_CONFIG_FLASH_OFFSET                                                              \
-    (CONFIG_FLASH_OFFSET + 0x1000) // 0x1E8000 - Homematic settings
-#define homematic_config_flash                                                                     \
-    (*(const homematic_config_t *)FLASH_PTR(HOMEMATIC_CONFIG_FLASH_OFFSET))
-#elif defined(USE_CASE_WEATHERMAP)
-#define WEATHERMAP_CONFIG_FLASH_OFFSET                                                             \
-    (CONFIG_FLASH_OFFSET + 0x1000) // 0x1E8000 - Weathermap settings
-#define weathermap_config_flash                                                                    \
-    (*(const weathermap_config_t *)FLASH_PTR(WEATHERMAP_CONFIG_FLASH_OFFSET))
-#endif
+// Use case config block — all use cases share this flash offset; typed accessor
+// is in each use case's own *_flash.h
+#define UC_CONFIG_FLASH_OFFSET (CONFIG_FLASH_OFFSET + 0x1000) // 0x1E8000
 
 #define DEVICE_CONFIG_FLASH_OFFSET                                                                 \
     (CONFIG_FLASH_OFFSET + 0x2000) // 0x1E9000 - Device and UI configuration
@@ -157,7 +129,7 @@ typedef struct {
 } flash_ota_result_t;
 
 // Initialise state; does NOT erase flash.
-void flash_ota_begin(uint32_t slot_offset, size_t total_size, size_t erase_length);
+void flash_ota_begin(uint32_t slot_offset, size_t erase_length);
 
 // Erase one sector.  Call repeatedly from the event loop; returns true when done.
 bool flash_ota_erase_next_sector(void);
@@ -166,94 +138,34 @@ bool flash_ota_erase_next_sector(void);
 void flash_ota_write_page(const uint8_t *data);
 
 // Validate header + CRC, mark slot valid if OK.  Call after all pages written.
-flash_ota_result_t flash_ota_finish(size_t expected_bytes);
+flash_ota_result_t flash_ota_finish(void);
 
 // flash_mark_firmware_valid() is internal to flash.c (called by flash_ota_finish).
 
-// Weathermap meta (marker only for now)
-#define WEATHERMAP_META_FLASH_OFFSET                                                               \
-    (CONFIG_FLASH_OFFSET + 0x5000) // 0x1EC000 - Weathermap marker/meta
-typedef struct __attribute__((packed)) {
-    char magic[4]; // "WMAP"
-    uint32_t bytes_count;
-    uint8_t reserved[8];
-} weathermap_meta_t;
-
-bool get_weathermap_meta(uint32_t *bytes_out);
-bool set_weathermap_meta(uint32_t bytes);
-bool clear_weathermap_meta(void);
-
-// Weathermap image storage (2-bit packed 400x300)
-#define WEATHERMAP_IMG_FLASH_OFFSET                                                                \
-    (CONFIG_FLASH_OFFSET + 0x6000)        // 0x1ED000 - 64 KB reserved for image
-#define WEATHERMAP_IMG_FLASH_SIZE 0x10000 // 64 KB budget
-
-typedef struct __attribute__((packed)) {
-    char magic[4];   // "WIMG"
-    uint16_t width;  // pixels
-    uint16_t height; // pixels
-    uint8_t bpp;     // bits per pixel in payload (2)
-    uint8_t reserved[3];
-    uint32_t datalen; // bytes of packed payload following header
-    uint32_t crc32;   // optional CRC of payload (0 if unused)
-} weathermap_image_header_t;
-
-bool weathermap_flash_write_image_2bpp(const uint8_t *packed_data, size_t packed_len,
-                                       uint16_t width, uint16_t height);
-bool weathermap_flash_info(uint16_t *width, uint16_t *height, uint32_t *datalen);
-const uint8_t *weathermap_flash_data_ptr(void);
-bool weathermap_flash_clear_image(void);
-
-// Alternate storage in slot1 (for robustness/debug): header+payload at slot1 base
-// Slot1 image storage (header page + payload pages) – streaming API
-bool wmap_slot1_begin_image(uint16_t width, uint16_t height);
-bool wmap_slot1_append_row_2bpp(const uint8_t *row_packed, size_t row_len);
-bool wmap_slot1_end_image(void);
-bool wmap_slot1_image_info(uint16_t *width, uint16_t *height, uint32_t *datalen);
-const uint8_t *wmap_slot1_image_data_ptr(void);
-
-// Streaming writer for WEATHERMAP 2‑bpp image region
-bool weathermap_flash_begin_image(uint16_t width, uint16_t height);
-bool weathermap_flash_append_row_2bpp(const uint8_t *row_packed, size_t row_len);
-bool weathermap_flash_end_image(void);
-
-#ifdef USE_CASE_WEATHERMAP
-// Streaming PNG staging into unused firmware slot1 (tolerates overwrite by firmware updates)
-bool wmap_staging_begin(void);
-bool wmap_staging_append(const uint8_t *data, size_t len);
-bool wmap_staging_end(uint32_t *total_bytes);
-void wmap_staging_abort(void);
-const uint8_t *wmap_staging_ptr(void); // pointer to staged bytes (XIP)
-uint32_t wmap_staging_size(void);      // last finalized size (or 0 if not finalized)
-#endif
+/* CRC32 utility — shared with use-case flash modules */
+uint32_t calc_crc32(const void *data, size_t len);
 
 /* Wi-Fi config */
 bool save_wifi_config(const wifi_config_t *in);
-void init_wifi_config(wifi_config_t *out);
-
-/* Use case specific config */
-#ifdef USE_CASE_SEATSURFING
-bool save_seatsurfing_config(const seatsurfing_config_t *in);
-void init_seatsurfing_config(seatsurfing_config_t *out);
-#elif defined(USE_CASE_HISTORIAN)
-bool save_historian_config(const historian_config_t *in);
-void init_historian_config(historian_config_t *out);
-#elif defined(USE_CASE_HOMEMATIC)
-bool save_homematic_config(const homematic_config_t *in);
-void init_homematic_config(homematic_config_t *out);
-#elif defined(USE_CASE_WEATHERMAP)
-bool load_weathermap_config(weathermap_config_t *out);
-bool save_weathermap_config(const weathermap_config_t *in);
-void init_weathermap_config(weathermap_config_t *out);
-#endif
 
 /* Device config */
 bool save_device_config(const device_config_t *in);
-void init_device_config(device_config_t *out);
 
 bool save_uploaded_logo_to_flash(const uint8_t *data, size_t len);
+void flash_erase_logo(void);
+void flash_zero_settings_sector(void);
+bool flash_demote_slot_header(uint32_t header_flash_offset);
+
+typedef struct {
+    char build_date[16];
+    char git_version[32];
+    uint32_t size;
+    uint32_t crc32;
+    uint8_t slot_index;
+    uint8_t valid_flag;
+} firmware_slot_info_t;
+
 const char *get_active_firmware_slot_info(void);
-bool get_firmware_slot_info(uint8_t slot, char *build_date, char *git_version, uint32_t *size,
-                            uint32_t *crc32, uint8_t *slot_index, uint8_t *valid_flag);
+bool get_firmware_slot_info(uint8_t slot, firmware_slot_info_t *info);
 bool get_flash_logo_info(int *width, int *height, int *datalen);
 void flash_log_status(void);

@@ -1,7 +1,9 @@
 #include "boot_input.h"
 #include "config.h"
 #include "debug.h"
+#include "device_caps.h"
 #include "epaper.h"
+#include "epaper_render.h"
 #include "flash.h"
 #include "hardware/watchdog.h"
 #include "http_client.h"
@@ -22,6 +24,20 @@
 #warning                                                                                           \
     "This firmware was developed and tested with pico-sdk 2.1.0. Other versions may cause issues."
 #endif
+
+static device_caps_t build_device_caps(const i2c_probe_result_t *probe) {
+    uint8_t strap = read_strap_pins();
+    return (device_caps_t){
+        .epaper_width = epaper_get_width(),
+        .epaper_height = epaper_get_height(),
+        .epaper_4gray = epaper_is_4gray(),
+        .st25_present = probe->st25_user_present,
+        .bmp581_present = probe->bmp581_present,
+        .ds3231_present = probe->ds3231_present,
+        .rv3028_present = probe->rv3028_present,
+        .coin_cell_present = (strap != 0x05),
+    };
+}
 
 int main(void) {
     init_debug();
@@ -69,7 +85,9 @@ int main(void) {
     debug_status(battery_voltage < 3.4f ? "WARN" : "OK", "Battery: %.2fV\n", battery_voltage);
 
     i2c_bus_init();
-    rtc_init();
+    i2c_probe_result_t probe = {0};
+    i2c_probe_expected_devices(&probe);
+    rtc_init(&probe);
 
     // Read all boot-time input sources (pushbuttons + NFC + RTC alarm)
     boot_input_t input = read_boot_input();
@@ -83,21 +101,19 @@ int main(void) {
     bool wifi_needed = page >= 0 && use_case.pages[page] && use_case.pages[page]->needs_wifi;
     debug_status("OK", "Page: %d (wifi=%s)\n", page, wifi_needed ? "yes" : "no");
 
-    // Setup mode entry via input_map
+    // Emergency mode: unconfigured device → treat as setup
+    if (device_config_flash.data.epapertype == EPAPER_NONE) {
+        debug_status("WARN", "No ePaper configured — entering WiFi setup mode\n");
+        page = PAGE_ACTION_SETUP;
+    }
+
     if (page == PAGE_ACTION_SETUP) {
         debug_status("INFO", "%s: launching web interface (source=0x%X)\n", use_case.name,
                      input.source);
         webserver_run();
         // After setup (save+exit or timeout): run page 0 as a normal RTC wake cycle.
-        // Gives immediate feedback — real content on success, error page on failure.
         page = 0;
-    }
-
-    // Emergency mode: if no ePaper configured, go directly to WiFi setup
-    if (device_config_flash.data.epapertype == EPAPER_NONE) {
-        debug_status("WARN", "No ePaper configured — entering WiFi setup mode\n");
-        webserver_run();
-        page = 0;
+        wifi_needed = use_case.pages[page] && use_case.pages[page]->needs_wifi;
     }
 
     void *run_data = NULL;
@@ -106,8 +122,12 @@ int main(void) {
         if (wifi_connect() != WIFI_SUCCESS) {
             render_page = PAGE_WIFI_ERROR;
         } else {
-            if (use_case.run)
-                run_data = use_case.run();
+            if (use_case.run) {
+                run_result_t result = use_case.run();
+                run_data = result.data;
+                if (!run_data && result.error_page)
+                    render_page = result.error_page;
+            }
             rtc_sync_from_server();
             inki_monitor_send_telemetry(battery_voltage, coin_cell_voltage, run_data != NULL);
             wifi_log_rssi();
@@ -115,14 +135,17 @@ int main(void) {
         }
     }
 
-    uint8_t *image_buf = epaper_init();
+    epaper_set_battery_voltage(battery_voltage);
+
+    uint8_t *image_buf = epaper_init(use_case.needs_4gray);
     if (image_buf == NULL) {
         debug_status("ERROR", "ePaper init or buffer allocation failed\n");
         debug_status("WARN", "Falling back to WiFi setup mode\n");
         webserver_run();
     }
 
-    use_case.render(image_buf, battery_voltage, render_page, run_data);
+    device_caps_t caps = build_device_caps(&probe);
+    use_case.render(image_buf, caps, render_page, run_data);
 
     if (use_case.free_data)
         use_case.free_data(run_data);

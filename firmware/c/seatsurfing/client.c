@@ -1,15 +1,16 @@
 #include "seatsurfing/client.h"
 #include "base64.h"
+#include "seatsurfing/web_config.h"
 #define LOG_MODULE LOG_MOD_SEATSURFING
 #include "boot_input.h"
 #include "debug.h"
 #include "epaper_pages_shared.h"
-#include "flash.h"
 #include "http_client.h"
 #include "lwip/ip_addr.h"
 #include "pico/stdlib.h"
 #include "rtc.h"
 #include "seatsurfing/epaper_pages.h"
+#include "seatsurfing/seatsurfing_flash.h"
 #include "st25_io.h"
 #include "third_party/cjson/cJSON.h"
 #include "tls_trust_store.h"
@@ -23,6 +24,7 @@
 // --- Parsed data storage ---
 
 seat_info_t seatsurfing_data[SEATSURFING_MAX_SEATS] = {0};
+static run_error_t s_last_run_error = RUN_OK;
 
 static seat_info_t seatsurfing_parse_seat_info(const char *json,
                                                const char *target_space_id_or_name);
@@ -67,6 +69,7 @@ static void format_name_from_email(const char *email, char *outbuf, size_t outbu
     outbuf[outbuf_len - 1] = '\0';
 }
 
+// cppcheck-suppress constParameterPointer
 static void abbreviate_name_if_needed(char *name, size_t max_chars) {
     size_t len = strlen(name);
     if (len <= max_chars)
@@ -74,6 +77,10 @@ static void abbreviate_name_if_needed(char *name, size_t max_chars) {
 
     char *space = strrchr(name, ' ');
     if (!space || space == name || space[1] == '\0')
+        return;
+
+    // Need room for " X.\0" — 3 chars after the space position
+    if ((size_t)(space - name) + 3 >= len + 1)
         return;
 
     space[1] = toupper((unsigned char)space[1]);
@@ -94,6 +101,7 @@ void ss_format_seat(const seat_info_t *seat, char *out, size_t out_len, size_t m
 
 static void seatsurfing_data_received(const char *response_data, size_t length, void *arg) {
     if (!response_data || length == 0) {
+        s_last_run_error = RUN_ERROR_CONNECTION;
         debug_status("ERROR", "SeatSurfing: transfer failed or incomplete\n");
         return;
     }
@@ -226,18 +234,21 @@ static seat_info_t seatsurfing_parse_seat_info(const char *json,
 // --- Native SeatSurfing / NFC booking state ---
 
 static char s_org_id[37] = {0}; // discovered via /organization/domain/{host}
-static char s_access_token[1024] = {0};
+static char s_access_token[1024] = {
+    0}; // JWTs are typically 200-500 bytes; 1024 covers RS256/ES256 with large claims
 static char s_booking_response[128] = {0}; // first 127 bytes of booking server reply
 
 static void ss_login_response_received(const char *data, size_t length, void *arg) {
     (void)arg;
     s_access_token[0] = '\0';
     if (!data || length == 0) {
+        s_last_run_error = RUN_ERROR_CONNECTION;
         debug_status("ERROR", "Booking: login response empty\n");
         return;
     }
     cJSON *root = cJSON_Parse(data);
     if (!root) {
+        s_last_run_error = RUN_ERROR_PARSE;
         debug_status("ERROR", "Booking: login JSON parse failed\n");
         return;
     }
@@ -246,7 +257,7 @@ static void ss_login_response_received(const char *data, size_t length, void *ar
         strncpy(s_access_token, token->valuestring, sizeof(s_access_token) - 1);
         debug_status("OK", "Booking: login OK (token %d bytes)\n", (int)strlen(s_access_token));
     } else {
-        // Log the raw response so we can see the server error
+        s_last_run_error = RUN_ERROR_AUTH;
         char snippet[64] = {0};
         strncpy(snippet, data, sizeof(snippet) - 1);
         debug_status("ERROR", "Booking: login no token — resp: %.63s\n", snippet);
@@ -342,8 +353,9 @@ static bool ss_dns_login_and_fetch(const ip_addr_t *ip, uint16_t port, const cha
     if (rlen < 0 || (size_t)rlen >= sizeof(req))
         return false;
     s_org_id[0] = '\0';
-    set_data_callback(ss_org_response_received, NULL);
-    if (!http_request_sync(ip, port, req, timeout) || !s_org_id[0]) {
+    if (!http_request_sync(ip, port, req, timeout, ss_org_response_received, NULL) ||
+        !s_org_id[0]) {
+        s_last_run_error = RUN_ERROR_CONNECTION;
         debug_status("ERROR", "SeatSurfing: org discovery failed\n");
         return false;
     }
@@ -356,8 +368,10 @@ static bool ss_dns_login_and_fetch(const ip_addr_t *ip, uint16_t port, const cha
         debug_status("ERROR", "SeatSurfing: login request build failed\n");
         return false;
     }
-    set_data_callback(ss_login_response_received, NULL);
-    if (!http_request_sync(ip, port, req, timeout) || !s_access_token[0]) {
+    if (!http_request_sync(ip, port, req, timeout, ss_login_response_received, NULL) ||
+        !s_access_token[0]) {
+        if (s_last_run_error == RUN_OK)
+            s_last_run_error = RUN_ERROR_AUTH;
         debug_status("ERROR", "SeatSurfing: login failed\n");
         return false;
     }
@@ -380,8 +394,15 @@ static bool ss_dns_login_and_fetch(const ip_addr_t *ip, uint16_t port, const cha
         debug_status("ERROR", "SeatSurfing: availability request build failed\n");
         return false;
     }
-    set_data_callback(seatsurfing_data_received, NULL);
-    return http_request_sync(ip, port, req, timeout);
+    if (!http_request_sync(ip, port, req, timeout, seatsurfing_data_received, NULL)) {
+        if (s_last_run_error == RUN_OK) {
+            int sc = http_get_last_status_code();
+            s_last_run_error = (sc == 401 || sc == 403) ? RUN_ERROR_AUTH : RUN_ERROR_CONNECTION;
+        }
+        debug_status("ERROR", "SeatSurfing: availability fetch failed\n");
+        return false;
+    }
+    return true;
 }
 
 // Execute the full booking session: login → fetch availability → POST booking.
@@ -411,8 +432,8 @@ static bool ss_do_booking(const ip_addr_t *ip, bool use_dns) {
             debug_status("ERROR", "Booking: login request build failed\n");
             return false;
         }
-        set_data_callback(ss_login_response_received, NULL);
-        if (!http_request_sync(ip, port, req, timeout) || !s_access_token[0]) {
+        if (!http_request_sync(ip, port, req, timeout, ss_login_response_received, NULL) ||
+            !s_access_token[0]) {
             debug_status("ERROR", "Booking: login failed\n");
             return false;
         }
@@ -429,8 +450,7 @@ static bool ss_do_booking(const ip_addr_t *ip, bool use_dns) {
             debug_status("ERROR", "Booking: availability request build failed\n");
             return false;
         }
-        set_data_callback(seatsurfing_data_received, NULL);
-        if (!http_request_sync(ip, port, req, timeout)) {
+        if (!http_request_sync(ip, port, req, timeout, seatsurfing_data_received, NULL)) {
             debug_status("ERROR", "Booking: availability fetch failed\n");
             return false;
         }
@@ -490,9 +510,9 @@ static bool ss_do_booking(const ip_addr_t *ip, bool use_dns) {
         debug_status("ERROR", "Booking: request build failed (too long?)\n");
         return true;
     }
-    set_data_callback(ss_booking_response_received, NULL);
     bool transport_ok = http_request_sync(ip, seatsurfing_config_flash.data.port, req,
-                                          device_config_flash.data.max_wait_data_wifi * 50);
+                                          device_config_flash.data.max_wait_data_wifi * 50,
+                                          ss_booking_response_received, NULL);
     debug_status(transport_ok ? "OK" : "ERROR", "Booking: resp=%s\n",
                  s_booking_response[0] ? s_booking_response : "(empty)");
 
@@ -566,6 +586,7 @@ static bool seatsurfing_make_request(void) {
         debug_status("INFO", "SeatSurfing: resolving %s via DNS\n",
                      seatsurfing_config_flash.data.host);
         if (!wifi_resolve_hostname(seatsurfing_config_flash.data.host, &ip, 5000)) {
+            s_last_run_error = RUN_ERROR_DNS;
             debug_status("ERROR", "SeatSurfing: DNS resolution failed for %s\n",
                          seatsurfing_config_flash.data.host);
             return false;
@@ -601,38 +622,88 @@ static bool seatsurfing_make_request(void) {
     int hlen = seatsurfing_build_http_request(req, sizeof(req), host, location_id, auth_b64, NULL,
                                               NULL, NULL);
     if (hlen < 0) {
-        dlog("[SEATSURFING] Failed to build HTTP request\n");
+        s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "SeatSurfing: request build failed\n");
         return false;
     }
 
     dlog("Constructed HTTP Header:\n%s\n", req);
 
-    return http_request_sync(&ip, port, req, timeout);
+    if (!http_request_sync(&ip, port, req, timeout, seatsurfing_data_received, NULL)) {
+        if (s_last_run_error == RUN_OK) {
+            int sc = http_get_last_status_code();
+            s_last_run_error = (sc == 401 || sc == 403) ? RUN_ERROR_AUTH : RUN_ERROR_CONNECTION;
+        }
+        debug_status("ERROR", "SeatSurfing: fetch failed\n");
+        return false;
+    }
+    return true;
 }
 
-static void *ss_run(void) {
+static int ss_error_page(void) {
+    switch (s_last_run_error) {
+    case RUN_ERROR_DNS:
+        return PAGE_DNS_ERROR;
+    case RUN_ERROR_AUTH:
+        return PAGE_AUTH_ERROR;
+    case RUN_ERROR_PARSE:
+        return PAGE_PARSE_ERROR;
+    default:
+        return PAGE_HTTP_ERROR;
+    }
+}
+
+static run_result_t ss_run(void) {
+    s_last_run_error = RUN_OK;
     tls_create_config_after_wifi();
-    set_data_callback(seatsurfing_data_received, NULL);
-    bool ok = seatsurfing_make_request();
-    return ok ? seatsurfing_data : NULL;
+    if (seatsurfing_make_request())
+        return (run_result_t){.data = seatsurfing_data};
+    return (run_result_t){.error_page = ss_error_page()};
 }
 
-static void ss_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+static void ss_render(uint8_t *image, device_caps_t caps, int page, const void *data) {
+    (void)caps;
     if (page == PAGE_WIFI_ERROR) {
+        debug_status("ERROR", "SeatSurfing: showing WiFi error page\n");
         render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                          "Please check the WiFi settings.");
+                          "Check WiFi settings.");
+        return;
+    }
+    if (page == PAGE_DNS_ERROR) {
+        debug_status("ERROR", "SeatSurfing: showing DNS error page\n");
+        render_page_error(image, "DNS Error!", "Cannot resolve server name",
+                          "Check hostname in settings.");
+        return;
+    }
+    if (page == PAGE_AUTH_ERROR) {
+        debug_status("ERROR", "SeatSurfing: showing auth error page\n");
+        render_page_error(image, "Auth Error!", "Login rejected by server",
+                          "Check username and password.");
+        return;
+    }
+    if (page == PAGE_HTTP_ERROR) {
+        debug_status("ERROR", "SeatSurfing: showing server error page\n");
+        render_page_error(image, "Server Error!", "Server did not respond",
+                          "Check server reachability.");
+        return;
+    }
+    if (page == PAGE_PARSE_ERROR) {
+        debug_status("ERROR", "SeatSurfing: showing parse error page\n");
+        render_page_error(image, "Data Error!", "Server response was invalid",
+                          "Check server version.");
         return;
     }
     if (!data && page >= 0 && ss_pages[page] && ss_pages[page]->needs_wifi) {
+        debug_status("ERROR", "SeatSurfing: showing generic server error page\n");
         render_page_error(image, "Server Error!", "Unable to reach the server",
-                          "Please check the server status.");
+                          "Check server status.");
         return;
     }
 
     if (page >= 0 && ss_pages[page])
-        ss_pages[page]->render(image, battery_voltage);
+        ss_pages[page]->render(image);
     else
-        render_page_fallback(page, image, battery_voltage);
+        render_page_fallback(page, image);
 }
 
 const use_case_t use_case = {
@@ -643,4 +714,10 @@ const use_case_t use_case = {
     .run = ss_run,
     .render = ss_render,
     .free_data = NULL,
+    .render_config_page = ss_render_config_page,
+    .handle_config_form = ss_handle_config_form,
+    .needs_4gray = false,
+    .show_display_name = false,
+    .extra_routes = NULL,
+    .extra_route_count = 0,
 };

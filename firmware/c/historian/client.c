@@ -4,14 +4,15 @@
 #include <time.h>
 
 #include "cJSON.h"
+#include "historian/web_config.h"
 #define LOG_MODULE LOG_MOD_HISTORIAN
 #include "debug.h"
 #include "epaper_pages_shared.h"
-#include "flash.h"
 #include "hardware/watchdog.h"
 #include "historian/client.h"
 #include "historian/config.h"
 #include "historian/epaper_pages.h"
+#include "historian/historian_flash.h"
 #include "http_client.h"
 #include "lwip/ip_addr.h"
 #include "st25_io.h"
@@ -21,11 +22,13 @@ static bool historian_parse_timeseries(const char *json, TimeSeries *result);
 
 // Historian data storage (shared with historian/epaper_pages.c)
 TimeSeries historian_data = {0};
+static run_error_t s_last_run_error = RUN_OK;
 
 // Callback for Historian HTTP response
 static void historian_data_received(const char *json_data, size_t length, void *arg) {
     if (!json_data || length == 0) {
-        dlog("[HISTORIAN] Transfer failed or incomplete\n");
+        s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "Historian: transfer failed or incomplete\n");
         return;
     }
 
@@ -37,7 +40,6 @@ static void historian_data_received(const char *json_data, size_t length, void *
         dlog("[HISTORIAN] Temperature range: %.2f - %.2f °C\n", historian_data.min_value,
              historian_data.max_value);
 
-        // Debug: Print first few data points like esign
         for (int i = 0; i < historian_data.count && i < 10; i++) {
             dlog("[HISTORIAN] #%03d: timestamp=%llu ms UTC, "
                  "value=%.2f %s, state=%u\n",
@@ -46,7 +48,8 @@ static void historian_data_received(const char *json_data, size_t length, void *
                  historian_data.points[i].state);
         }
     } else {
-        dlog("[HISTORIAN] Failed to parse JSON\n");
+        s_last_run_error = RUN_ERROR_PARSE;
+        debug_status("ERROR", "Historian: JSON parse failed\n");
     }
 }
 
@@ -275,7 +278,8 @@ static bool historian_make_request(void) {
     int request_len = historian_build_http_request(
         http_request, sizeof(http_request), historian_host, datapoint_id, start_time, end_time);
     if (request_len < 0) {
-        dlog("[HISTORIAN] Failed to build HTTP request\n");
+        s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "Historian: request build failed\n");
         return false;
     }
 
@@ -286,32 +290,56 @@ static bool historian_make_request(void) {
     IP4_ADDR(&ip, historian_config_flash.data.ip[0], historian_config_flash.data.ip[1],
              historian_config_flash.data.ip[2], historian_config_flash.data.ip[3]);
 
-    return http_request_sync(&ip, historian_config_flash.data.port, http_request,
-                             device_config_flash.data.max_wait_data_wifi * 50);
+    if (!http_request_sync(&ip, historian_config_flash.data.port, http_request,
+                           device_config_flash.data.max_wait_data_wifi * 50,
+                           historian_data_received, NULL)) {
+        if (s_last_run_error == RUN_OK)
+            s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "Historian: fetch failed\n");
+        return false;
+    }
+    return true;
 }
 
-static void *hist_run(void) {
-    set_data_callback(historian_data_received, NULL);
-    bool ok = historian_make_request();
-    return ok ? &historian_data : NULL;
+static run_result_t hist_run(void) {
+    s_last_run_error = RUN_OK;
+    if (historian_make_request())
+        return (run_result_t){.data = &historian_data};
+    int ep = (s_last_run_error == RUN_ERROR_PARSE) ? PAGE_PARSE_ERROR : PAGE_HTTP_ERROR;
+    return (run_result_t){.error_page = ep};
 }
 
-static void hist_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+static void hist_render(uint8_t *image, device_caps_t caps, int page, const void *data) {
+    (void)caps;
     if (page == PAGE_WIFI_ERROR) {
+        debug_status("ERROR", "Historian: showing WiFi error page\n");
         render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                          "Please check the WiFi settings.");
+                          "Check WiFi settings.");
+        return;
+    }
+    if (page == PAGE_HTTP_ERROR) {
+        debug_status("ERROR", "Historian: showing server error page\n");
+        render_page_error(image, "Server Error!", "Cannot reach Historian",
+                          "Check IP and port in settings.");
+        return;
+    }
+    if (page == PAGE_PARSE_ERROR) {
+        debug_status("ERROR", "Historian: showing parse error page\n");
+        render_page_error(image, "Data Error!", "Server response was invalid",
+                          "Check Historian version.");
         return;
     }
     if (!data && page >= 0 && hist_pages[page] && hist_pages[page]->needs_wifi) {
+        debug_status("ERROR", "Historian: showing generic server error page\n");
         render_page_error(image, "Server Error!", "Unable to reach the server",
-                          "Please check the server status.");
+                          "Check server status.");
         return;
     }
 
     if (page >= 0 && hist_pages[page])
-        hist_pages[page]->render(image, battery_voltage);
+        hist_pages[page]->render(image);
     else
-        render_page_fallback(page, image, battery_voltage);
+        render_page_fallback(page, image);
 }
 
 const use_case_t use_case = {
@@ -322,4 +350,10 @@ const use_case_t use_case = {
     .run = hist_run,
     .render = hist_render,
     .free_data = NULL,
+    .render_config_page = hist_render_config_page,
+    .handle_config_form = hist_handle_config_form,
+    .needs_4gray = false,
+    .show_display_name = true,
+    .extra_routes = NULL,
+    .extra_route_count = 0,
 };

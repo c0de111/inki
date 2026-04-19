@@ -1,11 +1,12 @@
 #include "homematic/client.h"
+#include "homematic/web_config.h"
 #define LOG_MODULE LOG_MOD_HOMEMATIC
 #include "debug.h"
 #include "epaper_pages_shared.h"
-#include "flash.h"
 #include "hardware/watchdog.h"
 #include "homematic/config.h"
 #include "homematic/epaper_pages.h"
+#include "homematic/homematic_flash.h"
 #include "http_client.h"
 #include "lwip/ip_addr.h"
 #include "pico/cyw43_arch.h"
@@ -29,6 +30,7 @@ static int homematic_build_get_service_messages(char *buf, size_t n);
 // --- Parsed data storage ---
 
 hm_item_value_t homematic_values[HOMEMATIC_MAX_ITEMS];
+static run_error_t s_last_run_error = RUN_OK;
 
 char homematic_service_msgs[HM_MAX_SERVICE_MSGS][80];
 char homematic_service_addr[HM_MAX_SERVICE_MSGS][24];
@@ -566,7 +568,8 @@ static bool hm_wait_step(int timeout_ms) {
     return ok;
 }
 
-static void *hm_run(void) {
+static run_result_t hm_run(void) {
+    s_last_run_error = RUN_OK;
     memset(&g_hm_seq, 0, sizeof(g_hm_seq));
     for (uint8_t i = 0;
          i < homematic_config_flash.data.count && g_hm_seq.total < HOMEMATIC_MAX_ITEMS; i++) {
@@ -619,25 +622,39 @@ static void *hm_run(void) {
             had_success = true;
     }
 
-    return had_success ? homematic_values : NULL;
+    if (!had_success) {
+        s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "Homematic: all requests failed\n");
+        return (run_result_t){.error_page = PAGE_HTTP_ERROR};
+    }
+    return (run_result_t){.data = homematic_values};
 }
 
-static void hm_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+static void hm_render(uint8_t *image, device_caps_t caps, int page, const void *data) {
+    (void)caps;
     if (page == PAGE_WIFI_ERROR) {
+        debug_status("ERROR", "Homematic: showing WiFi error page\n");
         render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                          "Please check the WiFi settings.");
+                          "Check WiFi settings.");
+        return;
+    }
+    if (page == PAGE_HTTP_ERROR) {
+        debug_status("ERROR", "Homematic: showing server error page\n");
+        render_page_error(image, "Server Error!", "Cannot reach Homematic CCU",
+                          "Check IP and port in settings.");
         return;
     }
     if (!data && page >= 0 && hm_pages[page] && hm_pages[page]->needs_wifi) {
+        debug_status("ERROR", "Homematic: showing generic server error page\n");
         render_page_error(image, "Server Error!", "Unable to reach the server",
-                          "Please check the server status.");
+                          "Check server status.");
         return;
     }
 
     if (page >= 0 && hm_pages[page])
-        hm_pages[page]->render(image, battery_voltage);
+        hm_pages[page]->render(image);
     else
-        render_page_fallback(page, image, battery_voltage);
+        render_page_fallback(page, image);
 }
 
 const use_case_t use_case = {
@@ -648,6 +665,12 @@ const use_case_t use_case = {
     .run = hm_run,
     .render = hm_render,
     .free_data = NULL,
+    .render_config_page = hm_render_config_page,
+    .handle_config_form = hm_handle_config_form,
+    .needs_4gray = false,
+    .show_display_name = true,
+    .extra_routes = NULL,
+    .extra_route_count = 0,
 };
 
 // --- XML-RPC request builders (always compiled, no #ifdef needed) ---

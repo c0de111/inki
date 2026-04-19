@@ -1,31 +1,3 @@
-/**
- * @file    ImageResources.c
- * @brief   Contains embedded image resources for the eSign project.
- *
- * This file includes hardcoded image data for use in the eSign application,
- * such as background images, logos, and QR codes. These assets are integral
- * to the project's functionality and are compiled directly into the firmware.
- *
- * ## Purpose
- * - Background images for ePaper displays.
- * - Project and branding logos.
- * - QR codes specific to room configurations.
- *
- * ## Notes
- * - The data is stored as byte arrays and optimized for the specific ePaper
- *   display modules supported by the project.
- * - Images should match the resolution and color requirements of the display.
- *
- * ## Example Usage
- * ```c
- * #include "ImageResources.h"
- *
- * void render_logo() {
- *     DisplayImage(bg_logo);  // Displays the project logo on the ePaper screen.
- * }
- * ```
- */
-
 #include "ImageResources.h"
 
 // Image arrays and constants

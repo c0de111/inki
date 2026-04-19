@@ -1,6 +1,7 @@
 #ifndef RTC_H
 #define RTC_H
 
+#include "i2c_bus.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -15,7 +16,7 @@ typedef struct rtc_time_t {
     uint8_t year; // offset from 2000
 } rtc_time_t;
 
-void rtc_init(void);
+void rtc_init(const i2c_probe_result_t *probe);
 bool rtc_is_available(void);
 int rtc_read_time(rtc_time_t *out);
 void rtc_set_time_from_string(const char *line);

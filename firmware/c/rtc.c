@@ -185,12 +185,9 @@ void rtc_to_iso8601(const rtc_time_t *t, char *buffer, size_t buffer_size) {
              t->hours, t->minutes, t->seconds);
 }
 
-void rtc_init(void) {
-    i2c_probe_result_t i2c_probe = {0};
-    i2c_probe_expected_devices(&i2c_probe);
-
-    const bool ds3231_present = i2c_probe.ds3231_present;
-    const bool rv3028_present = i2c_probe.rv3028_present;
+void rtc_init(const i2c_probe_result_t *probe) {
+    const bool ds3231_present = probe->ds3231_present;
+    const bool rv3028_present = probe->rv3028_present;
 
     if (ds3231_present && rv3028_present) {
         dlog("Both DS3231 and RV-3028 detected, using DS3231\n");

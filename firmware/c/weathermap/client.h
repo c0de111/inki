@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lwip/tcp.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

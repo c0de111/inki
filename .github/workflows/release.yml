@@ -94,13 +94,14 @@ jobs:
             echo "$TEMPLATE"
           } > release-body.md
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release on public repo
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.tag }}"
           gh release create "$TAG" \
+            --repo c0de111/inki \
             --title "inki $TAG" \
             --notes-file release-body.md \
             artifacts/inki_*.uf2

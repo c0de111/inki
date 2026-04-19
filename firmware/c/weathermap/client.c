@@ -1,4 +1,5 @@
 #include "weathermap/client.h"
+#include "weathermap/web_config.h"
 #define LOG_MODULE LOG_MOD_WEATHERMAP
 #include "debug.h"
 #include "epaper_pages_shared.h"
@@ -8,9 +9,11 @@
 #include "http_client.h"
 #include "lwip/ip_addr.h"
 #include "pico/stdlib.h"
-#include "png_stream.h"
 #include "third_party/GUI/GUI_Paint.h"
 #include "tls_trust_store.h"
+#include "weathermap/png_stream.h"
+#include "weathermap/weathermap_flash.h"
+#include "webserver.h"
 
 #include "st25_io.h"
 #include "use_case.h"
@@ -546,6 +549,9 @@ bool weathermap_render_from_flash(void) {
     return ok;
 }
 
+static bool wm_fetch_ok;
+static run_error_t s_last_run_error = RUN_OK;
+
 static void geodata_fetch(void) {
     // Ensure HTTP client/TLS is initialized
     extern bool http_client_init(void);
@@ -592,21 +598,32 @@ static void geodata_fetch(void) {
         ok = geodata_fetch_and_store_inline(&bkg_ip, BKG_PORT, req, &count);
     }
     if (!ok) {
-        dlog("[GEODATA] Fetch failed\n");
+        s_last_run_error = RUN_ERROR_CONNECTION;
+        debug_status("ERROR", "Weathermap: fetch failed\n");
         return;
     }
 
     dlog("[GEODATA] TLS fetch OK, bytes=%u\n", (unsigned)count);
     set_weathermap_meta((uint32_t)count);
 
-    // Do not decode to flash here. We will decode and draw directly from slot1 at render time.
     const uint8_t *data = wmap_staging_ptr();
     size_t data_len = wmap_staging_size();
     if (!(data && data_len >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' &&
           data[3] == 'G')) {
-        dlog("[GEODATA] Staged content missing/invalid PNG signature.\n");
+        s_last_run_error = RUN_ERROR_PARSE;
+        debug_status("ERROR", "Weathermap: invalid or missing PNG in staging buffer\n");
     }
 }
+// --- Extra HTTP routes for this use case ---
+
+static void weathermap_serve_png(struct tcp_pcb *tpcb);
+static void weathermap_serve_clear(struct tcp_pcb *tpcb);
+
+static const route_t wm_extra_routes[] = {
+    {"/weathermap.png", HTTP_GET, ROUTE_ACTION, {.page = weathermap_serve_png}},
+    {"/weathermap_clear", HTTP_GET, ROUTE_ACTION, {.page = weathermap_serve_clear}},
+};
+
 // --- use_case_t: Weathermap page catalog, input map, and export ---
 
 static const page_def_t page_weathermap_main = {"weathermap", render_page_weathermap, true};
@@ -649,9 +666,8 @@ static const input_map_entry_t wm_input_map[] = {
 
 // --- Lifecycle: run (fetch) and render ---
 
-static bool wm_fetch_ok;
-
-static void *wm_run(void) {
+static run_result_t wm_run(void) {
+    s_last_run_error = RUN_OK;
     tls_create_config_after_wifi();
     wm_fetch_ok = false;
     geodata_fetch();
@@ -659,27 +675,42 @@ static void *wm_run(void) {
     size_t data_len = wmap_staging_size();
     if (data && data_len >= 8 && data[0] == 0x89 && data[1] == 'P') {
         wm_fetch_ok = true;
-        return &wm_fetch_ok;
+        return (run_result_t){.data = &wm_fetch_ok};
     }
-    return NULL;
+    int ep = (s_last_run_error == RUN_ERROR_PARSE) ? PAGE_PARSE_ERROR : PAGE_HTTP_ERROR;
+    return (run_result_t){.error_page = ep};
 }
 
-static void wm_render(uint8_t *image, float battery_voltage, int page, const void *data) {
+static void wm_render(uint8_t *image, device_caps_t caps, int page, const void *data) {
+    (void)caps;
     if (page == PAGE_WIFI_ERROR) {
+        debug_status("ERROR", "Weathermap: showing WiFi error page\n");
         render_page_error(image, "WiFi Error!", "Unable to connect to WiFi",
-                          "Please check the WiFi settings.");
+                          "Check WiFi settings.");
+        return;
+    }
+    if (page == PAGE_HTTP_ERROR) {
+        debug_status("ERROR", "Weathermap: showing fetch error page\n");
+        render_page_error(image, "Fetch Error!", "Cannot load map data",
+                          "Check network and TLS config.");
+        return;
+    }
+    if (page == PAGE_PARSE_ERROR) {
+        debug_status("ERROR", "Weathermap: showing PNG error page\n");
+        render_page_error(image, "Map Error!", "Invalid map data received",
+                          "Check server response.");
         return;
     }
     if (!data && page >= 0 && wm_pages[page] && wm_pages[page]->needs_wifi) {
-        render_page_error(image, "Fetch Error!", "Unable to load map data",
-                          "Please check the configuration.");
+        debug_status("ERROR", "Weathermap: showing generic fetch error page\n");
+        render_page_error(image, "Fetch Error!", "Unable to load map data", "Check configuration.");
         return;
     }
 
     if (page >= 0 && wm_pages[page])
-        wm_pages[page]->render(image, battery_voltage);
+        wm_pages[page]->render(image);
     else
-        render_page_fallback(page, image, battery_voltage);
+        render_page_fallback(page, image);
 }
 
 const use_case_t use_case = {
@@ -690,4 +721,44 @@ const use_case_t use_case = {
     .run = wm_run,
     .render = wm_render,
     .free_data = NULL,
+    .render_config_page = wm_render_config_page,
+    .handle_config_form = wm_handle_config_form,
+    .needs_4gray = true,
+    .show_display_name = true,
+    .extra_routes = wm_extra_routes,
+    .extra_route_count = sizeof(wm_extra_routes) / sizeof(wm_extra_routes[0]),
 };
+
+// =============================================================================
+// Web route handlers
+// =============================================================================
+
+static void weathermap_serve_png(struct tcp_pcb *tpcb) {
+    uint32_t staged_bytes = 0;
+    if (!get_weathermap_meta(&staged_bytes) || staged_bytes < 8) {
+        send_response(tpcb, "<html><body><h3>No cached map</h3></body></html>");
+        return;
+    }
+    const uint8_t *data = FLASH_PTR(FIRMWARE_SLOT1_FLASH_OFFSET);
+    if (!(data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G')) {
+        send_response(tpcb, "<html><body><h3>Invalid PNG in cache</h3></body></html>");
+        return;
+    }
+    send_binary_response(tpcb, "image/png", data, staged_bytes);
+}
+
+static void weathermap_serve_clear(struct tcp_pcb *tpcb) {
+    weathermap_flash_clear_image();
+    clear_weathermap_meta();
+    char page[512];
+    snprintf(page, sizeof(page),
+             "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" "
+             "content=\"width=device-width, initial-scale=1\">"
+             "<title>Weathermap</title><style>body{font-family:sans-serif;margin:2em;}</style>"
+             "</head><body>"
+             "<h3>Weathermap cleared</h3><p>The cached image and marker were erased. A fresh "
+             "fetch will occur on next boot.</p>"
+             "<p><a href=\"/\">Back</a></p>"
+             "</body></html>");
+    send_response(tpcb, page);
+}

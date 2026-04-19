@@ -111,11 +111,13 @@ http_result_t http_request_async_count_only(
     const ip_addr_t *server_ip, uint16_t port, const char *request_data,
     void (*callback)(const char *body, size_t length, bool success, void *arg), void *callback_arg);
 
+typedef void (*data_callback_fn)(const char *response_data, size_t length, void *arg);
+
 // Synchronous HTTP request: dispatch + poll until completion or timeout.
-// Invokes the registered data callback (set_data_callback) on body receipt.
+// cb is invoked with the response body on success (pass NULL to skip body processing).
 // timeout_ms <= 0 uses 5000 ms. Returns true on success.
 bool http_request_sync(const ip_addr_t *server_ip, uint16_t port, const char *request,
-                       int timeout_ms);
+                       int timeout_ms, data_callback_fn cb, void *cb_arg);
 
 // Same as http_request_sync but suppresses body storage (count-only mode).
 bool http_request_sync_count_only(const ip_addr_t *server_ip, uint16_t port, const char *request,
@@ -134,9 +136,8 @@ bool http_session_is_active(void);
 
 // --- Callback system for use-case data processing ---
 
-typedef void (*data_callback_fn)(const char *response_data, size_t length, void *arg);
-
-// Set callback for data processing (called by use case before starting HTTP request)
+// Set callback for direct invocation via http_invoke_data_callback().
+// Used by Homematic's async orchestration. For sync requests, pass cb to http_request_sync().
 void set_data_callback(data_callback_fn callback, void *arg);
 
 // Invoke the registered data callback from use-case request chains (e.g. Homematic sequential)
@@ -145,5 +146,9 @@ void http_invoke_data_callback(const char *data, size_t length, void *arg);
 // Returns the server time (UTC) extracted from the last HTTP Date header.
 // Returns true if a valid Date header was parsed, false otherwise.
 bool http_get_server_time(rtc_time_t *out);
+
+// Returns the HTTP status code from the last response (e.g. 200, 401, 500).
+// Returns 0 if no HTTP response was received (pure TCP failure or not yet requested).
+int http_get_last_status_code(void);
 
 #endif // HTTP_CLIENT_H

@@ -1,7 +1,8 @@
-#include "png_stream.h"
+#include "weathermap/png_stream.h"
 #define LOG_MODULE LOG_MOD_PNG
 #include "debug.h"
 #include "flash.h"
+#include "weathermap/weathermap_flash.h"
 // Include full miniz header to ensure mz_size_t and tinfl types are defined
 #include "third_party/GUI/GUI_Paint.h"
 #include "third_party/miniz/miniz_tinfl.h"

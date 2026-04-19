@@ -6,6 +6,7 @@
 #include "flash.h"
 #include "http_client.h"
 #include "sensors.h"
+#include "use_case.h"
 #include "version.h"
 
 #include "hardware/watchdog.h"
@@ -21,20 +22,6 @@
 #define INKI_MONITOR_TIMEOUT_MS_MAX 10000
 #define INKI_MONITOR_HOST_BUFSIZE TELEMETRY_HOST_MAX_LEN
 #define INKI_MONITOR_HTTP_PATH "/api/v1/telemetry"
-
-static const char *inki_monitor_use_case_name(void) {
-#ifdef USE_CASE_SEATSURFING
-    return "seatsurfing";
-#elif defined(USE_CASE_HISTORIAN)
-    return "historian";
-#elif defined(USE_CASE_HOMEMATIC)
-    return "homematic";
-#elif defined(USE_CASE_WEATHERMAP)
-    return "weathermap";
-#else
-    return "unknown";
-#endif
-}
 
 static int inki_monitor_sanitize_timeout_ms(int timeout_ms) {
     if (timeout_ms < INKI_MONITOR_TIMEOUT_MS_MIN || timeout_ms > INKI_MONITOR_TIMEOUT_MS_MAX) {
@@ -222,8 +209,8 @@ static bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
                  "}",
                  device_id, label_escaped, sample->query_ok ? "true" : "false", rssi_fragment,
                  wake_fragment, version_escaped, build_date_escaped,
-                 inki_monitor_room_type_name(device_config_flash.data.type),
-                 inki_monitor_use_case_name(), (unsigned long)sample->telemetry_send_elapsed_ms,
+                 inki_monitor_room_type_name(device_config_flash.data.type), use_case.name,
+                 (unsigned long)sample->telemetry_send_elapsed_ms,
                  (double)sample->battery_before_wifi_v, (double)sample->battery_after_wifi_v,
                  (double)sample->coin_cell_v, (double)sample->pico_temp_c);
 

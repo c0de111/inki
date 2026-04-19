@@ -17,6 +17,7 @@
 
 static http_session_t g_session = {0};
 static int s_body_progress_pct = -10; // reset per-request; avoids static-local persistence bug
+static int g_last_status_code = 0;    // last HTTP status code received; 0 = no response yet
 
 // Server time extracted from HTTP Date header (UTC)
 static rtc_time_t g_server_time = {0};
@@ -39,6 +40,7 @@ static void reset_session(http_session_t *session) {
     session->total_received = 0;
     session->last_error = ERR_OK;
     session->transfer_was_successful = false;
+    g_last_status_code = 0;
     session->completion_callback = NULL;
     session->callback_arg = NULL;
 
@@ -212,6 +214,7 @@ static bool recv_header_phase(http_session_t *session, struct altcp_pcb *pcb, st
     g_server_time_valid = rtc_parse_http_date(session->header_buffer, &g_server_time);
 
     int status = parse_http_status_code(session->header_buffer);
+    g_last_status_code = (status >= 0) ? status : 0;
     if (status >= 0 && (status < 200 || status >= 300)) {
         char status_line[80] = {0};
         const char *nl = strchr(session->header_buffer, '\n');
@@ -219,7 +222,7 @@ static bool recv_header_phase(http_session_t *session, struct altcp_pcb *pcb, st
         if (sl_len > 79)
             sl_len = 79;
         memcpy(status_line, session->header_buffer, sl_len);
-        dlog("[HTTP] Error status: %d — %s\n", status, status_line);
+        debug_status("ERROR", "[HTTP] Error status: %d — %s\n", status, status_line);
         return fail_session(session, pcb, p, ERR_CLSD);
     }
 
@@ -683,6 +686,11 @@ http_result_t http_request_async_count_only(const ip_addr_t *server_ip, uint16_t
 static volatile bool s_sync_done = false;
 static volatile bool s_sync_ok = false;
 
+// Data callback: set per-request by http_request_sync; set explicitly by
+// Homematic's async orchestration via set_data_callback/http_invoke_data_callback.
+static data_callback_fn data_callback = NULL;
+static void *data_callback_arg = NULL;
+
 static void http_sync_wrapper_cb(const char *body, size_t length, bool success, void *arg) {
     (void)arg;
     if (success && body && length > 0)
@@ -692,9 +700,12 @@ static void http_sync_wrapper_cb(const char *body, size_t length, bool success, 
 }
 
 static bool http_request_sync_impl(const ip_addr_t *server_ip, uint16_t port, const char *request,
-                                   int timeout_ms, bool no_store) {
+                                   int timeout_ms, bool no_store, data_callback_fn cb,
+                                   void *cb_arg) {
     if (timeout_ms <= 0)
         timeout_ms = 5000;
+    data_callback = cb;
+    data_callback_arg = cb_arg;
     s_sync_done = false;
     s_sync_ok = false;
     reset_session(&g_session);
@@ -713,13 +724,13 @@ static bool http_request_sync_impl(const ip_addr_t *server_ip, uint16_t port, co
 }
 
 bool http_request_sync(const ip_addr_t *server_ip, uint16_t port, const char *request,
-                       int timeout_ms) {
-    return http_request_sync_impl(server_ip, port, request, timeout_ms, false);
+                       int timeout_ms, data_callback_fn cb, void *cb_arg) {
+    return http_request_sync_impl(server_ip, port, request, timeout_ms, false, cb, cb_arg);
 }
 
 bool http_request_sync_count_only(const ip_addr_t *server_ip, uint16_t port, const char *request,
                                   int timeout_ms) {
-    return http_request_sync_impl(server_ip, port, request, timeout_ms, true);
+    return http_request_sync_impl(server_ip, port, request, timeout_ms, true, NULL, NULL);
 }
 
 http_result_t
@@ -743,11 +754,6 @@ bool http_session_is_active(void) { return g_session.active; }
 // CALLBACK SYSTEM AND RUN HELPERS
 // =============================================================================
 
-// Data callback mechanism: use cases register a parser, HTTP completion invokes it.
-
-static data_callback_fn data_callback = NULL;
-static void *data_callback_arg = NULL;
-
 void set_data_callback(data_callback_fn callback, void *arg) {
     data_callback = callback;
     data_callback_arg = arg;
@@ -765,3 +771,5 @@ bool http_get_server_time(rtc_time_t *out) {
     *out = g_server_time;
     return true;
 }
+
+int http_get_last_status_code(void) { return g_last_status_code; }
