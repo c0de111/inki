@@ -48,7 +48,7 @@ Manual user interaction:
 </tr>
 <tr>
   <td align="center" style="padding: 20px;"><em>inki board – for details use KiCAD</em></td>
-  <td align="center" style="padding: 20px;"><em>schematic – for details use KiCAD</em></td>
+  <td align="center" style="padding: 20px;"><em>schematic – <a href="inki_l2.pdf">PDF</a> · for details use KiCAD</em></td>
 </tr>
 </table>
 
@@ -237,6 +237,7 @@ In real-world operation at ~3–4 V reverse voltage, the leakage is orders of ma
 
 ## Files
 
+- `inki_l2.pdf` — schematic PDF (no KiCad required)
 - `inki_l2.kicad_sch` — main schematic
 - `inki_l2.kicad_pcb` — PCB layout
 - `inki_l2_BOM.csv` — bill of materials
