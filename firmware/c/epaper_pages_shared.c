@@ -198,7 +198,7 @@ static void render_page_dnd(uint8_t *image_buffer) {
 static void render_page_decision_maker(uint8_t *image_buffer) {
     Paint_Clear(WHITE);
 
-    const char *decision = (get_rand_32() > 127) ? "No!" : "Yes!";
+    const char *decision = (get_rand_32() % 2) ? "No!" : "Yes!";
     const char *vars[] = {device_config_flash.data.roomname, decision};
 
     if (device_config_flash.data.epapertype == EPAPER_WAVESHARE_7IN5_V2) {
@@ -267,10 +267,9 @@ static void render_page_device_info(uint8_t *image_buffer) {
         rtc_format_time(&rtc_data, rtc_dst, sizeof(rtc_dst));
         snprintf(buf[6], sizeof(buf[6]), "RTC (DST): %s", rtc_dst);
 
-        read_mac_address();
-        snprintf(buf[7], sizeof(buf[7]), "MAC address: %02X:%02X:%02X:%02X:%02X:%02X",
-                 mac_address[0] & 0xFF, mac_address[1] & 0xFF, mac_address[2] & 0xFF,
-                 mac_address[3] & 0xFF, mac_address[4] & 0xFF, mac_address[5] & 0xFF);
+        const uint8_t *mac = wifi_mac();
+        snprintf(buf[7], sizeof(buf[7]), "MAC address: %02X:%02X:%02X:%02X:%02X:%02X", mac[0],
+                 mac[1], mac[2], mac[3], mac[4], mac[5]);
 
         float coin_voltage = read_coin_cell_voltage(device_config_flash.data.conversion_factor);
         snprintf(buf[8], sizeof(buf[8]), "Vcc: %.3fV", epaper_get_battery_voltage());

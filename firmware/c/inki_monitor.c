@@ -8,9 +8,9 @@
 #include "sensors.h"
 #include "use_case.h"
 #include "version.h"
+#include "wifi.h"
 
 #include "hardware/watchdog.h"
-#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
 #include <stdio.h>
@@ -72,36 +72,6 @@ static void json_escape_string(char *dst, size_t dst_size, const char *src) {
     dst[w] = '\0';
 }
 
-static bool inki_monitor_read_sta_mac(uint8_t mac[6]) {
-    if (!mac) {
-        return false;
-    }
-    memset(mac, 0, 6);
-    cyw43_arch_lwip_begin();
-    int rc = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac);
-    cyw43_arch_lwip_end();
-    return rc == 0;
-}
-
-static bool inki_monitor_try_read_rssi(int32_t *out_rssi_dbm) {
-    if (!out_rssi_dbm) {
-        return false;
-    }
-    *out_rssi_dbm = 0;
-    bool ok = false;
-    cyw43_arch_lwip_begin();
-    int link = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
-    if (link >= 0) {
-        int32_t rssi = 0;
-        if (cyw43_wifi_get_rssi(&cyw43_state, &rssi) == 0) {
-            *out_rssi_dbm = rssi;
-            ok = true;
-        }
-    }
-    cyw43_arch_lwip_end();
-    return ok;
-}
-
 static bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
     if (!sample) {
         return false;
@@ -143,18 +113,13 @@ static bool inki_monitor_send_sample(const inki_monitor_sample_t *sample) {
         return false;
     }
 
-    uint8_t mac[6] = {0};
-    bool have_mac = inki_monitor_read_sta_mac(mac);
-    if (!have_mac) {
-        dlog("[INKI_MON] Failed to read STA MAC, using zeros for device_id.\n");
-    }
-
+    const uint8_t *mac = wifi_mac();
     char device_id[sizeof("inki-") + 12] = {0};
     snprintf(device_id, sizeof(device_id), "inki-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2],
              mac[3], mac[4], mac[5]);
 
     int32_t rssi_dbm = 0;
-    bool have_rssi = inki_monitor_try_read_rssi(&rssi_dbm);
+    bool have_rssi = wifi_get_rssi(&rssi_dbm);
 
     char label_escaped[80];
     char version_escaped[80];

@@ -668,7 +668,7 @@ static const input_map_entry_t wm_input_map[] = {
 
 static run_result_t wm_run(void) {
     s_last_run_error = RUN_OK;
-    tls_create_config_after_wifi();
+    tls_init();
     wm_fetch_ok = false;
     geodata_fetch();
     const uint8_t *data = wmap_staging_ptr();

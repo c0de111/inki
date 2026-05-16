@@ -6,7 +6,6 @@
 #include "debug.h"
 #include "flash.h"
 #include "i2c_bus.h"
-#include "pico/cyw43_arch.h"
 #include "rtc.h"
 #include "sensors.h"
 #include "version.h"
@@ -24,13 +23,9 @@ void build_device_status_page(char *buf, size_t sz) {
 
     char buffer[2048];
     char buffer2[256];
-    uint8_t mac_buf[6];
+    const uint8_t *mac_buf = wifi_mac();
 
     rtc_time_t now;
-
-    if (cyw43_wifi_get_mac(&cyw43_state, 0, mac_buf) != 0) {
-        memset(mac_buf, 0, sizeof(mac_buf));
-    }
 
     rtc_read_time(&now);
     float vcc = read_battery_voltage(device_config_flash.data.conversion_factor);

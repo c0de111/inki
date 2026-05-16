@@ -9,7 +9,6 @@
 #include "homematic/homematic_flash.h"
 #include "http_client.h"
 #include "lwip/ip_addr.h"
-#include "pico/cyw43_arch.h"
 #include "st25_io.h"
 #include "use_case.h"
 #include "wifi.h"
@@ -79,22 +78,6 @@ void summarize_addr(const char *full, char *out, size_t n) {
 // --- HTTP response callback ---
 
 static void homematic_data_received(const char *body, size_t length, void *arg) {
-    // Special reset signal from HTTP layer
-    if ((uintptr_t)arg == 0xFFFF) {
-        for (int i = 0; i < HOMEMATIC_MAX_ITEMS; i++) {
-            homematic_values[i].valid = false;
-            homematic_values[i].fault = false;
-            homematic_values[i].type = HM_TYPE_NONE;
-            homematic_values[i].unit[0] = 0;
-        }
-        homematic_service_count = 0;
-        for (int i = 0; i < HM_MAX_SERVICE_MSGS; i++) {
-            homematic_service_msgs[i][0] = 0;
-            homematic_service_addr[i][0] = 0;
-        }
-        return;
-    }
-
     // If arg is a valid index (sequential single-call mode), only update that index
     if ((uintptr_t)arg < HOMEMATIC_MAX_ITEMS) {
         int idx = (int)(uintptr_t)arg;
@@ -441,18 +424,18 @@ static void homematic_single_completion(const char *body, size_t length, bool su
         }
         strncpy(g_hm_seq.unit[idx], unit, sizeof(g_hm_seq.unit[idx]) - 1);
         g_hm_seq.unit_known[idx] = true;
-        http_invoke_data_callback(unit, strlen(unit), (void *)(uintptr_t)(0x8000 | idx));
+        homematic_data_received(unit, strlen(unit), (void *)(uintptr_t)(0x8000 | idx));
     } else if (g_hm_seq.phase == HM_PHASE_VALUE) {
         if (success && body && length > 0) {
-            http_invoke_data_callback(body, length, (void *)(uintptr_t)idx);
+            homematic_data_received(body, length, (void *)(uintptr_t)idx);
         } else {
-            http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)idx);
+            homematic_data_received(NULL, 0, (void *)(uintptr_t)idx);
         }
     } else if (g_hm_seq.phase == HM_PHASE_SERVICE) {
         if (success && body && length > 0) {
-            http_invoke_data_callback(body, length, (void *)(uintptr_t)0x9000);
+            homematic_data_received(body, length, (void *)(uintptr_t)0x9000);
         } else {
-            http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)0x9000);
+            homematic_data_received(NULL, 0, (void *)(uintptr_t)0x9000);
         }
     }
 
@@ -583,8 +566,6 @@ static run_result_t hm_run(void) {
     g_hm_seq.eff.data.count = g_hm_seq.total;
     g_hm_seq.eff.data.add_interface_prefix = false;
 
-    http_invoke_data_callback(NULL, 0, (void *)(uintptr_t)0xFFFF);
-    set_data_callback(homematic_data_received, NULL);
     dlog("[HOMEMATIC] Sequential mode with %u items\n", g_hm_seq.total);
 
     int timeout_ms = device_config_flash.data.max_wait_data_wifi * 50;

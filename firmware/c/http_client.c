@@ -6,8 +6,11 @@
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
+#include "http_parse.h"
+#include "lwip/altcp.h"
 #include "lwip/altcp_tls.h"
-#include "mbedtls/ssl.h"
+#include "lwip/err.h"
+#include "lwip/pbuf.h"
 #include "tls_trust_store.h"
 
 #include <limits.h>
@@ -15,17 +18,67 @@
 #include <stdlib.h>
 #include <string.h>
 
-static http_session_t g_session = {0};
-static int s_body_progress_pct = -10; // reset per-request; avoids static-local persistence bug
-static int g_last_status_code = 0;    // last HTTP status code received; 0 = no response yet
+#define HTTP_RECV_SLICE 1500
+#define HTTP_HEADER_MAX 4096
+#define PROGRESS_PCT_UNSET (-10) // sentinel: first 0% progress log fires at >= UNSET+10
+#define HTTP_PORT_IS_TLS(p) ((p) == 443)
 
-// Server time extracted from HTTP Date header (UTC)
-static rtc_time_t g_server_time = {0};
+typedef enum {
+    HTTP_SESSION_INACTIVE,
+    HTTP_SESSION_CONNECTING,
+    HTTP_SESSION_CONNECTED,
+    HTTP_SESSION_SENDING,
+    HTTP_SESSION_RECEIVING_HEADER,
+    HTTP_SESSION_RECEIVING_BODY,
+    HTTP_SESSION_COMPLETE,
+    HTTP_SESSION_ERROR,
+} http_session_state_t;
+
+typedef struct {
+    bool active;
+    http_session_state_t state;
+    bool header_complete;
+    bool transfer_complete;
+    bool fallback_mode; // response has no Content-Length — connection close delimits body
+    bool no_store_body; // count bytes only, no heap allocation
+    bool use_tls;
+    bool stream_mode; // fire streaming callbacks instead of accumulating body
+
+    char header_buffer[HTTP_HEADER_MAX];
+    size_t header_length;
+
+    char *body_buffer;
+    size_t body_buffer_size;
+    size_t expected_length;
+    size_t total_received;
+
+    char *request_data;
+    size_t request_length;
+
+    struct altcp_pcb *pcb;
+    char server_hostname[96]; // SNI hostname for TLS sessions
+
+    void (*completion_callback)(const char *body, size_t length, bool success, void *arg);
+    void *callback_arg;
+
+    void (*stream_on_header)(const char *header, size_t header_len, int status_code,
+                             int content_length, void *arg);
+    void (*stream_on_data)(const uint8_t *data, size_t len, void *arg);
+    void (*stream_on_complete)(bool success, void *arg);
+    void *stream_arg;
+
+    err_t last_error;
+    bool transfer_was_successful;
+} http_session_t;
+
+static http_session_t g_session = {0};
+static int s_body_progress_pct = PROGRESS_PCT_UNSET;
+static int g_last_status_code = 0; // last HTTP status code received; 0 = no response yet
+
+static rtc_time_t g_server_time = {0}; // UTC, set per-request during header parse
 static bool g_server_time_valid = false;
 
-// === Helper Functions ===
-
-// Frees body/request buffers and zeros all session state. Safe to call multiple times.
+// Safe to call multiple times — idempotent.
 static void reset_session(http_session_t *session) {
     session->active = false;
     session->state = HTTP_SESSION_INACTIVE;
@@ -65,70 +118,6 @@ static void reset_session(http_session_t *session) {
     session->stream_arg = NULL;
 }
 
-static int parse_content_length(const char *header) {
-    const char *cl = strstr(header, "Content-Length:");
-    if (!cl) {
-        cl = strstr(header, "content-length:"); // Case-insensitive
-    }
-    if (!cl)
-        return -1;
-
-    cl += 15; // Skip "Content-Length:"
-    while (*cl == ' ')
-        cl++; // Skip spaces
-
-    return atoi(cl);
-}
-
-static int parse_http_status_code(const char *header) {
-    const char *p = strstr(header, "HTTP/");
-    if (!p)
-        return -1;
-    // Find first space after HTTP/version
-    p = strchr(p, ' ');
-    if (!p)
-        return -1;
-    // Skip spaces and parse number
-    while (*p == ' ')
-        p++;
-    return atoi(p);
-}
-
-// Extract hostname from the HTTP request's Host header (without optional :port)
-static void extract_host_from_request(const char *request, char *out_host, size_t out_size) {
-    if (!request || !out_host || out_size == 0)
-        return;
-    out_host[0] = '\0';
-    const char *line = request;
-    while (line) {
-        if (strncasecmp(line, "Host:", 5) == 0) {
-            const char *v = line + 5;
-            while (*v == ' ' || *v == '\t')
-                v++;
-            const char *end = v;
-            while (*end && *end != '\r' && *end != '\n')
-                end++;
-            size_t len = (size_t)(end - v);
-            if (len >= out_size)
-                len = out_size - 1;
-            size_t copy = len;
-            for (size_t i = 0; i < len; i++) {
-                if (v[i] == ':') {
-                    copy = i;
-                    break;
-                }
-            }
-            memcpy(out_host, v, copy);
-            out_host[copy] = '\0';
-            return;
-        }
-        const char *nl = strchr(line, '\n');
-        line = nl ? nl + 1 : NULL;
-    }
-}
-
-// === TCP Callbacks ===
-
 static void handle_connection_closed(http_session_t *session, struct altcp_pcb *pcb) {
     dlog("[HTTP] Connection closed by server\n");
     altcp_err(pcb, NULL);
@@ -166,8 +155,7 @@ static void handle_connection_closed(http_session_t *session, struct altcp_pcb *
     reset_session(session);
 }
 
-// Deregister callbacks, release pcb/pbuf, fire failure notification, reset session.
-// Returns true so callers can write: return fail_session(session, pcb, p, ERR_xxx);
+// Returns true so callers can write: return fail_session(...);
 static bool fail_session(http_session_t *session, struct altcp_pcb *pcb, struct pbuf *p,
                          err_t err_code) {
     altcp_err(pcb, NULL);
@@ -213,7 +201,7 @@ static bool recv_header_phase(http_session_t *session, struct altcp_pcb *pcb, st
 
     g_server_time_valid = rtc_parse_http_date(session->header_buffer, &g_server_time);
 
-    int status = parse_http_status_code(session->header_buffer);
+    int status = http_parse_status_code(session->header_buffer);
     g_last_status_code = (status >= 0) ? status : 0;
     if (status >= 0 && (status < 200 || status >= 300)) {
         char status_line[80] = {0};
@@ -226,14 +214,15 @@ static bool recv_header_phase(http_session_t *session, struct altcp_pcb *pcb, st
         return fail_session(session, pcb, p, ERR_CLSD);
     }
 
-    const char *te1 = strstr(session->header_buffer, "Transfer-Encoding:");
-    const char *te2 = te1 ? te1 : strstr(session->header_buffer, "transfer-encoding:");
-    if (te2 && (strstr(te2, "chunked") || strstr(te2, "Chunked"))) {
+    const char *te = strstr(session->header_buffer, "Transfer-Encoding:");
+    if (!te)
+        te = strstr(session->header_buffer, "transfer-encoding:");
+    if (te && (strstr(te, "chunked") || strstr(te, "Chunked"))) {
         dlog("[HTTP] Chunked transfer-encoding not supported\n");
         return fail_session(session, pcb, p, ERR_VAL);
     }
 
-    int content_length = parse_content_length(session->header_buffer);
+    int content_length = http_parse_content_length(session->header_buffer);
     if (session->stream_on_header && session->no_store_body) {
         session->stream_on_header(session->header_buffer, session->header_length, status,
                                   content_length, session->stream_arg);
@@ -397,8 +386,6 @@ static void finalize_transfer(http_session_t *session, struct altcp_pcb *pcb) {
     reset_session(session);
 }
 
-// Two-phase recv: accumulate header until CRLFCRLF, then receive body.
-// Fallback handles responses without Content-Length — server close marks end of body.
 static err_t http_recv_callback(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
     http_session_t *session = (http_session_t *)arg;
     if (pcb != session->pcb) {
@@ -432,10 +419,8 @@ static err_t http_recv_callback(void *arg, struct altcp_pcb *pcb, struct pbuf *p
                 return ERR_OK;
             continue;
         }
-        if (session->active && session->header_complete) {
-            if (recv_body_phase(session, pcb, p, chunk, step))
-                return ERR_OK;
-        }
+        if (recv_body_phase(session, pcb, p, chunk, step))
+            return ERR_OK;
     }
 
     altcp_recved(pcb, p->tot_len);
@@ -467,16 +452,13 @@ static err_t http_connected_callback(void *arg, struct altcp_pcb *pcb, err_t err
         return err; // lwIP fires http_error_callback; session inactive so it exits immediately
     }
 
-    // Success: TCP connection established
     dlog("[HTTP] TCP connection established successfully\n");
     if (session->use_tls) {
         dlog("[HTTP] TLS handshake will begin...\n");
     }
-
-    dtrace("[HTTP] Connected to server\n");
     session->state = HTTP_SESSION_CONNECTED;
 
-    // Send HTTP request — log first line (method + path) without the full token body
+    // Log request first line only — avoids dumping Authorization tokens to the console.
     {
         char req_line[80] = {0};
         const char *nl = strchr(session->request_data, '\n');
@@ -486,7 +468,6 @@ static err_t http_connected_callback(void *arg, struct altcp_pcb *pcb, err_t err
         memcpy(req_line, session->request_data, rl);
         dlog("[HTTP] Sending %d bytes: %s\n", (int)session->request_length, req_line);
     }
-    // Wrap write in cyw43 lock for safety
     cyw43_arch_lwip_begin();
     err_t write_err =
         altcp_write(pcb, session->request_data, session->request_length, TCP_WRITE_FLAG_COPY);
@@ -497,7 +478,6 @@ static err_t http_connected_callback(void *arg, struct altcp_pcb *pcb, err_t err
         dlog("[HTTP] Failed to send request: %d\n", write_err);
         session->state = HTTP_SESSION_ERROR;
         session->last_error = write_err;
-        // Close and reset to avoid dangling PCB or leaks
         altcp_close(pcb);
         session->pcb = NULL;
         if (session->completion_callback) {
@@ -517,27 +497,24 @@ static err_t http_connected_callback(void *arg, struct altcp_pcb *pcb, err_t err
 // not a real error. Errors arriving after a successful transfer are late duplicates.
 static void http_error_callback(void *arg, err_t err) {
     http_session_t *session = (http_session_t *)arg;
-    // If session is already inactive (e.g., after success/reset), ignore spurious errors
     if (!session || !session->active) {
         dtrace("[HTTP] Ignoring TCP error on inactive session (%d)\n", err);
         return;
     }
 
-    // Ignore errors after a successful transfer (late/duplicate callbacks)
+    // Late duplicate — transfer already succeeded.
     if (session->transfer_was_successful) {
         dtrace("[HTTP] TCP connection closed normally after successful transfer\n");
         return;
     }
 
-    // Log all errors for debugging, even close notifications
     dlog("[HTTP] TCP error occurred: %d\n", err);
 
-    // Silently ignore pure close notifications for callback logic
     if (err == ERR_CLSD) {
         return;
     }
 
-    // Handle HTTP/1.0 connection close as success if we received data
+    // HTTP/1.0 without Content-Length: the server-initiated RST/ABRT *is* the success signal.
     if (session->fallback_mode && session->header_complete && session->total_received > 0 &&
         (err == ERR_RST || err == ERR_ABRT)) {
 
@@ -557,7 +534,6 @@ static void http_error_callback(void *arg, err_t err) {
         return;
     }
 
-    // Genuine error
     dlog("[HTTP] TCP error: %d (transfer incomplete)\n", err);
     session->state = HTTP_SESSION_ERROR;
     session->last_error = err;
@@ -567,21 +543,17 @@ static void http_error_callback(void *arg, err_t err) {
     reset_session(session);
 }
 
-// === Public API Implementation ===
-
 bool http_client_init(void) {
-    tls_trust_store_init();
     reset_session(&g_session);
     debug_status("OK", "HTTP client initialized\n");
     return true;
 }
 
-// Allocates the request buffer, creates a PCB (TLS or plain), registers lwIP callbacks,
-// and initiates the TCP connection.  Assumes g_session fields (callbacks, options) are
-// already set by the caller.  On error the session is fully reset.
+// Caller must have populated g_session's callback/mode fields before calling.
+// On any error the session is fully reset.
 static http_result_t open_connection(const ip_addr_t *server_ip, uint16_t port,
                                      const char *request_data, bool no_store, bool use_tls) {
-    s_body_progress_pct = -10;
+    s_body_progress_pct = PROGRESS_PCT_UNSET;
     g_server_time_valid = false;
     g_session.no_store_body = no_store;
     g_session.request_length = strlen(request_data);
@@ -596,8 +568,8 @@ static http_result_t open_connection(const ip_addr_t *server_ip, uint16_t port,
 
     g_session.use_tls = use_tls;
     if (g_session.use_tls) {
-        extract_host_from_request(g_session.request_data, g_session.server_hostname,
-                                  sizeof(g_session.server_hostname));
+        http_parse_host(g_session.request_data, g_session.server_hostname,
+                        sizeof(g_session.server_hostname));
     }
 
     if (g_session.use_tls) {
@@ -614,12 +586,8 @@ static http_result_t open_connection(const ip_addr_t *server_ip, uint16_t port,
         ip_type = IP_IS_V6(server_ip) ? IPADDR_TYPE_V6 : IPADDR_TYPE_V4;
 #endif
         g_session.pcb = altcp_tls_new(cfg, ip_type);
-        if (g_session.pcb && g_session.server_hostname[0]) {
-            void *ctx = altcp_tls_context(g_session.pcb);
-            if (ctx) {
-                mbedtls_ssl_set_hostname((mbedtls_ssl_context *)ctx, g_session.server_hostname);
-            }
-        }
+        if (g_session.pcb && g_session.server_hostname[0])
+            tls_apply_sni(g_session.pcb, g_session.server_hostname);
         dlog("[HTTP] Using TLS: host='%s' port=%u\n",
              g_session.server_hostname[0] ? g_session.server_hostname : "(none)", (unsigned)port);
     } else {
@@ -640,9 +608,7 @@ static http_result_t open_connection(const ip_addr_t *server_ip, uint16_t port,
     g_session.active = true;
     g_session.state = HTTP_SESSION_CONNECTING;
 
-    dlog("[HTTP] Calling altcp_connect to %d.%d.%d.%d:%u\n", (int)((server_ip->addr >> 0) & 0xFF),
-         (int)((server_ip->addr >> 8) & 0xFF), (int)((server_ip->addr >> 16) & 0xFF),
-         (int)((server_ip->addr >> 24) & 0xFF), (unsigned)port);
+    dlog("[HTTP] Calling altcp_connect to %s:%u\n", ipaddr_ntoa(server_ip), (unsigned)port);
     err_t err = altcp_connect(g_session.pcb, server_ip, port, http_connected_callback);
     cyw43_arch_lwip_end();
 
@@ -667,7 +633,7 @@ http_request_async(const ip_addr_t *server_ip, uint16_t port, const char *reques
     reset_session(&g_session);
     g_session.completion_callback = callback;
     g_session.callback_arg = callback_arg;
-    return open_connection(server_ip, port, request_data, false, port == 443);
+    return open_connection(server_ip, port, request_data, false, HTTP_PORT_IS_TLS(port));
 }
 
 http_result_t http_request_async_count_only(const ip_addr_t *server_ip, uint16_t port,
@@ -678,23 +644,20 @@ http_result_t http_request_async_count_only(const ip_addr_t *server_ip, uint16_t
     reset_session(&g_session);
     g_session.completion_callback = callback;
     g_session.callback_arg = callback_arg;
-    return open_connection(server_ip, port, request_data, true, port == 443);
+    return open_connection(server_ip, port, request_data, true, HTTP_PORT_IS_TLS(port));
 }
 
-// --- Synchronous request helpers ---
-
+// Sync state is file-static so that a late lwIP callback arriving after a
+// sync-call timeout writes into known storage rather than a dead stack frame.
 static volatile bool s_sync_done = false;
 static volatile bool s_sync_ok = false;
-
-// Data callback: set per-request by http_request_sync; set explicitly by
-// Homematic's async orchestration via set_data_callback/http_invoke_data_callback.
-static data_callback_fn data_callback = NULL;
-static void *data_callback_arg = NULL;
+static data_callback_fn s_sync_user_cb = NULL;
+static void *s_sync_user_cb_arg = NULL;
 
 static void http_sync_wrapper_cb(const char *body, size_t length, bool success, void *arg) {
     (void)arg;
-    if (success && body && length > 0)
-        http_invoke_data_callback(body, length, NULL);
+    if (success && body && length > 0 && s_sync_user_cb)
+        s_sync_user_cb(body, length, s_sync_user_cb_arg);
     s_sync_ok = success;
     s_sync_done = true;
 }
@@ -704,13 +667,13 @@ static bool http_request_sync_impl(const ip_addr_t *server_ip, uint16_t port, co
                                    void *cb_arg) {
     if (timeout_ms <= 0)
         timeout_ms = 5000;
-    data_callback = cb;
-    data_callback_arg = cb_arg;
+    s_sync_user_cb = cb;
+    s_sync_user_cb_arg = cb_arg;
     s_sync_done = false;
     s_sync_ok = false;
     reset_session(&g_session);
     g_session.completion_callback = http_sync_wrapper_cb;
-    if (open_connection(server_ip, port, request, no_store, port == 443) != HTTP_SUCCESS)
+    if (open_connection(server_ip, port, request, no_store, HTTP_PORT_IS_TLS(port)) != HTTP_SUCCESS)
         return false;
     int waited = 0;
     while (!s_sync_done && waited < timeout_ms) {
@@ -745,24 +708,10 @@ http_request_async_stream(const ip_addr_t *server_ip, uint16_t port, const char 
     g_session.stream_on_data = on_data;
     g_session.stream_on_complete = on_complete;
     g_session.stream_arg = cb_arg;
-    return open_connection(server_ip, port, request_data, true, port == 443);
+    return open_connection(server_ip, port, request_data, true, HTTP_PORT_IS_TLS(port));
 }
 
 bool http_session_is_active(void) { return g_session.active; }
-
-// =============================================================================
-// CALLBACK SYSTEM AND RUN HELPERS
-// =============================================================================
-
-void set_data_callback(data_callback_fn callback, void *arg) {
-    data_callback = callback;
-    data_callback_arg = arg;
-}
-
-void http_invoke_data_callback(const char *data, size_t length, void *arg) {
-    if (data_callback)
-        data_callback(data, length, arg);
-}
 
 bool http_get_server_time(rtc_time_t *out) {
     if (!g_server_time_valid || !out) {

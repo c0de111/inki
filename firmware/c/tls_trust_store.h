@@ -1,16 +1,16 @@
-// Minimal TLS trust store interface for ALTCP + mbedTLS
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
 
 struct altcp_tls_config;
+struct altcp_pcb;
 
-// Initialize global TLS client config (idempotent)
-void tls_trust_store_init(void);
+// Initialize TLS client config. Must be called after Wi-Fi initialization.
+void tls_init(void);
 
-// Create TLS config after Wi-Fi initialization (call after wifi_connect)
-void tls_create_config_after_wifi(void);
-
-// Get global TLS client config (NULL if init failed)
+// Get global TLS client config (NULL if init failed or TLS not enabled for this use case).
 struct altcp_tls_config *tls_get_client_config(void);
+
+// Set TLS SNI hostname on an established PCB. No-op if pcb or hostname is NULL/empty.
+void tls_apply_sni(struct altcp_pcb *pcb, const char *hostname);

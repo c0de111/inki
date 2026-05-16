@@ -107,7 +107,7 @@ typedef struct {
 } route_t;
 
 // Full setup-mode event loop: AP mode, DHCP/DNS, OTA state machine.
-// Caller must call cyw43_arch_init_with_country() first.
+// Caller must call wifi_ap_start() first.
 // Returns when the setup timeout expires; caller handles shutdown.
 void webserver_run(void);
 

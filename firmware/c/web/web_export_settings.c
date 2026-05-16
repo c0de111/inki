@@ -334,9 +334,9 @@ void build_settings_export_txt(char *buf, size_t sz, char *disposition, size_t d
     snprintf(download_name, sizeof(download_name), "inki_settings_%s_%s.txt", use_case.name,
              settings_date);
     snprintf(disposition, disp_sz, "attachment; filename=\"%s\"", download_name);
-    snprintf(source_device_id, sizeof(source_device_id), "inki-%02X%02X%02X%02X%02X%02X",
-             mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4],
-             mac_address[5]);
+    const uint8_t *mac = wifi_mac();
+    snprintf(source_device_id, sizeof(source_device_id), "inki-%02X%02X%02X%02X%02X%02X", mac[0],
+             mac[1], mac[2], mac[3], mac[4], mac[5]);
     strncpy(exported_at, "unknown", sizeof(exported_at) - 1);
     exported_at[sizeof(exported_at) - 1] = '\0';
     rtc_time_t now = {0};
@@ -350,8 +350,7 @@ void build_settings_export_txt(char *buf, size_t sz, char *disposition, size_t d
     off += (size_t)snprintf(buf + off, sz - off, "meta.source_device_id=%s\n", source_device_id);
     off += (size_t)snprintf(buf + off, sz - off, "meta.exported_at=%s\n", exported_at);
     off += (size_t)snprintf(buf + off, sz - off, "device.mac=%02X:%02X:%02X:%02X:%02X:%02X\n",
-                            mac_address[0], mac_address[1], mac_address[2], mac_address[3],
-                            mac_address[4], mac_address[5]);
+                            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     off += (size_t)snprintf(buf + off, sz - off, "build_signature=%s\n",
                             (version && version[0] != '\0') ? version : "unknown");
     off += (size_t)snprintf(buf + off, sz - off, "build_date=%s\n",

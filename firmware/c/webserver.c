@@ -37,7 +37,6 @@
 #include "lwip/tcp.h"
 #include "morse.h"
 #include "ota.h"
-#include "pico/cyw43_arch.h"
 #include "pico/flash.h"
 #include "pico/time.h"
 #include "power.h"
@@ -751,7 +750,7 @@ static void start_setup_webserver(void) {
 
 // =============================================================================
 // webserver_run() — setup mode event loop
-// Caller must have called cyw43_arch_init_with_country() before this.
+// Caller must have called wifi_ap_start() before this.
 // Returns when the setup timeout expires; caller handles shutdown.
 // =============================================================================
 
@@ -772,20 +771,13 @@ void webserver_run(void) {
 
     debug_info("WiFi setup mode: initializing...\n");
 
-    if (!wifi_start_ap()) {
-        debug_flush();
-        power_shutdown_default();
-    }
-
     static const char *ssid = "inki-setup";
     static const char *password = "12345678";
 
-    cyw43_arch_enable_ap_mode(ssid, password, CYW43_AUTH_WPA2_AES_PSK);
-
-    ip4_addr_t ip, netmask, gw;
-    IP4_ADDR(&ip, 192, 168, 4, 1);
-    IP4_ADDR(&netmask, 255, 255, 255, 0);
-    IP4_ADDR(&gw, 192, 168, 4, 1);
+    if (!wifi_ap_start(ssid, password)) {
+        debug_flush();
+        power_shutdown_default();
+    }
 
     absolute_time_t t_shutdown = make_timeout_time_ms(WIFI_SETUP_TIMEOUT_MS);
     webserver_set_shutdown_time(t_shutdown);
@@ -794,11 +786,6 @@ void webserver_run(void) {
     captive_start_dhcp();
     captive_start_dns();
 
-    if (cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_AP, mac_address) == 0) {
-        debug_status("OK", "AP MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac_address[0],
-                     mac_address[1], mac_address[2], mac_address[3], mac_address[4],
-                     mac_address[5]);
-    }
     debug_status("OK", "AP active: SSID=%s  IP=192.168.4.1\n", ssid);
 
 #if LED_MORSE_ENABLED
@@ -817,7 +804,7 @@ void webserver_run(void) {
     while (true) {
         bool ota_active = !ota_is_idle();
 
-        cyw43_arch_poll(); // no-op in threadsafe_background, kept for clarity
+        wifi_poll();
 
         webserver_ota_tick();
 
@@ -856,7 +843,7 @@ void webserver_run(void) {
         // Shutdown timeout
         if (absolute_time_diff_us(get_absolute_time(), t_shutdown) < 0) {
             debug_status("WARN", "Setup timeout — shutting down\n");
-            cyw43_arch_deinit();
+            wifi_deinit();
             return; // caller calls debug_flush() + power_shutdown_default()
         }
 

@@ -655,7 +655,7 @@ static int ss_error_page(void) {
 
 static run_result_t ss_run(void) {
     s_last_run_error = RUN_OK;
-    tls_create_config_after_wifi();
+    tls_init();
     if (seatsurfing_make_request())
         return (run_result_t){.data = seatsurfing_data};
     return (run_result_t){.error_page = ss_error_page()};

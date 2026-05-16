@@ -46,6 +46,7 @@ if(USE_CASE STREQUAL "seatsurfing")
         seatsurfing/seatsurfing_flash.c
         third_party/cjson/cJSON.c
     )
+    set(UC_TRUST_STORE_HEADER "certs/trust_store_seatsurfing_pem.h")
 elseif(USE_CASE STREQUAL "historian")
     set(UC_SOURCES
         historian/client.c
@@ -54,6 +55,7 @@ elseif(USE_CASE STREQUAL "historian")
         historian/historian_flash.c
         third_party/cjson/cJSON.c
     )
+    set(UC_TRUST_STORE_HEADER "")
 elseif(USE_CASE STREQUAL "homematic")
     set(UC_SOURCES
         homematic/client.c
@@ -61,6 +63,7 @@ elseif(USE_CASE STREQUAL "homematic")
         homematic/web_config.c
         homematic/homematic_flash.c
     )
+    set(UC_TRUST_STORE_HEADER "")
 elseif(USE_CASE STREQUAL "weathermap")
     set(UC_SOURCES
         weathermap/client.c
@@ -70,6 +73,7 @@ elseif(USE_CASE STREQUAL "weathermap")
         weathermap/png_stream.c
         third_party/miniz/miniz_tinfl.c
     )
+    set(UC_TRUST_STORE_HEADER "certs/trust_store_weathermap_pem.h")
 else()
     message(FATAL_ERROR "Unknown USE_CASE '${USE_CASE}'. Valid: seatsurfing, historian, homematic, weathermap")
 endif()
@@ -82,6 +86,7 @@ add_executable(inki_slot0
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture
+    http_parse.c    # Pure HTTP header parse helpers (content-length, status, host)
     inki_monitor.c  # Optional telemetry POST to inki-monitor (runtime, fail-safe)
     ${UC_SOURCES}
     ImageResources.c     # Image data for ePaper display
@@ -122,6 +127,7 @@ add_executable(inki_slot1
     ${CMAKE_CURRENT_BINARY_DIR}/version.c  # Auto-generated version info
     wifi.c          # Wi-Fi handling logic
     http_client.c   # Robust HTTP client with historian architecture
+    http_parse.c    # Pure HTTP header parse helpers (content-length, status, host)
     inki_monitor.c  # Optional telemetry POST to inki-monitor (runtime, fail-safe)
     ${UC_SOURCES}
     ImageResources.c     # Image data for ePaper display
@@ -327,6 +333,12 @@ if(USE_CASE_DEFINE)
     target_compile_definitions(inki_slot0 PRIVATE ${USE_CASE_DEFINE})
     target_compile_definitions(inki_slot1 PRIVATE ${USE_CASE_DEFINE})
     message(STATUS "Use case override: ${USE_CASE_DEFINE}")
+endif()
+
+if(UC_TRUST_STORE_HEADER)
+    target_compile_definitions(inki_slot0 PRIVATE TRUST_STORE_HEADER="${UC_TRUST_STORE_HEADER}")
+    target_compile_definitions(inki_slot1 PRIVATE TRUST_STORE_HEADER="${UC_TRUST_STORE_HEADER}")
+    message(STATUS "Trust store: ${UC_TRUST_STORE_HEADER}")
 endif()
 
 if(INKI_DEBUG_USB_WAIT)

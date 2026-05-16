@@ -52,8 +52,7 @@ uint8_t *epaper_init(bool is_4gray) {
                                                         : (EPD_7IN5_V2_WIDTH / 4 + 1)) *
                           EPD_7IN5_V2_HEIGHT;
         } else {
-            EPD_7IN5_V2_Init();
-            EPD_7IN5_V2_Clear();
+            EPD_7IN5_V2_Init_Fast();
             buffer_size = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 8)
                                                         : (EPD_7IN5_V2_WIDTH / 8 + 1)) *
                           EPD_7IN5_V2_HEIGHT;
@@ -74,8 +73,7 @@ uint8_t *epaper_init(bool is_4gray) {
                                                         : (EPD_4IN2_V2_WIDTH / 4 + 1)) *
                           EPD_4IN2_V2_HEIGHT;
         } else {
-            EPD_4IN2_V2_Init();
-            EPD_4IN2_V2_Clear();
+            EPD_4IN2_V2_Init_Fast(Seconds_1S);
             buffer_size = ((EPD_4IN2_V2_WIDTH % 8 == 0) ? (EPD_4IN2_V2_WIDTH / 8)
                                                         : (EPD_4IN2_V2_WIDTH / 8 + 1)) *
                           EPD_4IN2_V2_HEIGHT;

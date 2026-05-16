@@ -1,107 +1,35 @@
 #include "tls_trust_store.h"
 #include "config.h"
 
-#if defined(USE_CASE_WEATHERMAP) || defined(USE_CASE_SEATSURFING)
+#ifdef TRUST_STORE_HEADER
 
 #define LOG_MODULE LOG_MOD_TLS
 #include "debug.h"
 #include "lwip/altcp_tls.h"
+#include "mbedtls/ssl.h"
 #if INKI_DEBUG_TLS_CB
 #include "mbedtls/debug.h"
 #endif
-#include <stdlib.h>
-#include <string.h>
 
-// Trust store selection
-// Prefer a consolidated PEM trust bundle if available (can include multiple CAs such as HARICA,
-// ISRG Root X1, etc.). Fallback to legacy HARICA bundle if present. Otherwise, validation is
-// disabled.
-
-#if __has_include("certs/trust_store_pem.h")
-#include "certs/trust_store_pem.h" // defines: trust_store_pem, trust_store_pem_len (bytes)
-#define HAVE_TRUST_PEM 1
-#elif __has_include("certs/harica_bundle.h")
-#include "certs/harica_bundle.h" // defines: harica_bundle_der, harica_bundle_der_len (bytes)
-#define HAVE_HARICA_DER 1
-#else
-#define HAVE_TRUST_PEM 0
-#define HAVE_HARICA_DER 0
-static const uint8_t empty_ca[] = {};
-static const size_t empty_ca_len = 0;
-#endif
+#include TRUST_STORE_HEADER // defines: trust_store_pem[], trust_store_pem_len (includes NUL)
 
 static struct altcp_tls_config *s_tls_cfg = NULL;
 
 #if INKI_DEBUG_TLS_CB
 static void tls_enable_debug_callback(void) {
-    // ALTCP mbedTLS config already installs a debug callback internally.
-    // Raising threshold here enables verbose TLS diagnostics.
     mbedtls_debug_set_threshold(4);
     dlog("[TLS] INKI_DEBUG_TLS_CB enabled (mbedTLS debug threshold=4)\n");
 }
 #endif
 
-void tls_trust_store_init(void) {
+void tls_init(void) {
     if (s_tls_cfg)
         return;
 
-#if HAVE_TRUST_PEM
-    dlog("[TLS] Trust store (PEM) available (%u bytes)\n", (unsigned)trust_store_pem_len);
-#elif HAVE_HARICA_DER
-    dlog("[TLS] HARICA certificate bundle (DER) available (%u bytes)\n",
-         (unsigned)harica_bundle_der_len);
-#else
-    dlog("[TLS] No certificate bundle embedded - certificate validation disabled\n");
-#endif
+    dlog("[TLS] Trust store: %u bytes\n", (unsigned)trust_store_pem_len);
 
-    dtrace("[TLS] Trust store initialized (config deferred until after Wi-Fi init)\n");
-}
-
-void tls_create_config_after_wifi(void) {
-    if (s_tls_cfg)
-        return;
-
-    // Create TLS config AFTER Wi-Fi initialization (like pico-examples)
-    dtrace("[TLS] Creating ALTCP TLS client config after Wi-Fi init\n");
-
-// Use certificate validation if available
-#if HAVE_TRUST_PEM
-    // Ensure PEM is NUL-terminated for parsers that expect it
-    const u8_t *ca_ptr = (const u8_t *)trust_store_pem;
-    size_t ca_len = (size_t)trust_store_pem_len;
-    u8_t *tmp_buf = NULL;
-    if (ca_len == 0 || trust_store_pem[ca_len - 1] != '\0') {
-        tmp_buf = (u8_t *)malloc(ca_len + 1);
-        if (tmp_buf) {
-            memcpy(tmp_buf, trust_store_pem, ca_len);
-            tmp_buf[ca_len] = '\0';
-            ca_ptr = tmp_buf;
-            ca_len = ca_len + 1;
-        }
-    }
-    s_tls_cfg = altcp_tls_create_config_client(ca_ptr, ca_len);
-    if (tmp_buf) {
-        free(tmp_buf);
-        tmp_buf = NULL;
-    }
-    if (!s_tls_cfg) {
-        dlog("[TLS] PEM trust store parse failed; attempting fallback CA bundle (if present)\n");
-    }
-#endif
-#if !HAVE_TRUST_PEM || (HAVE_TRUST_PEM && 0)
-    /* nothing */
-#endif
-#if HAVE_HARICA_DER
-    if (!s_tls_cfg) {
-        s_tls_cfg = altcp_tls_create_config_client(harica_bundle_der, harica_bundle_der_len);
-    }
-#endif
-#if !HAVE_TRUST_PEM && !HAVE_HARICA_DER
-    if (!s_tls_cfg) {
-        s_tls_cfg = altcp_tls_create_config_client(NULL, 0);
-        dlog("[TLS] No certificate validation (fallback for testing)\n");
-    }
-#endif
+    s_tls_cfg =
+        altcp_tls_create_config_client((const u8_t *)trust_store_pem, (size_t)trust_store_pem_len);
 
     if (!s_tls_cfg) {
         dlog("[TLS] Failed to create ALTCP TLS client config\n");
@@ -112,16 +40,26 @@ void tls_create_config_after_wifi(void) {
     tls_enable_debug_callback();
 #endif
 
-    dlog("[TLS] ALTCP TLS config created successfully after Wi-Fi init\n");
+    dlog("[TLS] ALTCP TLS config created successfully\n");
 }
 
 struct altcp_tls_config *tls_get_client_config(void) { return s_tls_cfg; }
 
-#else // !(USE_CASE_WEATHERMAP || USE_CASE_SEATSURFING)
+void tls_apply_sni(struct altcp_pcb *pcb, const char *hostname) {
+    if (!pcb || !hostname || hostname[0] == '\0')
+        return;
+    void *ctx = altcp_tls_context(pcb);
+    if (ctx)
+        mbedtls_ssl_set_hostname((mbedtls_ssl_context *)ctx, hostname);
+}
 
-// Stub implementations for use cases that don't need TLS
-void tls_trust_store_init(void) {}
-void tls_create_config_after_wifi(void) {}
+#else // !TRUST_STORE_HEADER — stubs for use cases that don't need TLS
+
+void tls_init(void) {}
 struct altcp_tls_config *tls_get_client_config(void) { return NULL; }
+void tls_apply_sni(struct altcp_pcb *pcb, const char *hostname) {
+    (void)pcb;
+    (void)hostname;
+}
 
-#endif // USE_CASE_WEATHERMAP || USE_CASE_SEATSURFING
+#endif // TRUST_STORE_HEADER

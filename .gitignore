@@ -88,10 +88,6 @@ _autosave-*.kicad_sch
 *.FCBak
 **/fp-info-cache
 
-.claude/*
-!.claude/memory/
-!.claude/settings.local.json
-skills-lock.json
 # External UF2 tools (auto-downloaded by create_uf2.sh)
 firmware/c/uf2conv.py
 firmware/c/uf2families.json
@@ -99,7 +95,6 @@ firmware/c/uf2families.json
 # Docs build output (do not commit generated site)
 docs/_site/
 docs/vendor/
-
 
 # Firmware build output
 firmware/c/build/
@@ -123,5 +118,3 @@ inki-monitor/*.pyc
 # FreeCAD autosave backups
 *.FCBak
 
-# Claude Code
-skills-lock.json
