@@ -32,3 +32,10 @@ Paint_DrawString_EN(x, y, "text", &font_ubuntu_mono_20pt_bold, WHITE, BLACK);
 ## Integration
 
 These fonts are compiled separately from the Waveshare fonts and included in the build system via CMakeLists.txt.
+
+## License
+
+The Ubuntu Mono typeface is Copyright Canonical Ltd. and is licensed under the
+**Ubuntu Font Licence 1.0**. The bitmap font tables in this directory are generated from
+Ubuntu Mono and are therefore distributed under the same licence. The full licence text is
+in `LICENSE` in this directory.

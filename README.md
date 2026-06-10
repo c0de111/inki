@@ -226,7 +226,7 @@ Shows Wi-Fi setup info so you can connect to the device’s web UI.
 This project contains both hardware and software components, which are licensed under separate terms:
 
 - All content in the **/hardware** directory is licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.
-- All content in the **/firmware** directory is licensed under the **Apache License, Version 2.0**.
+- All original content in the **/firmware** directory is licensed under the **Apache License, Version 2.0**. Bundled third-party components under **/firmware/c/third_party/** retain their respective upstream licenses — see [firmware/c/third_party/README.md](firmware/c/third_party/README.md).
 
 See the LICENSE files in the respective directories for full license texts and terms.
 
