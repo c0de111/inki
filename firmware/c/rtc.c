@@ -181,8 +181,24 @@ void rtc_format_time_short(const rtc_time_t *t, char *buffer, size_t buffer_size
 }
 
 void rtc_to_iso8601(const rtc_time_t *t, char *buffer, size_t buffer_size) {
-    snprintf(buffer, buffer_size, "20%02u-%02u-%02uT%02u:%02u:%02uZ", t->year, t->month, t->date,
-             t->hours, t->minutes, t->seconds);
+    // RTC stores CET (UTC+1); subtract offset to emit true UTC with Z suffix.
+    int h = (int)t->hours - RTC_TIMEZONE_OFFSET_H;
+    uint8_t d = t->date, m = t->month, y = t->year;
+    if (h < 0) {
+        h += 24;
+        if (d > 1) {
+            d--;
+        } else {
+            static const uint8_t mdays[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+            m = (m > 1) ? m - 1 : 12;
+            if (m == 12)
+                y = y > 0 ? y - 1 : 99;
+            int yr = 2000 + y;
+            d = (m == 2 && (yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0))) ? 29 : mdays[m];
+        }
+    }
+    snprintf(buffer, buffer_size, "20%02u-%02u-%02uT%02d:%02u:%02uZ", y, m, d, h, t->minutes,
+             t->seconds);
 }
 
 void rtc_init(const i2c_probe_result_t *probe) {
