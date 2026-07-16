@@ -90,7 +90,7 @@ static void abbreviate_name_if_needed(char *name, size_t max_chars) {
 
 void ss_format_seat(const seat_info_t *seat, char *out, size_t out_len, size_t max_chars) {
     if (seat->is_available) {
-        strncpy(out, "frei", out_len);
+        strncpy(out, "free", out_len);
     } else {
         format_name_from_email(seat->user_email, out, out_len);
         abbreviate_name_if_needed(out, max_chars);

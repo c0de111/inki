@@ -118,7 +118,7 @@ No cables, programmer or flashing required — just insert batteries and use you
 </p>
 
 <p align="center">
-  <i>Left: Log of the AA battery voltage of a 7.5&quot; prototype, running for 198 days with 1800-second refresh intervals.<br>
+  <i>Left: Log of the AA battery voltage of a 7.5&quot; prototype, over 198 days at 1800-second refresh; separate 4.2-inch field units have since run over a year (393 days, still going) on one battery set.<br>
   Right: The 4.2&quot; version of the inki device with its backside visible (including batteries and RTC).<br>
   Click any image to view the full-resolution version.</i>
 </p>

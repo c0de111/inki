@@ -163,7 +163,7 @@ void render_page_placeholder(uint8_t *image_buffer, const char *title) {
 }
 
 static void render_page_placeholder_default(uint8_t *image_buffer) {
-    render_page_placeholder(image_buffer, "inki");
+    render_page_placeholder(image_buffer, "Tinta");
 }
 
 void render_page_fallback(int page, uint8_t *image_buffer) {

@@ -172,23 +172,30 @@ void epaper_draw_firmware_info(void) {
     snprintf(buffer, sizeof(buffer), "%s %s %s, U=%.2fV", program_name, version, build_date,
              s_battery_voltage);
 
+    sFONT *font;
+    int y;
     switch (device_config_flash.data.epapertype) {
     case EPAPER_WAVESHARE_7IN5_V2:
-        Paint_DrawString_EN(500, 464, buffer, &Font12, WHITE, BLACK);
+        font = &Font12;
+        y = 464;
         break;
-
     case EPAPER_WAVESHARE_4IN2_V2:
-        Paint_DrawString_EN(150, 292, buffer, &Font8, WHITE, BLACK);
+        font = &Font8;
+        y = 292;
         break;
-
     case EPAPER_WAVESHARE_2IN9_V2:
-        Paint_DrawString_EN(250, 284, buffer, &Font12, WHITE, BLACK);
+        font = &Font12;
+        y = 284;
         break;
-
     default:
         dlog("Unsupported ePaper type: %d\n", device_config_flash.data.epapertype);
         return;
     }
+
+    int x = (int)Paint.Width - 2 - (int)strlen(buffer) * font->Width;
+    if (x < 0)
+        x = 0;
+    Paint_DrawString_EN(x, y, buffer, font, WHITE, BLACK);
 }
 
 void epaper_draw_4gray_test(void) {

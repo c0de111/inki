@@ -12,15 +12,15 @@
 #endif
 
 #if defined(USE_CASE_HISTORIAN)
-#define DEFAULT_ROOMNAME "inki-historian"
+#define DEFAULT_ROOMNAME "tinta-historian"
 #elif defined(USE_CASE_SEATSURFING)
-#define DEFAULT_ROOMNAME "inki-seatsurfing"
+#define DEFAULT_ROOMNAME "tinta-seatsurf"
 #elif defined(USE_CASE_HOMEMATIC)
-#define DEFAULT_ROOMNAME "inki-homematic"
+#define DEFAULT_ROOMNAME "tinta-homematic"
 #elif defined(USE_CASE_WEATHERMAP)
-#define DEFAULT_ROOMNAME "inki-weathermap"
+#define DEFAULT_ROOMNAME "tinta-weathermap"
 #else
-#define DEFAULT_ROOMNAME "inki"
+#define DEFAULT_ROOMNAME "tinta"
 #endif
 
 __attribute__((section(".wifi_config"))) __attribute__((used))
