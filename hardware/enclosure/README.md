@@ -1,11 +1,11 @@
-# eSign Enclosure
+# Tinta Enclosure
 
-This directory contains the 3D-printable enclosures for the eSign project, created in FreeCAD. Two versions are included, supporting:
+This directory contains the 3D-printable enclosures for the Tinta project, created in FreeCAD. Two versions are included, supporting:
 
 - **4.2" Waveshare V2 ePaper display**
 - **7.5" Waveshare V2 ePaper display**
 
-Both are tailored to fit the shared custom eSign PCB and for wall mounting.
+Both are tailored to fit the shared custom Tinta PCB and for wall mounting.
 
 ---
 

@@ -1,42 +1,44 @@
 # Firmware
 
-The **inki** firmware is a compact, bare-metal C application for the **Raspberry Pi Pico W**, designed for ultra-low-power **ePaper signage**. It supports "over-the-air" WIFI firmware updates, flash-persistent configuration, and dynamic content fetched via Wi-Fi from the Seatsurfing room booking system.
+The **Tinta** firmware is a compact, bare-metal C application for the **Raspberry Pi Pico W**, designed for ultra-low-power **ePaper signage**. It supports over-the-air firmware updates over Wi-Fi, flash-persistent configuration, and content fetched over Wi-Fi from whichever back end the selected use case targets — Seatsurfing room booking, CCU-Historian time series, or Homematic status.
 
 ## Key Features
 
-- No RTOS or dynamic memory
-  Runs on bare metal using the official Pico SDK, cyw43_arch and lwIP for Wi-Fi web server and client queries. Minimal runtime overhead, deterministic behavior, and low power consumption. Up to 10.000s refresh per battery life, tested in daily usage with 10.000s of operations without problem.
+- No RTOS
+  Runs on bare metal using the official Pico SDK, cyw43_arch and lwIP for the Wi-Fi web server and client queries. Minimal runtime overhead, deterministic behaviour, and low power consumption. The device is powered down completely between updates, so every wake starts from a cold boot — there is no long-running state to drift or fragment. Field units have passed 5000 wake cycles on a single set of cells; see the [circuit README](../hardware/circuit/README.md) for measured data.
 
 - Dual-slot bootloader (Slot 0 and Slot 1)
   Enables safe OTA / WIFI updates: new firmware is flashed to the inactive slot and activated only after verification by the device (magic word and crc32 check).
 
 - Power-optimized architecture
-  A P-MOSFET fully disconnects power when inactive. Wakeups are triggered by RTC (DS3231) or pushbutton.
+  A P-MOSFET fully disconnects power when inactive. Three sources wake the device: an RTC alarm (DS3231 or RV-3028, auto-detected at runtime), a pushbutton, or an NFC field event.
 
 - Configuration in flash
   Wi-Fi credentials, Seatsurfing settings, and display behavior are stored in dedicated flash regions, separate from firmware.
 
 - Web-based configuration portal
-  Device features an access point mode (enter by holding all pushbuttons during startup). Configuration is done via browser (Wi-Fi, API, room, clock, ...).
+  Device features an access point mode, entered by holding pushbutton 3 alone or all three pushbuttons while it powers on. Configuration is done via browser (Wi-Fi, API, room, clock, ...).
 
 - Seatsurfing API integration
   Fetches live booking data and displays current room status. Multiple spaces per display supported.
 
 - Flexible build system
-  Bootloader, lot-specific binaries and "factory"-setting binaries are generated automatically via `build.sh`, flashing is supported via `flash.sh`.
-hare 4.2″ or 7.5″ ePaper displays. The content persists without power.
+  Bootloader, slot binaries and the factory-configuration image are generated automatically via `build.sh`; `create_uf2.sh` packs them into a single USB-flashable image.
+
+- ePaper display support
+  Waveshare 4.2″ or 7.5″ panels, selected at build time. The content persists without power.
 
 
 ---
-# Building the eSign Firmware
+# Building the Tinta Firmware
 
 Steps to clone, configure, and build the firmware.
 
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-org/inki.git
-cd inki/firmware/c
+git clone https://github.com/c0de111/tinta.git
+cd tinta/firmware/c
 ```
 
 ## 2. Build
@@ -55,6 +57,15 @@ The firmware supports multiple use cases that can be selected at build time:
 
 # Historian time-series data visualization
 ./build.sh --historian
+
+# Homematic home-automation status
+./build.sh --homematic
+
+# Weathermap (experimental)
+./build.sh --weathermap
+
+# Standalone NFC antenna tuning firmware
+./build.sh --st25-tune
 
 # Template for new use cases
 ./build.sh --new-usecase
@@ -75,10 +86,32 @@ This should give you (among others) the following files (numbers show approximat
 
 ## 3. Write the firmware
 
-At least the very first time you have to write the bootloader, initial config and one firmware slot - see flash.sh. After initial flashing you can use the web interface.
+### Over USB — no programmer needed
+
+`./create_uf2.sh` (run after `./build.sh`) packs the bootloader, slot 0, and the default
+configuration into a single `.uf2`, named after the selected use case. Prebuilt ones are attached
+to every release.
+
+Hold BOOTSEL while plugging the board into USB, then copy the `.uf2` onto the `RPI-RP2` drive that
+appears. Because the image covers all three flash regions, this works on a factory-fresh Pico W —
+no SWD, no debug probe. Everything after that can be done over the web interface, including
+firmware updates.
 
 ```bash
-flash.sh
+./build.sh --seatsurfing
+./create_uf2.sh              # -> build/inki_seatsurfing.uf2
+```
+
+### Over SWD — for development
+
+`flash.sh` writes the regions individually, which is what you want while working on the firmware:
+it can rewrite slot 0 alone and leave your configuration in place.
+
+⚠️ Check which sections are enabled before running it. The default-configuration section is a
+factory reset and erases all user settings.
+
+```bash
+./flash.sh
 ```
 
 ## Notes
@@ -164,7 +197,7 @@ st25.request_valid?
 ├── YES → intentional NFC wake → handle opcode, proceed with page
 └── NO
     ├── pushbutton != 0 → button wake → normal cycle (page selected by button)
-    │   (includes AP mode: pushbutton==4, all-buttons: pushbutton==7)
+    │   (codes 4 and 7 both select AP/setup mode)
     └── pushbutton == 0
         ├── it_sts != 0 AND !alarm_flag → spurious NFC (generic tap, no payload)
         │   → LED 3x blink, power off immediately
@@ -202,7 +235,7 @@ st25.request_valid?
 - `0x11` — LED slow blink (test)
 - `0x12` — LED fast blink (test)
 
-The Android app from the [NFC_exploration](https://codeberg.org/c0de111/NFC_exploration) project produces this format.
+The companion Android app, [wake-electronics/tinta-tap](https://github.com/wake-electronics/tinta-tap), produces this format.
 
 ### ST25 Antenna Tuning Helper
 
@@ -227,7 +260,7 @@ sudo tio /dev/ttyACM0
 4. Color-coded bars: blue (baseline) → green → yellow → red (strong coupling)
 5. Session peak tracking shows maximum delta per phone tap
 
-**Note:** The tune firmware overwrites the entire flash (no bootloader layout). Flash the normal inki firmware back when done.
+**Note:** The tune firmware overwrites the entire flash (no bootloader layout). Flash the normal Tinta firmware back when done.
 
 ### Source Files
 

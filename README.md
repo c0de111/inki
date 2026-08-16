@@ -1,245 +1,122 @@
 # Tinta
 
-**Tinta** (formerly published as inki) is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. See also https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device
-<!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
+Tinta is a battery-powered ePaper sign built around the Raspberry Pi Pico W. A real-time clock
+wakes it on schedule, it fetches data over Wi-Fi, redraws the screen, and then switches itself off
+completely in hardware — there is no sleep mode. A push button or an NFC tap wakes it on demand.
+This approach earned an Honorable Mention in the "Least Power" category of
+[Hackaday's 2026 Green-Powered Challenge](https://hackaday.com/2026/05/07/congratulations-to-the-green-powered-challenge-winners/).
+One set of ordinary alkaline cells lasts thousands of refresh cycles, and the ePaper keeps its
+image while the device is off.
+
+This repository holds everything needed to build one: firmware, PCB design, 3D-printable enclosure,
+and an optional telemetry service. Formerly published as **inki**.
+
+**[Product page](https://wake-electronics.com/)** · **[Development logs on Hackaday](https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device)** · **Videos on [MakerTube](https://makertube.net/c/esign) and [YouTube](https://www.youtube.com/@tinta-gadget)**
+
+<!-- Once the campaign page is public, add to the line above:
+     **[Crowd Supply campaign](https://www.crowdsupply.com/wake-electronics/tinta)** · -->
 
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
-    <img src="images/esign_4_2_1_cropped.jpg" alt="eSign Device" width="500" style="border-radius: 8px;">
-  </a>
-</p>
-
-<p align="center">
-  <i>Fully assembled 4.2&quot; Tinta (powered-off) with ePaper display and 3D-printed enclosure.</i>
-<!--<i>Click the image to view full-resolution version.</i>-->
-</p>
-
-<p align="center">
-  <a href="https://makertube.net/w/gxEmY74gfjZvuuTyGfTvus" target="_blank">
-    <img src="images/esign_4_2_video_refresh_screenshot.png" alt="eSign refresh" width="300">
-  </a>
-</p>
-
-<p align="center">
-  <i>Tinta 4.2" operating: realtime clock switching on the device (LED on), pico connects to WIFI and gatheres current booking of desk (originally, desk is free), epaper is refreshes with the new information, device is switching off (LED off).</i>
-<!-- <i>Click the image to view video.</i> -->
-</p>
-
-<p align="center">
-  <a href="images/7_5_ccu-historian.JPG" target="_blank">
-    <img src="images/7_5_ccu-historian.JPG" alt="eSign Device" width="500" style="border-radius: 8px;">
-  </a>
-</p>
-
-<p align="center">
-  <i>7.5" version displaying temperature reading of a sensor from the ccu-historian home automation system over the last 24 hours.
-</i>
-<!-- <i>Click the image to view video.</i> -->
-</p>
-
----
-
-## Try it: How to Use Tinta
-If you have a Pico W at hand, you can quickly test:
-
-- Download a prebuilt UF2 from the latest Release:
-  - Historian: [inki_historian.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_historian.uf2)
-  - SeatSurfing: [inki_seatsurfing.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_seatsurfing.uf2)
-  - Homematic: [inki_homematic.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_homematic.uf2)
-- Hold BOOTSEL while plugging in the Pico W → the RPI-RP2 drive appears
-- Copy the UF2 to the drive → the board reboots automatically
-- The Pico W onboard LED blinks “inki” in Morse
-- Connect to the Wi‑Fi AP `inki-setup`, then open `http://192.168.4.1` in your browser
-- Works on a bare Pico W (EPAPER_NONE by default)
-
----
-
-## Quick Start: How to Use Tinta
-
-Tinta can be configured and updated with a new firmware via the Wi-Fi setup mode:
-
-- Start and connect to the Tinta Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
-
-- Setup the configuration of the device
-
-  - Wi-Fi credentials
-  - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, room name, ...)
-  - Optionally adjust device settings (automatic refresh intervals...)
-  - Optionally upload a custom logo / piktogram
-  - Optionally upload firmware updates, Tinta will automatically choose the most recent version at next reboot
-  - Set realtime clock, using the client's time (your phone/tablet/computer used for connecting to Tinta)
-  - Tinta reboots and starts displaying live information from the configured source
-
-No cables, programmer or flashing required — just insert batteries and use your browser.
-
-<p align="center">
-  <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
-    <img src="images/inki_webinterface_landingpage_combined.png" alt="Tinta setup and configuration interface" width="600" style="border-radius: 8px;">
-  </a>
-</p>
-
-<p align="center">
-  <em>Left: browser-based configuration interface at <code>http://192.168.4.1</code>. Right: Tinta Wi-Fi setup mode.</em>
-</p>
-
-## Features
-
-- **Battery powered**
-  No cables needed, runtime up to years
-
-- **Web Interface**
-  For setup, configuration and updates via WIFI, bootloader (https://github.com/c0de111/pico_bootloader) automatically chooses most recent firmware version
-
-- **ePaper Display Support**
-  Compatible with Waveshare 7.5" V2 and 4.2" V2 displays, retains its content even when powered off.
-
-- **Automatically synchronizes with: seats booked via seatsurfing, data from ccu-historian**
-  Shows current booking state and name, layouts, refresh time and display content can be adjusted for room types, or data from ccu-historian or a homematic ccu.
-
-- **Wi-Fi Connectivity**
-  Periodically fetches content via HTTP, refresh time freely programmable.
-
-- **Multi-Page Display**
-  User-selectable display pages via pushbuttons. [See „User-selectable pages“](#user-selectable-pages)
-
-- **Battery Voltage Monitoring** Monitoring of AA / AAA batteries via adc and logged via Wi-Fi, hardware-controlled voltage divider activated only when needed for RTC supply.
-
-- **Telemetry** Optional [inki-monitor](inki-monitor/) companion service for battery, Wi-Fi, and temperature monitoring with browser-rendered charts.
-
-- **Energy Efficiency** Hardware-controlled shutdown and wake-up via RTC and MOSFET switching — no software sleep required, operated by standard AA or AAA batteries. About 10.000 iteration for large version (7.5", 3 x AA batteries) and about 5.000 iteration for small version (4.2", 3 X AAA batteries). Runtime (depending on wake-up frequency and thus iterations) up to years. For estimation use the script [power_consumption_estimate.py](hardware/circuit/)
-
-<p align="center">
-  <a href="images/log_prototype_esign_7_5.png" target="_blank">
-    <img src="images/log_prototype_esign_7_5.png" alt="eSign 7.5&quot; log" width="400" style="border-radius: 8px; margin-right: 12px;">
-  </a>
-  <a href="images/esign_4_2_backside.JPG" target="_blank">
-    <img src="images/esign_4_2_backside.JPG" alt="eSign 4.2&quot; backside" width="400" style="border-radius: 8px;">
-  </a>
-</p>
-
-<p align="center">
-  <i>Left: Log of the AA battery voltage of a 7.5&quot; prototype, over 198 days at 1800-second refresh; separate 4.2-inch field units have since run over a year (393 days, still going) on one battery set.<br>
-  Right: The 4.2&quot; version of the Tinta device with its backside visible (including batteries and RTC).<br>
-  Click any image to view the full-resolution version.</i>
-</p>
-
----
-
-## Build your own *Tinta*
-
-This repository provides all files, documentation, and code to build your own *Tinta*:
-
-1. **3D-Printed Enclosure**
-   Files and documentation for the modular enclosure with a dovetail mount - [(STLs and FreeCAD files)](hardware/enclosure/).
-
-   ### Assembly Animation (4.2" version)
-
-![Assembly Animation](hardware/enclosure/images/assembly.gif)
-
-This animation shows the step-by-step assembly of the 4.2" enclosure.
-
-2. **Electronics**
-   Custom PCB design with RTC, Pico W, and power management for ultra-low energy consumption [(schematics, pcbs, docs)](hardware/circuit/) — [schematic PDF](hardware/circuit/inki_l2.pdf).
-
-3. **Firmware**
-   C-based firmware for RTC wakeup, Wi-Fi sync, Web interface, ePaper display handling, and modular room configuration [(C code, build instructions, docs)](firmware).
-
-   <p align="center">
-  <a href="https://makertube.net/w/ogwhv2iz3bCEpDWk6XRxvr" target="_blank">
-    <img src="images/esign_4_2_video_screenshot.jpg" alt="eSign Enclosure Demo" width="500">
-  </a>
-</p>
-
-<p align="center"><i>Click to watch the 3D enclosure demo video on MakerTube</i></p>
-
-   ---
-
-## User-selectable pages
-
-Eight combinations are available by holding buttons 1–3 while pressing *Start*. New hardware diode-ORs the buttons so **any button wakes the device**; older boards still only wake on Button 1, but page selection works the same once awake.
-
-> **Page selection logic:**
-> Active page = sum of pressed buttons: **Button 1 = 1**, **Button 2 = 2**, **Button 3 = 4**
-> Pages 0–3 are primary; pages 4–7 mirror 0–3 (legacy combos).
-
----
-
-### Page 1: **Room Occupation (Default View)**
-Displays current room occupancy fetched from the seatsurfing server. The room name, occupant, and space number are shown. This page is shown automatically triggered by the Real Time Clock.
-
-<p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_0.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_0.JPG" alt="page 0eSign Device" width="400" style="border-radius: 8px;">
+    <img src="images/esign_4_2_1_cropped.jpg" alt="Assembled 4.2-inch Tinta" width="500" style="border-radius: 8px;">
   </a>
 </p>
 
 ---
 
-### Page 2: **Videokonferenz**
-Static “videoconference in progress” view. No network connection required.
+## Try it on a bare Pico W
 
-<p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_1.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_1.JPG" alt="page 1 eSign Device" width="400" style="border-radius: 8px;">
-  </a>
-</p>
+No custom hardware required — the firmware runs on a stock Pico W with the display disabled.
 
----
+1. Download a prebuilt UF2 from the [latest release](https://github.com/c0de111/tinta/releases/latest):
+   [seatsurfing](https://github.com/c0de111/tinta/releases/latest/download/inki_seatsurfing.uf2) ·
+   [historian](https://github.com/c0de111/tinta/releases/latest/download/inki_historian.uf2) ·
+   [homematic](https://github.com/c0de111/tinta/releases/latest/download/inki_homematic.uf2)
+2. Hold BOOTSEL while plugging in the Pico W, then copy the UF2 to the `RPI-RP2` drive.
+3. The onboard LED blinks `inki` in Morse once it is up.
+4. Connect to the Wi-Fi access point `inki-setup` and open `http://192.168.4.1`.
 
-### Page 3: **Universal Decision Maker**
-A playful feature for indecisive moments. Randomly displays either “Yes!” or “No!” without requiring a network connection.
+> Release artifacts and the setup access point still carry the old `inki` name.
 
+## Build from source
 
-<p align="center">
-  <a href="images/4_2_white_pages/esign_4_2_page_2_YES.JPG" target="_blank">
-    <img src="images/4_2_white_pages/esign_4_2_page_2_YES.JPG" alt="page 2 eSign Device" width="400" style="border-radius: 8px;">
-<img src="images/4_2_white_pages/esign_4_2_page_2_NO.JPG" alt="page 2 eSign Device" width="400" style="border-radius: 8px;">
-  </a>
-</p>
+Building, flashing, use-case selection, and the debug output are documented in
+**[firmware/README.md](firmware/README.md)**. In short:
 
+```
+cd firmware/c
+./build.sh --seatsurfing        # or --historian, --homematic, --weathermap
+```
 
-<p align="center">
-  <a href="https://makertube.net/w/1DiDJP2MitTqSbMxgx9UBE" target="_blank">
-    <img src="images/esign_4_2_universal_decisionMaker_screenshot.png" alt="eSign refresh" width="400">
-  </a>
+Requires the Pico SDK 2.1.0 (`PICO_SDK_PATH`), the ARM GNU toolchain, and CMake 3.12+.
+The build produces a bootloader, two firmware slots for over-the-air updates, and a default
+configuration image.
 
-  <a href="https://makertube.net/w/9YwdxqEVp6JRVWCDHPg3zx" target="_blank">
-    <img src="images/esign_4_2_universal_decisionMaker_screenshot_no.png" alt="eSign refresh" width="400">
-  </a>
-</p>
+## Repository layout
 
----
+```
+firmware/       Pico W firmware in C — build system, use cases, drivers, web interface
+hardware/       KiCad schematic and PCB (circuit/), FreeCAD and STL enclosure (enclosure/)
+inki-monitor/   optional Python/Flask service collecting battery and Wi-Fi telemetry
+scripts/        helper scripts
+images/         photographs and diagrams used in the documentation
+```
 
-### Page 4: **Web Interface Info**
-Shows Wi-Fi setup info so you can connect to the device’s web UI.
+Each directory has its own README with the details.
 
-<p align="center">
-  <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
-   <img src="images/inki_webinterface_landingpage_combined.png" alt="Tinta setup and configuration interface" width="600" style="border-radius: 8px;">
-  </a>
-</p>
+## Hardware
 
----
+The [enclosure](hardware/enclosure/) is modular and 3D-printable, with a dovetail mount: the
+baseplate is glued or screwed to the wall and the sign clips on, so it lifts straight off for a
+battery change.
+
+![Assembly of the 4.2-inch enclosure](hardware/enclosure/images/assembly.gif)
+
+The [circuit](hardware/circuit/) is a custom PCB carrying the Pico W, a real-time clock, MOSFET
+power switching, battery monitoring, and an optional NFC front end.
+
+## NFC
+
+Boards with the optional ST25DV04KC tag can be reached by a phone **while the device is switched
+off**: the phone's field powers the tag, the phone writes a short command into its EEPROM, and the
+tag pulls the wake line. The Pico W then boots, reads the command over I²C, and acts on it — so a
+tap can refresh the display or book a desk without the device having been powered at all.
+
+The 16-byte wire format, the wake-source decision tree, and the antenna tuning helper are described
+in [firmware/README.md](firmware/README.md) and [firmware/c/README.md](firmware/c/README.md). The
+companion Android app lives in its own repository,
+[wake-electronics/tinta-tap](https://github.com/wake-electronics/tinta-tap).
+
+## Field results
+
+A 4.2-inch unit running the Seatsurfing use case has been logged continuously in an office:
+
+```
+393 days, 5142 wake cycles on one set of three AAA cells
+99.5 % day coverage; one outage in 393 days (66.6 h, external cause)
+45-minute wake interval, median 2700.0 s over 13 months, no measurable drift
+```
+
+The 4.2-inch version is rated at about 5,000 wake cycles on three AAA cells, the 7.5-inch version
+at about 10,000 on three AA cells. The unit above met that rating in the field and kept going.
+Actual runtime follows the configured wake interval: a longer interval means fewer cycles per day
+and a longer life on the same cells.
 
 ## License
 
-This project contains both hardware and software components, which are licensed under separate terms:
+This project contains both hardware and software components, licensed under separate terms:
 
-- All content in the **/hardware** directory is licensed under the **CERN Open Hardware License v2 - Strongly Reciprocal (CERN-OHL-S-2.0)**.
-- All original content in the **/firmware** directory is licensed under the **Apache License, Version 2.0**. Bundled third-party components under **/firmware/c/third_party/** retain their respective upstream licenses — see [firmware/c/third_party/README.md](firmware/c/third_party/README.md).
+- Everything in **/hardware** is licensed under the
+  **CERN Open Hardware License v2 — Strongly Reciprocal (CERN-OHL-S-2.0)**.
+- All original content in **/firmware** is licensed under the **Apache License, Version 2.0**.
+  Bundled third-party components under `/firmware/c/third_party/` retain their upstream licenses —
+  see [firmware/c/third_party/README.md](firmware/c/third_party/README.md).
 
-See the LICENSE files in the respective directories for full license texts and terms.
+See the LICENSE files in the respective directories for the full texts.
 
----
+## Contributing
 
-## Status
+Issues and pull requests are welcome, particularly new use cases: one directory under
+`firmware/c/` and one build flag, see [firmware/README.md](firmware/README.md).
 
-**Active development** — repository being built step-by-step.
-
-Want to follow or contribute? Star the repo, and stay tuned for updates!
-
-## Contact
-
-For questions, feedback, or contributions, feel free to reach out via email:
-
-✉️ [c0de@posteo.de](mailto:c0de@posteo.de)
+Contact: [c0de@posteo.de](mailto:c0de@posteo.de)

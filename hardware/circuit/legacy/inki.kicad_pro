@@ -505,7 +505,7 @@
       "pos_files": "gerber/",
       "specctra_dsn": "",
       "step": "esign_simple.step",
-      "svg": "/home/nicolas/esign-circuit/board_250405.svg",
+      "svg": "",
       "vrml": ""
     },
     "page_layout_descr_file": ""

@@ -7,7 +7,7 @@ Usage:
   import_legacy.sh [--dry-run] --db <sqlite.db> --file <legacy_queries.txt> --device-id <inki-...> --label <label>
 
 Example:
-  ./import_legacy.sh --dry-run --db ./data/inki-monitor.sqlite3 --file /home/nicolas/esign-server/log/103H_queries.txt --device-id inki-2CCF67D929A3 --label 103H_queries.txt
+  ./import_legacy.sh --dry-run --db ./data/inki-monitor.sqlite3 --file /path/to/legacy-logs/103H_queries.txt --device-id inki-2CCF67D929A3 --label 103H_queries.txt
 
 Arguments:
   --dry-run            Parse/report only (no DB write)

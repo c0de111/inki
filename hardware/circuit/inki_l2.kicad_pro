@@ -531,7 +531,7 @@
       "pos_files": "gerber/",
       "specctra_dsn": "",
       "step": "esign_simple.step",
-      "svg": "/home/nicolas/esign-circuit/board_250405.svg",
+      "svg": "",
       "vrml": ""
     },
     "page_layout_descr_file": ""
@@ -682,7 +682,7 @@
       "workbook_filename": ""
     },
     "page_layout_descr_file": "",
-    "plot_directory": "/home/nicolas/Downloads/",
+    "plot_directory": "",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
     "spice_external_command": "spice \"%I\"",

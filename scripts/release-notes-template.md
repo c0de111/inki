@@ -1,6 +1,6 @@
 ## Overview
 
-Full DIY package: enclosure, PCB, and firmware to build inki without a programmer.
+Full DIY package: enclosure, PCB, and firmware to build Tinta without a programmer.
 Quick-start UF2s: prebuilt images to preview setup and the web interface on a bare Pico W; same firmware runs on fully assembled devices and supports OTA via the web UI.
 
 ## What's Included

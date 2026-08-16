@@ -1,6 +1,6 @@
 # inki-monitor
 
-Lightweight companion service for **inki** device telemetry — battery voltages, Wi-Fi signal strength, temperature, and more. Runs as a small Python/Flask process on a LAN host with SQLite storage and browser-rendered Plotly.js charts.
+Lightweight companion service for **Tinta** device telemetry — battery voltages, Wi-Fi signal strength, temperature, and more. Runs as a small Python/Flask process on a LAN host with SQLite storage and browser-rendered Plotly.js charts.
 
 ## Quick start
 
@@ -45,7 +45,7 @@ Key settings:
 
 ## Firmware side
 
-Configure telemetry in the inki web interface under Device Settings: host (IPv4), port, Bearer token, timeout, optional label. Telemetry is sent after the main query, before Wi-Fi deinit. Failures do not affect the main inki flow.
+Configure telemetry in the Tinta web interface under Device Settings: host (IPv4), port, Bearer token, timeout, optional label. Telemetry is sent after the main query, before Wi-Fi deinit. Failures do not affect the main inki flow.
 
 Current constraints: HTTP only, IPv4 literal only, hardcoded path `/api/v1/telemetry`.
 

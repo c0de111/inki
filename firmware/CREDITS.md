@@ -1,6 +1,6 @@
 # 📜 CREDITS & THIRD-PARTY LICENSE NOTICE
 
-This project (eSign) incorporates open-source components developed and maintained by third parties. These components are included in accordance with their respective licenses. We gratefully acknowledge their contributions.
+This project (Tinta) incorporates open-source components developed and maintained by third parties. These components are included in accordance with their respective licenses. We gratefully acknowledge their contributions.
 
 ---
 

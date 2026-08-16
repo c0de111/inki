@@ -43,7 +43,7 @@ Manual user interaction via:
 
 ## Power Consumption and Estimations
 
-The typical battery life under realistic usage conditions can be estimated by power_consumption_estimate.py, example output for 4.2" esign:
+Typical battery life can be estimated with [`power_consumption_estimate.py`](../power_consumption_estimate.py) in the parent directory, example output for the 4.2" version:
 
 ### Power Consumption Estimate for 4.2"
 
@@ -189,7 +189,7 @@ Thus, no practical impact on battery life is expected from reverse leakage throu
 
 - `esign.kicad_sch`: Main schematic
 - `esign.kicad_pcb`: PCB layout
-- `power_consumption_estimate.py`: Lifetime and energy analysis script
+- `../power_consumption_estimate.py`: lifetime and energy analysis script (in the parent directory)
 - `datasheets_and_manuals/`: Component datasheets
 - `Fotos_Circuit/`: Documentation images
 

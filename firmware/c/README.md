@@ -1,4 +1,4 @@
-# inki firmware
+# Tinta firmware
 
 Bare-metal C firmware for the Raspberry Pi Pico W. Supports multiple use cases selected at build time.
 
@@ -28,7 +28,7 @@ grep -n "^echo.*Flash" flash.sh
 
 ## NFC Integration (ST25DV)
 
-The ST25DV04KC NFC tag allows the Android app to wake inki and send commands via EEPROM.
+The ST25DV04KC NFC tag allows the Android app to wake Tinta and send commands via EEPROM.
 
 ### Protocol
 

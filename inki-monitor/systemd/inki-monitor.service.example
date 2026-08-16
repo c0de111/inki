@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/inki-private/inki-monitor
-ExecStart=/path/to/inki-private/inki-monitor/.venv/bin/python3 app.py
+WorkingDirectory=/path/to/tinta/inki-monitor
+ExecStart=/path/to/tinta/inki-monitor/.venv/bin/python3 app.py
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1

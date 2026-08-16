@@ -119,3 +119,5 @@ inki-monitor/*.pyc
 # FreeCAD autosave backups
 *.FCBak
 
+# CMake build output accidentally committed in the past
+**/CMakeFiles/
