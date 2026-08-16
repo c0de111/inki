@@ -1,6 +1,6 @@
-# inki
+# Tinta
 
-**inki** is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. See also https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device
+**Tinta** (formerly published as inki) is a bare-metal, battery-powered, energy-efficient system for ePaper-based display of information gathered via Wi-Fi with a runtime up to years. This repository includes two use cases: room signage as front-end for the [SeatSurfing](https://github.com/seatsurfing/seatsurfing) desk sharing system and display of live information from home automation with homematic and [ccu-historian](https://github.com/mdzio/ccu-historian). It features a webinterface for setup, a realtime clock-based power control for battery-powered, low-power consumption and wireless operation, an 3D-printed case with dovetail mount, a custom PCB and an ePaper display that retains its content when powered off. See also https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device
 <!-- <img src="images/inki_1280_640.png" alt="inki logo" width="80" align="right"> -->
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <i>Fully assembled 4.2&quot; inki (powered-off) with ePaper display and 3D-printed enclosure.</i>
+  <i>Fully assembled 4.2&quot; Tinta (powered-off) with ePaper display and 3D-printed enclosure.</i>
 <!--<i>Click the image to view full-resolution version.</i>-->
 </p>
 
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <i>inki 4.2" operating: realtime clock switching on the device (LED on), pico connects to WIFI and gatheres current booking of desk (originally, desk is free), epaper is refreshes with the new information, device is switching off (LED off).</i>
+  <i>Tinta 4.2" operating: realtime clock switching on the device (LED on), pico connects to WIFI and gatheres current booking of desk (originally, desk is free), epaper is refreshes with the new information, device is switching off (LED off).</i>
 <!-- <i>Click the image to view video.</i> -->
 </p>
 
@@ -39,13 +39,13 @@
 
 ---
 
-## Try it: How to Use inki
+## Try it: How to Use Tinta
 If you have a Pico W at hand, you can quickly test:
 
 - Download a prebuilt UF2 from the latest Release:
-  - Historian: [inki_historian.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_historian.uf2)
-  - SeatSurfing: [inki_seatsurfing.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_seatsurfing.uf2)
-  - Homematic: [inki_homematic.uf2](https://github.com/c0de111/inki/releases/latest/download/inki_homematic.uf2)
+  - Historian: [inki_historian.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_historian.uf2)
+  - SeatSurfing: [inki_seatsurfing.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_seatsurfing.uf2)
+  - Homematic: [inki_homematic.uf2](https://github.com/c0de111/tinta/releases/latest/download/inki_homematic.uf2)
 - Hold BOOTSEL while plugging in the Pico W → the RPI-RP2 drive appears
 - Copy the UF2 to the drive → the board reboots automatically
 - The Pico W onboard LED blinks “inki” in Morse
@@ -54,11 +54,11 @@ If you have a Pico W at hand, you can quickly test:
 
 ---
 
-## Quick Start: How to Use inki
+## Quick Start: How to Use Tinta
 
-inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
+Tinta can be configured and updated with a new firmware via the Wi-Fi setup mode:
 
-- Start and connect to the inki Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
+- Start and connect to the Tinta Wi-Fi hotspot "inki-setup", open your browser and go to http://192.168.4.1.
 
 - Setup the configuration of the device
 
@@ -66,20 +66,20 @@ inki can be configured and updated with a new firmware via the Wi-Fi setup mode:
   - Seatsurfing settings, via seatsurfing's Rest API, (copy&paste from seatsurfing "service account": credentials, location id, space id, room name, ...)
   - Optionally adjust device settings (automatic refresh intervals...)
   - Optionally upload a custom logo / piktogram
-  - Optionally upload firmware updates, inki will automatically choose the most recent version at next reboot
-  - Set realtime clock, using the client's time (your phone/tablet/computer used for connecting to inki)
-  - inki reboots and starts displaying live information from the configured source
+  - Optionally upload firmware updates, Tinta will automatically choose the most recent version at next reboot
+  - Set realtime clock, using the client's time (your phone/tablet/computer used for connecting to Tinta)
+  - Tinta reboots and starts displaying live information from the configured source
 
 No cables, programmer or flashing required — just insert batteries and use your browser.
 
 <p align="center">
   <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
-    <img src="images/inki_webinterface_landingpage_combined.png" alt="inki setup and configuration interface" width="600" style="border-radius: 8px;">
+    <img src="images/inki_webinterface_landingpage_combined.png" alt="Tinta setup and configuration interface" width="600" style="border-radius: 8px;">
   </a>
 </p>
 
 <p align="center">
-  <em>Left: browser-based configuration interface at <code>http://192.168.4.1</code>. Right: inki Wi-Fi setup mode.</em>
+  <em>Left: browser-based configuration interface at <code>http://192.168.4.1</code>. Right: Tinta Wi-Fi setup mode.</em>
 </p>
 
 ## Features
@@ -119,22 +119,22 @@ No cables, programmer or flashing required — just insert batteries and use you
 
 <p align="center">
   <i>Left: Log of the AA battery voltage of a 7.5&quot; prototype, over 198 days at 1800-second refresh; separate 4.2-inch field units have since run over a year (393 days, still going) on one battery set.<br>
-  Right: The 4.2&quot; version of the inki device with its backside visible (including batteries and RTC).<br>
+  Right: The 4.2&quot; version of the Tinta device with its backside visible (including batteries and RTC).<br>
   Click any image to view the full-resolution version.</i>
 </p>
 
 ---
 
-## Build your own *inki*
+## Build your own *Tinta*
 
-This repository provides all files, documentation, and code to build your own *inki*:
+This repository provides all files, documentation, and code to build your own *Tinta*:
 
 1. **3D-Printed Enclosure**
    Files and documentation for the modular enclosure with a dovetail mount - [(STLs and FreeCAD files)](hardware/enclosure/).
 
    ### Assembly Animation (4.2" version)
 
-![Assembly Animation](docs/assets/images/assembly.gif)
+![Assembly Animation](hardware/enclosure/images/assembly.gif)
 
 This animation shows the step-by-step assembly of the 4.2" enclosure.
 
@@ -215,7 +215,7 @@ Shows Wi-Fi setup info so you can connect to the device’s web UI.
 
 <p align="center">
   <a href="images/inki_webinterface_landingpage_combined.png" target="_blank">
-   <img src="images/inki_webinterface_landingpage_combined.png" alt="inki setup and configuration interface" width="600" style="border-radius: 8px;">
+   <img src="images/inki_webinterface_landingpage_combined.png" alt="Tinta setup and configuration interface" width="600" style="border-radius: 8px;">
   </a>
 </p>
 

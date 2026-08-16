@@ -1,4 +1,4 @@
-// ISRG Root X1 — trust anchor for Let's Encrypt chains (e.g. lumpri.ptb.de)
+// ISRG Root X1 — trust anchor for Let's Encrypt chains
 // Expires: 2035-06-04. Source: https://letsencrypt.org/certificates/
 static const unsigned char trust_store_pem[] =
     "-----BEGIN CERTIFICATE-----\n"
