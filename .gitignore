@@ -87,6 +87,8 @@ _autosave-*.kicad_sch
 *.bak
 *.FCBak
 **/fp-info-cache
+# KiCad 9 local file history (auto-snapshots, not design data)
+**/.history/
 *-backups/
 
 # External UF2 tools (auto-downloaded by create_uf2.sh)
@@ -121,3 +123,16 @@ inki-monitor/*.pyc
 
 # CMake build output accidentally committed in the past
 **/CMakeFiles/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Python caches (anywhere, not just inki-monitor)
+__pycache__/
+*.pyc
+.venv/
