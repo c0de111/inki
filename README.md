@@ -11,7 +11,7 @@ image while the device is off.
 This repository holds everything needed to build one: firmware, PCB design, 3D-printable enclosure,
 and an optional telemetry service. Formerly published as **inki**.
 
-[Crowd Supply campaign](https://www.crowdsupply.com/wake-electronics/tinta) · [Product page](https://wake-electronics.com/) · [Hackaday logs](https://hackaday.io/project/203726-inki-low-power-wireless-epaper-device) · [MakerTube](https://makertube.net/c/tinta) · [YouTube](https://www.youtube.com/@tinta-gadget)
+[Crowd Supply campaign](https://www.crowdsupply.com/wake-electronics/tinta) · [Hackaday logs](https://hackaday.io/project/203726-tinta-low-power-wireless-epaper-device) · [Mastodon](https://hachyderm.io/@tinta) · [MakerTube](https://makertube.net/c/tinta) · [YouTube](https://www.youtube.com/@tinta-gadget)
 
 <p align="center">
   <a href="images/esign_4_2_1_cropped.jpg" target="_blank">
